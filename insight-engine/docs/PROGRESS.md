@@ -96,19 +96,24 @@
 
 ### Review 🔴 必须修（UMS 阶段 3，2026-08-26 review 产出，下次对话优先处理）
 
-- [ ] 🔴 **禁用/改密后 token 不失效 —— 踢人机制形同虚设**
-  - 定位：`UserServiceImpl.updateStatus:138-140` 与 `updatePassword:161` 仅执行 `delete(ie:auth:token:{userId})`；而 `JwtAuthFilter.doFilterInternal:78-81` 只查黑名单 `isBlacklisted(token)`、**从不读该缓存**；`AuthServiceImpl.cacheToken:302-307` 写入的缓存无任何消费方（死代码），且存的是完整 token 明文（与"存摘要"注释自相矛盾）。
-  - 影响：禁用用户/改密后，已签发的 access token（最长 2h）仍可正常访问，注释宣称的"强制重新登录"完全不成立；Redis 中的明文 token 也是泄露面。
-  - 修复（推荐方案 B）：
-    - A：`JwtAuthFilter` 增加"校验 `ie:auth:token:{userId}` 存在且摘要匹配"，踢人靠删缓存（改动最小）；
-    - B（推荐）：JWT 引入 `jti` + `ver`（会话版本号）Claim，禁用/改密时 `ver`+1 写 Redis，过滤器比对版本，无状态友好、可扩展；
-    - C：改密/禁用时枚举该用户全部会话 token 加入黑名单（需维护 userId→tokenHash 集合）。
-  - 附带：`cacheToken` 一律改存 SHA-256 摘要（与 `RedisTokenBlacklistService` 对齐），杜绝明文 token 落 Redis。
+- [x] 🔴 **禁用/改密后 token 不失效 —— 踢人机制形同虚设**（2026-09-02 已修复，分支 `feature/ums-auth`）
+  - 修复落点（采用方案 A：补上「过滤器消费登录态缓存」这一缺失环节，改动最小、符合 TD §6.1 既有单 key 设计）：
+    - starter-security 新增可选接口 `TokenSessionService`（与 `TokenBlacklistService` 同模式，starter 保持零 Redis 依赖）；
+    - `JwtAuthFilter` 签名校验通过后、建立认证前调用 `sessionService.isActive(userId, token)`，登录态失效（缓存被删/摘要不匹配）→ 401 拒绝；未注入实现的服务退化为纯无状态 JWT 校验；
+    - `SecurityAutoConfiguration` 通过 `ObjectProvider<TokenSessionService>` 可选装配；
+    - UMS 新增 `RedisTokenSessionService`：校验 `ie:auth:token:{userId}` 存在且 == sha256(当前 token)；
+    - UMS 新增 `TokenDigestUtil`（JDK MessageDigest 实现 SHA-256，不引 hutool crypto）；
+    - `AuthServiceImpl.cacheToken` 由存明文 token 改为存 SHA-256 摘要（与注释及黑名单服务对齐）。
+  - 附带说明：方案 A 是「单会话语义」——同 userId 后登录/刷新会覆盖缓存，旧 access token 立即失效（含多设备互踢）；TD §6.1 本就是单 key 设计，符合既定意图。若未来需多设备并存，再演进方案 B（`jti`+`ver`）。
+  - 备注：方案 B（`jti`+`ver`）与 C（枚举黑名单）未采用，理由见 LEARNING.md 实战复盘。
 
-- [ ] 🔴 **JWT 密钥硬编码且可预测**
-  - 定位：`SecurityProperties.jwtSecret:26` 代码内默认值 + `application.yml:41` 明文写死同一开发密钥 `insight-engine-dev-secret-key-change-me-in-prod-2026-08`。
+- [x] 🔴 **JWT 密钥硬编码且可预测**（2026-09-02 已修复，分支 `feature/ums-auth`）
+  - 修复落点：
+    - `SecurityProperties.jwtSecret` 删除代码内默认值（原先第 26 行写死开发密钥）；
+    - `SecurityAutoConfiguration.jwtUtil` Bean 初始化处 fail-fast 校验：密钥为空/长度不足 32 字节 → 拒绝启动；`prod` profile 下密钥含 `change-me` 占位 → 拒绝启动（密钥仅经环境变量/配置中心注入）；
+    - `application.yml` 密钥改为 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}`，生产注入独立随机密钥即覆盖。
   - 影响：HS256 对称密钥若以默认值上线，攻击者可离线伪造任意 userId/roles/perms 的 JWT，等于完全绕过认证与授权。
-  - 修复：删除代码内默认值；生产 profile 下启动校验（jwtSecret 为空或含 `change-me` 直接 fail-fast 拒绝启动）；密钥仅经环境变量/配置中心注入。
+  - 备注：本地开发默认值仍含 `change-me` 字样以便 fail-fast 兜底识别；生产切换 `prod` profile 必须显式注入。
 
 - [ ] 🔴 **双身份源并存 —— UserContextFilter 无条件信任明文身份头（承自骨架阶段 review 红级问题）**
   - 定位：UMS 同时依赖 `starter-web`（自动装配 `UserContextFilter`，`WebAutoConfiguration:56-60`，从 `X-User-Id/X-Tenant-Id/X-Roles` 明文头解析并 `UserContext.set`，order=HIGHEST+1 先执行）与 `starter-security`（`JwtAuthFilter:98-112` 解析 JWT 覆盖 `UserContext`）。
@@ -166,6 +171,15 @@
 
 ## 七、最近一次对话摘要
 
+- 日期：2026-09-02
+- 内容：① 梳理 git 真实状态——发现本地未配 remote（用户误以为远程已建 master/dev），给出 IDEA2026 标准步骤（commit 干净 → `git remote add origin` → `push -u origin master` → `push -u origin feature/ums-auth`）；② 讲透 Git Flow vs GitHub Flow 分支模型对比（本项目用 GitHub Flow，远程只建 master + 各 feature/xxx，不需要 develop）；③ 精准指出用户 4 个误解（基于原笔记的命名错乱：把 dev 当 GitHub Flow 的 master 用、又用 Git Flow 命名 dev-xuy），承认原笔记带病；④ 给出 GitHub Flow 完整动作（pull master → 切 feature → 提交 → push feature → PR 合 master → 删 feature）与 Git Flow 对照动作；⑤ 重写 `docs/LEARNING.md` 中 Git 笔记（原 line 684-812 整段替换）：明确「同名 ≠ 同一对象」、破三个致命误解（push 永远同名推送 / 本地 master ≠ origin/master / pull 只同步一个分支）、补 Git Flow 对照章节与标准动作、扩展面试追问至 6 题（新增"远程 dev-xuy 与远程 dev 什么关系"专项澄清）。
+- 日期：2026-09-02
+- 内容：学习沉淀「ThreadLocal 线程隔离与 remove 防串号」到 `docs/LEARNING.md`——讲透①为什么 ThreadLocal 能做到线程隔离（底层 = 每个 Thread 自带 ThreadLocalMap，数据存在线程身上，不加锁）；②容器线程池复用时为什么必须 remove（线程回池不销毁，残留脏上下文导致下一个请求串号/越权）；③为什么清理必须放 finally。串联项目三处 ThreadLocal 全家桶：`UserContext.HOLDER`（业务上下文）/ `TraceFilter`+MDC（日志上下文）/ `SecurityContextHolder`（安全上下文），三者共用同一套规则（请求级数据放 ThreadLocal，请求结束 finally remove）。含面试追问（原理/为什么必须 remove/set(null) vs remove/弱引用泄漏/子线程取不到）与 5 条踩坑（忘 remove 串号、清理没放 finally、普通 static 字段串号、异步读不到、线程池内存泄漏）。
+- 日期：2026-09-02
+- 内容：修复 UMS review 🔴 清单第 2 项「JWT 密钥硬编码且可预测」——① 删除 `SecurityProperties.jwtSecret` 代码内默认值；② `SecurityAutoConfiguration` 的 `jwtUtil` Bean 初始化处加 fail-fast 启动校验（空/长度不足 32 字节拒绝启动；`prod` profile 下含 `change-me` 占位密钥拒绝启动）；③ `application.yml` 密钥改为 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}` 环境变量注入；④ 编译通过（starter-security + ums 模块）；⑤ LEARNING.md 沉淀讲解；⑥ 未提交，等待用户确认。未处理：🔴 其余 2 项（token 失效、双身份源）。
+- 日期：2026-09-02
+- 内容：修复 UMS review 🔴 清单第 1 项「禁用/改密后 token 不失效（踢人机制形同虚设）」——采用方案 A（改动最小、贴合 TD §6.1 单 key 设计）：① starter-security 新增可选接口 `TokenSessionService`（零 Redis 依赖模式与 `TokenBlacklistService` 一致）；② `JwtAuthFilter` 在签名校验后、建立认证前校验 `sessionService.isActive(userId, token)`，登录态失效即 401；③ `SecurityAutoConfiguration` 经 `ObjectProvider` 可选装配；④ UMS 新增 `RedisTokenSessionService` 实现（缓存存在 + SHA-256 摘要匹配）；⑤ UMS 新增 `TokenDigestUtil`；⑥ `AuthServiceImpl.cacheToken` 改存 SHA-256 摘要（不再落明文 token）；⑦ 编译通过。语义注意：方案 A 为单会话，同 userId 重新登录/刷新会顶掉旧 token（多设备互踢）。未处理：🔴 双身份源（UserContextFilter）。
+- 下一步：按第五节 🔴 清单修复剩余项（双身份源），然后实现 gateway 网关，接入 Nacos
 - 日期：2026-08-26
 - 内容：阶段 3 UMS 认证服务（第一个完整微服务）——① 从 master 切出 `feature/ums-auth`；② 实现三个 starter 骨架：starter-mybatis（MP 装配 + 逻辑删除全局配置 + 审计字段填充）、starter-redis（RedisTemplate JSON 序列化）、starter-security（SecurityFilterChain 无状态 + JWT 签发/解析 + 认证过滤器 + 未认证/无权限统一 Result 处理 + 可选黑名单）；③ 实现 UMS 完整业务：认证 5 接口（登录含 5 次锁定/刷新/登出黑名单/注册/当前用户）、用户 5 接口（分页/创建/更新/启停/改密）、角色 5 + 权限树 1 接口（含内置角色禁删 1003、授权先删后插）；④ 入参 JSR-303 校验 + @PreAuthorize 方法级权限（member:read/role:write 等）全部落地；⑤ 编译通过，实机冒烟验证：登录返回 48 权限的 JWT、/auth/me 返回工作空间、角色列表 5 个、权限树 27 组、未带 token 访问返回 401；⑥ 接入 Knife4j（文档页 200、OpenAPI 15 路径）+ 产出 FEATURES.md 功能模块实现清单。
 - 日期：2026-08-26

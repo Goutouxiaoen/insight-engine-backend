@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insightengine.common.core.ErrorCode;
 import com.insightengine.common.core.Result;
 import com.insightengine.starter.security.blacklist.TokenBlacklistService;
+import com.insightengine.starter.security.session.TokenSessionService;
 import com.insightengine.starter.security.util.JwtPayload;
 import com.insightengine.starter.security.util.JwtUtil;
 import com.insightengine.starter.web.context.LoginUser;
@@ -55,11 +56,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper;
     /** 黑名单服务（可选）：未配置时为 null，退化为无状态 JWT 校验 */
     private final TokenBlacklistService blacklistService;
+    /** 登录态服务（可选）：未配置时为 null，跳过登录态校验（登出靠黑名单、踢人不可用） */
+    private final TokenSessionService sessionService;
 
-    public JwtAuthFilter(JwtUtil jwtUtil, ObjectMapper objectMapper, TokenBlacklistService blacklistService) {
+    public JwtAuthFilter(JwtUtil jwtUtil, ObjectMapper objectMapper,
+                         TokenBlacklistService blacklistService, TokenSessionService sessionService) {
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
         this.blacklistService = blacklistService;
+        this.sessionService = sessionService;
     }
 
     @Override
@@ -81,6 +86,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
         try {
             JwtPayload payload = jwtUtil.parseAccessToken(token);
+            // 登录态校验（签名合法之后、建立认证之前）：改密/禁用/重新登录后旧 token 在此被拒
+            // （TD §6.1：登录态缓存被删或摘要不匹配 → 强制重新登录）
+            if (sessionService != null && !sessionService.isActive(payload.getUserId(), token)) {
+                writeUnauthorized(response, ErrorCode.UNAUTHORIZED);
+                return;
+            }
             authenticate(request, payload);
             filterChain.doFilter(request, response);
         } catch (ExpiredJwtException e) {

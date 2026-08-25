@@ -35,9 +35,10 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 # JWT 配置（insight.security.*，由 starter-security 读取）
+# 密钥优先级：环境变量 INSIGHT_SECURITY_JWT_SECRET > 下方本地开发默认值；
+# 生产禁止使用含 "change-me" 的开发默认值（starter 启动 fail-fast 拦截），必须注入独立随机密钥。
 insight:
   security:
-    # 开发默认密钥；生产通过环境变量 INSIGHT_SECURITY_JWT_SECRET 覆盖
-    jwt-secret: insight-engine-dev-secret-key-change-me-in-prod-2026-08
+    jwt-secret: ${INSIGHT_SECURITY_JWT_SECRET:insight-engine-local-dev-secret-change-me-in-prod-2026-09}
     access-token-ttl-seconds: 7200      # 2 小时（TD §7.2）
     refresh-token-ttl-seconds: 604800   # 7 天（TD §7.2）

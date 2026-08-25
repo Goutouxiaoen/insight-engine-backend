@@ -5,12 +5,14 @@ import com.insightengine.starter.security.blacklist.TokenBlacklistService;
 import com.insightengine.starter.security.filter.JwtAuthFilter;
 import com.insightengine.starter.security.handler.RestAccessDeniedHandler;
 import com.insightengine.starter.security.handler.RestAuthenticationEntryPoint;
+import com.insightengine.starter.security.session.TokenSessionService;
 import com.insightengine.starter.security.util.JwtUtil;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -19,6 +21,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * starter-security 自动配置类。
@@ -60,10 +65,27 @@ public class SecurityAutoConfiguration {
 
     /**
      * JWT 工具：由配置属性派生签名密钥与有效期。
+     *
+     * <p>fail-fast 启动校验：HS256 密钥一旦带默认值/开发占位值上线，
+     * 攻击者可离线伪造任意 userId/roles/perms 的 JWT（等于绕过整个认证体系），
+     * 故在 Bean 初始化期强制校验，而非留给运行时。</p>
      */
     @Bean
     @ConditionalOnMissingBean(JwtUtil.class)
-    public JwtUtil jwtUtil(SecurityProperties properties) {
+    public JwtUtil jwtUtil(SecurityProperties properties, Environment environment) {
+        String secret = properties.getJwtSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("insight.security.jwt-secret 未配置，拒绝启动。"
+                    + "请通过环境变量 INSIGHT_SECURITY_JWT_SECRET 或配置中心注入 HS256 密钥（>= 32 字节）");
+        }
+        if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("insight.security.jwt-secret 长度不足 32 字节（HS256 要求 >= 256 bit），拒绝启动");
+        }
+        if (Arrays.asList(environment.getActiveProfiles()).contains("prod")
+                && secret.contains("change-me")) {
+            throw new IllegalStateException("prod 环境禁止使用开发占位 JWT 密钥（含 change-me 标记），"
+                    + "请通过环境变量 INSIGHT_SECURITY_JWT_SECRET 注入独立随机密钥后重启");
+        }
         return new JwtUtil(properties);
     }
 
@@ -97,6 +119,7 @@ public class SecurityAutoConfiguration {
                                                    JwtUtil jwtUtil,
                                                    ObjectMapper objectMapper,
                                                    ObjectProvider<TokenBlacklistService> blacklistProvider,
+                                                   ObjectProvider<TokenSessionService> sessionProvider,
                                                    RestAuthenticationEntryPoint entryPoint,
                                                    RestAccessDeniedHandler accessDeniedHandler) throws Exception {
         http.csrf(csrf -> csrf.disable())
@@ -112,8 +135,9 @@ public class SecurityAutoConfiguration {
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 // 前置 JWT 认证过滤器（在用户名密码过滤器之前执行）；
-                // 黑名单服务为可选依赖，未提供时退化为纯无状态 JWT 校验
-                .addFilterBefore(new JwtAuthFilter(jwtUtil, objectMapper, blacklistProvider.getIfAvailable()),
+                // 黑名单/登录态服务为可选依赖，未提供时退化为纯无状态 JWT 校验
+                .addFilterBefore(new JwtAuthFilter(jwtUtil, objectMapper,
+                                blacklistProvider.getIfAvailable(), sessionProvider.getIfAvailable()),
                         UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

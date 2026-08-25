@@ -20,6 +20,7 @@ import com.insightengine.ums.mapper.RoleMapper;
 import com.insightengine.ums.mapper.UserMapper;
 import com.insightengine.ums.mapper.WorkspaceMapper;
 import com.insightengine.ums.service.AuthService;
+import com.insightengine.ums.util.TokenDigestUtil;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -298,11 +299,15 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * 写登录态缓存（TTL = access 有效期）。
+     *
+     * <p>只存 SHA-256 摘要、不落明文 token（与黑名单服务一致，TD §6.1/ADR-10）：
+     * Redis 被拖库时拿不到可直接使用的 token。校验方（JwtAuthFilter → TokenSessionService）
+     * 同样对请求 token 算摘要比对，「缓存存在且摘要一致」才视为有效登录态。</p>
      */
     private void cacheToken(Long userId, String accessToken) {
         stringRedisTemplate.opsForValue().set(
                 AuthConstants.KEY_AUTH_TOKEN + userId,
-                accessToken,
+                TokenDigestUtil.sha256Hex(accessToken),
                 Duration.ofSeconds(jwtUtil.getAccessTtlSeconds()));
     }
 
