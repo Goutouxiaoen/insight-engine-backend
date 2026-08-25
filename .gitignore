@@ -1,0 +1,41 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/
+mvnw
+mvnw.cmd
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+.settings/
+.project
+.classpath
+
+# Node / 前端
+node_modules/
+dist/
+.pnpm-store/
+*.local
+
+# 环境与密钥
+.env
+.env.*
+application-local.yml
+*.secret
+
+# 日志
+logs/
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 构建产物
+build/
+out/
