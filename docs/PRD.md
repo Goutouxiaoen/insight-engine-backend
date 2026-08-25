@@ -2491,7 +2491,7 @@ CREATE TABLE ie_audit_log (
 
 `docker-compose.yml` 安排：
 
-| 服务 | 镜像 | 端口 |
+| 服务 | 镜像 | 宿主映射端口（本项目专属） |
 |------|------|------|
 | nginx | nginx:1.25 | 80, 443 |
 | admin-web | 构建产物 | via nginx |
@@ -2507,13 +2507,15 @@ CREATE TABLE ie_audit_log (
 | billing | insight-engine/billing | 8088 |
 | obs | insight-engine/obs | 8089 |
 | notify | insight-engine/notify | 8090 |
-| postgres | pgvector/pgvector:pg15 | 5432 |
-| redis | redis:7-alpine | 6379 |
-| rabbitmq | rabbitmq:3-management | 5672, 15672 |
-| nacos | nacos/nacos-server:v2.3 | 8848, 9848 |
-| minio | minio/minio | 9000, 9001 |
-| prometheus | prom/prometheus | 9090 |
-| grafana | grafana/grafana | 3000 |
+| postgres | pgvector/pgvector:pg15 | 5433（容器内 5432） |
+| redis | redis:7-alpine | 6380（容器内 6379） |
+| rabbitmq | rabbitmq:3.13-management | **5673 / 15673**（容器内 5672/15672） |
+| nacos | nacos/nacos-server:v2.3.2 | 8850 / 9850（容器内 8848/9848） |
+| minio | minio/minio | 9010 / 9011（容器内 9000/9001） |
+| prometheus | prom/prometheus | 9091（容器内 9090） |
+| grafana | grafana/grafana | 3001（容器内 3000） |
+
+> 说明：**微服务之间走 compose 内部网络（`服务名:容器内端口`），不经过宿主端口**；宿主映射端口仅供本机 IDE 直连调试与浏览器访问管理界面使用。本机已存在 `rabbitmq:4.2`（占用 5672/15672），故本项目 RabbitMQ 锁定 `3.13-management` 并映射宿主 5673/15673，互不干扰。详见 TD §18.2。
 
 ### 17.2 K8s Helm（V1.0）
 

@@ -71,7 +71,7 @@
 | PostgreSQL | 15 | 主库 + 向量 | 一个库同时承担业务与向量，降低运维复杂度 |
 | PGVector | 0.7.x | 向量扩展 | PostgreSQL 原生扩展，支持 ivfflat/hnsw |
 | Redis | 7 | 缓存/会话/配额 | |
-| RabbitMQ | 3.13 | 消息 | 异步任务、事件、通知 |
+| RabbitMQ | 3.13（镜像 `rabbitmq:3.13-management`） | 消息 | 异步任务、事件、通知；宿主端口映射 5673/15673 |
 | Nacos | 2.3.2 | 注册+配置 | |
 | Sentinel | 1.8.6（alibaba 版本） | 限流熔断 | |
 | JJWT | 0.12.x | JWT | |
@@ -1042,7 +1042,97 @@ public void uploadDocument(Document doc) {
 - `depends_on` + `healthcheck` 保证启动顺序
 - 环境变量注入配置（`${NACOS_ADDR}` 等）
 
-### 18.2 Dockerfile（后端示例）
+### 18.2 端口规划与冲突规避（重要）
+
+#### 18.2.1 核心原则：区分「容器内端口」与「宿主映射端口」
+
+Docker 端口映射 `"宿主机:容器"` 中，两段含义完全不同：
+
+| 端口类型 | 含义 | 谁能改 |
+|----------|------|--------|
+| **容器内端口**（冒号右边） | 进程在容器内监听的端口，固定不变 | 永远不改 |
+| **宿主映射端口**（冒号左边） | 宿主机上暴露的端口，供本机访问 | 按需改，避开冲突 |
+
+**关键结论**：
+
+1. **微服务之间**走 docker-compose 内部网络，用 `服务名:容器内端口`（如 `rabbitmq:5672`）通信，**完全不经过宿主端口**，所以宿主端口冲突不影响服务间通信。
+2. **宿主映射端口**只服务于"宿主机直连"场景：本机 IDE 直连调试、浏览器打开管理界面。
+3. 因此，**本机已有服务占用某宿主端口时，只需改项目 docker-compose 的宿主映射端口，容器内端口保持不变**。
+
+#### 18.2.2 本机端口占用现状（阶段 0 已发现）
+
+| 中间件 | 本机现状 | 冲突 |
+|--------|----------|------|
+| RabbitMQ | 已有 `rabbitmq:4.2` 容器，占用宿主 5672/15672 | ✅ 与本项目 5672/15672 冲突 |
+| 其他（PostgreSQL/Redis/Nacos/MinIO 等） | 待阶段 2 逐一确认 | 待定 |
+
+#### 18.2.3 本项目宿主端口规划（项目专属，统一避开本机占用）
+
+> 规则：**容器内端口保持不变，宿主端口统一加偏移，形成项目专属端口段**，避免与本机任何已有服务冲突。
+
+| 服务 | 容器内端口 | 本项目宿主映射端口 | 说明 |
+|------|-----------|------------------|------|
+| rabbitmq | 5672 / 15672 | **5673 / 15673** | 避开本机 4.2（5672/15672） |
+| postgres | 5432 | **5433** | 避开本机可能已装的 PG 5432 |
+| redis | 6379 | **6380** | 避开本机可能已装的 Redis 6379 |
+| nacos | 8848 / 9848 | **8850 / 9850** | 避开默认 8848 |
+| minio | 9000 / 9001 | **9010 / 9011** | 避开默认 9000 |
+| prometheus | 9090 | **9091** | 避开默认 9090 |
+| grafana | 3000 | **3001** | 避开默认 3000 |
+
+#### 18.2.4 docker-compose 端口写法（RabbitMQ 示例）
+
+```yaml
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management      # 锁定 3.13，与 TD 版本表一致
+    container_name: insight-rabbitmq
+    ports:
+      - "5673:5672"      # 宿主 5673 → 容器 5672（AMQP，本机 IDE 直连用）
+      - "15673:15672"    # 宿主 15673 → 容器 15672（管理界面）
+    environment:
+      RABBITMQ_DEFAULT_USER: insight
+      RABBITMQ_DEFAULT_PASS: insight123
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+```
+
+微服务内部连接配置（走内部网络，用容器名 + 容器内端口）：
+
+```yaml
+# 业务服务 application.yml
+spring:
+  rabbitmq:
+    host: rabbitmq          # compose 服务名
+    port: 5672              # 容器内端口（不是 5673！）
+    username: insight
+    password: insight123
+```
+
+本机 IDE 直连调试时（不打容器、直接跑本地 jar）：
+
+```yaml
+# 本地 application-local.yml
+spring:
+  rabbitmq:
+    host: localhost
+    port: 5673              # 走宿主映射端口
+```
+
+#### 18.2.5 RabbitMQ 版本 3.13 vs 4.2 的说明
+
+| 项 | 3.13 | 4.x（4.2） |
+|----|------|-----------|
+| AMQP 0-9-1 协议 | 兼容 | 兼容（客户端无感知） |
+| Spring AMQP 兼容 | 官方兼容（Boot 3.2 配 spring-amqp 3.1.x） | 兼容，但 4.0 有 breaking changes |
+| 风险 | 无 | 4.0 移除了部分 deprecated 特性（classic mirroring 等） |
+
+**决策**：本项目**独立起 `rabbitmq:3.13-management`**，不复用本机 4.2 容器。理由：项目环境隔离、版本受控、可复现；避免与现有项目耦合、避免 4.0 breaking changes 的不确定性。本项目只用基础交换机/队列/死信，3.13 完全够用。
+
+### 18.3 Dockerfile（后端示例）
 
 ```dockerfile
 FROM maven:3.9-eclipse-temurin-17 AS build
@@ -1056,7 +1146,7 @@ COPY --from=build /app/insight-engine-modules/insight-engine-ums/target/*.jar ap
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
 
-### 18.3 初始化
+### 18.4 初始化
 
 - `init.sql` 挂载到 postgres `/docker-entrypoint-initdb.d/`
 - `seed 数据`：管理员账号、权限字典、内置工具
@@ -1078,6 +1168,8 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 | ADR-8 | ivfflat 起步，规模化转 hnsw | 直接 hnsw | 省内存、构建快，MVP 够用 |
 | ADR-9 | SSE 流式而非 WebSocket | WebSocket | 单向流式场景 SSE 更简单、兼容代理 |
 | ADR-10 | JWT 存 Redis 摘要 + 黑名单 | 无状态纯 JWT | 支持主动登出/踢人，同时保留无状态校验 |
+| ADR-11 | 中间件宿主端口统一加偏移（RabbitMQ 5673/15673 等），容器内端口不变 | 直接复用默认宿主端口 / 复用本机已有容器 | 本机已有 rabbitmq:4.2 占用 5672/15672；容器内端口固定、服务间走内部网络，宿主端口仅用于本机调试，改映射即可隔离 |
+| ADR-12 | RabbitMQ 锁定 3.13-management，不复用本机 4.2 | 复用本机 4.2 容器 | 项目环境隔离、版本受控可复现；4.0 有 breaking changes，本项目无需 4.x 特性 |
 
 ---
 
