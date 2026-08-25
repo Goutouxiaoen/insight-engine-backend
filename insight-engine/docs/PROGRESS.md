@@ -25,7 +25,7 @@
 | 产品/技术/接口文档                                | ✅ 完成  | 100% | PRD/TD/IF                             | 已定稿                                    |
 | 协作指导文档                                    | ✅ 完成  | 100% | DEVGUIDE.md                           | 已定稿                                    |
 | 环境准备（JDK/Maven/Docker/Node）               | ✅ 完成  | 100% | 本机 JDK21/Maven3.9.9/Docker29/Node24   | 全部就绪，Docker 引擎已启动                      |
-| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                            | master 分支，已有 5 次提交，无远程                 |
+| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                            | master 分支，已有 6 次提交，无远程                 |
 | 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位 | `mvn clean install -DskipTests` 全量编译通过 |
 | 基础设施（docker-compose/init.sql）             | ⚪ 未开始 | 0%   |                                       |                                        |
 | UMS 认证服务                                  | ⚪ 未开始 | 0%   |                                       |                                        |
@@ -90,5 +90,5 @@
 ## 七、最近一次对话摘要
 
 - 日期：2026-08-25
-- 内容：阶段 1 工程骨架闭环并进入收尾——① 目录层级重构为 `insight-engine/` 自包含项目（`d:/CodexProject/` 成为多工程容器）；② 父 POM + BOM + common + api + 8 starter + 12 业务模块占位，`mvn clean install -DskipTests` 全量编译通过；③ 排查并解决 `package-info.java` 在 IDEA 中不被识别的问题，最终回归企业标准：`package-info.java` 保持「包级文档」本分、不写类型锚点，接受骨架阶段 api 模块暂空的过渡显示；④ 清理 21 个 target 构建产物；⑤ 沉淀 3 篇学习笔记（Docker 端口映射 / Maven 多模块工程 / package-info.java 包级元数据）。
-- 下一步：进入阶段 2，编写 docker-compose.yml + init.sql 基础设施；阶段 1 代码改动待 git 提交（`git add -A && git commit`）
+- 内容：阶段 1 工程骨架闭环并进入收尾——① 目录层级重构为 `insight-engine/` 自包含项目（`d:/CodexProject/` 成为多工程容器）；② 父 POM + BOM + common + api + 8 starter + 12 业务模块占位，`mvn clean install -DskipTests` 全量编译通过；③ 排查并解决 `package-info.java` 在 IDEA 中不被识别的问题，最终回归企业标准：`package-info.java` 保持「包级文档」本分、不写类型锚点，接受骨架阶段 api 模块暂空的过渡显示；④ 清理 21 个 target 构建产物；⑤ 沉淀 3 篇学习笔记（Docker 端口映射 / Maven 多模块工程 / package-info.java 包级元数据）；⑥ 已 git 提交（`0a79d77`）。
+- 下一步：进入阶段 2，编写 docker-compose.yml + init.sql 基础设施
