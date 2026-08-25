@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-modules</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-gateway：API 网关（WebFlux 栈）
+      职责（TD §8.3 / PRD §9.2，宿主端口 7000）：
+        统一入口、路由转发、JWT/API Key 鉴权、限流、跨域、traceId 透传。
+      说明：网关基于 Spring Cloud Gateway（WebFlux），不能引入 Servlet 栈的 starter-web，
+            其 traceId/鉴权等过滤器将在阶段 4 以 GatewayFilter/GlobalFilter 实现。
+      当前状态：阶段 1 仅建骨架。
+    -->
+    <artifactId>insight-engine-gateway</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-gateway</name>
+    <description>智擎 AI API 网关</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- Spring Cloud Gateway（响应式网关） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-modules</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-notify：通知服务
+      职责（TD §12 / IF §16，宿主端口 7110）：
+        通知渠道、模板、投递记录。
+      当前状态：阶段 1 仅建骨架，完整实现见阶段 11。
+    -->
+    <artifactId>insight-engine-notify</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-notify</name>
+    <description>智擎 AI 通知服务</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+</project>

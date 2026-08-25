@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-starter：聚合各 starter 的父模块（packaging=pom）
+      作用：把 8 个「技术能力起步依赖」聚合在一起，便于统一构建与管理。
+      各 starter 说明见 TD §3.1，均遵循「starter/* → common」单向依赖规则。
+    -->
+    <artifactId>insight-engine-starter</artifactId>
+    <packaging>pom</packaging>
+
+    <name>insight-engine-starter</name>
+    <description>智擎 AI 技术能力起步依赖聚合模块</description>
+
+    <modules>
+        <module>insight-engine-starter-web</module>
+        <module>insight-engine-starter-mybatis</module>
+        <module>insight-engine-starter-security</module>
+        <module>insight-engine-starter-redis</module>
+        <module>insight-engine-starter-nacos</module>
+        <module>insight-engine-starter-ai</module>
+        <module>insight-engine-starter-mq</module>
+        <module>insight-engine-starter-observability</module>
+    </modules>
+</project>

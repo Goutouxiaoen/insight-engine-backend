@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-starter</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-starter-security：Security + JWT 起步依赖
+      职责（TD §7.3 / §7.4）：
+        1. Spring Security 过滤链（无状态、放行白名单）
+        2. JWT 工具（JJWT 签发/解析）
+        3. 方法级权限注解支持（@PreAuthorize）
+      当前状态：阶段 1 仅建骨架，具体能力在阶段 3（UMS 认证）实现。
+    -->
+    <artifactId>insight-engine-starter-security</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-starter-security</name>
+    <description>智擎 AI Security+JWT 起步依赖（过滤链/JWT/方法级权限）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- Spring Security -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- JJWT：JWT 签发与解析 -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+</project>

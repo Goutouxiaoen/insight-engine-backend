@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-common：纯公共模块
+      职责：常量、枚举、异常、统一响应体、分页封装等「无框架依赖」的基础类
+      约束（TD §3.2）：
+        - 不依赖任何业务模块
+        - 不依赖 Spring Web（纯 POJO），保证可被 gateway（WebFlux）与业务服务（WebMvc）通用
+    -->
+    <artifactId>insight-engine-common</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-common</name>
+    <description>智擎 AI 公共基础模块（常量/枚举/异常/响应/分页）</description>
+
+    <dependencies>
+        <!-- Lombok：仅编译期，消除样板代码 -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

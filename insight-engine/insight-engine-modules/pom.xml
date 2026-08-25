@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-modules：业务微服务聚合模块（packaging=pom）
+      聚合 gateway 网关 + 11 个业务服务，统一构建。
+      各服务职责见 TD §9.2 / PRD §9.2 端口表，端口与容器端口映射见 PRD §17.1。
+      依赖方向（TD §3.2）：modules/* → api → common；modules/* → starter/* → common。
+    -->
+    <artifactId>insight-engine-modules</artifactId>
+    <packaging>pom</packaging>
+
+    <name>insight-engine-modules</name>
+    <description>智擎 AI 业务微服务聚合模块</description>
+
+    <modules>
+        <module>insight-engine-gateway</module>
+        <module>insight-engine-ums</module>
+        <module>insight-engine-workspace</module>
+        <module>insight-engine-model</module>
+        <module>insight-engine-kb</module>
+        <module>insight-engine-agent</module>
+        <module>insight-engine-tool</module>
+        <module>insight-engine-conv</module>
+        <module>insight-engine-billing</module>
+        <module>insight-engine-obs</module>
+        <module>insight-engine-notify</module>
+    </modules>
+</project>

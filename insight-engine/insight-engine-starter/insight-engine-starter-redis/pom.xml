@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-starter</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-starter-redis：Redis 起步依赖
+      职责（TD §6.1~§6.4）：
+        1. RedisTemplate 序列化配置（JSON 序列化，避免 JDK 序列化二进制不可读）
+        2. 分布式锁封装（SETNX + Lua 释放）
+        3. 缓存注解与三大问题（穿透/击穿/雪崩）防护
+      当前状态：阶段 1 仅建骨架，具体能力在对应服务阶段实现。
+    -->
+    <artifactId>insight-engine-starter-redis</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-starter-redis</name>
+    <description>智擎 AI Redis 起步依赖（序列化/分布式锁/缓存防护）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- Spring Data Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+    </dependencies>
+</project>

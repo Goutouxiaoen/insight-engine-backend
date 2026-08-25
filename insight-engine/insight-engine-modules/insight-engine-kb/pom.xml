@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-modules</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-kb：知识库服务
+      职责（TD §10 / IF §9，宿主端口 7104）：
+        知识库/文档上传、异步解析切片、Embedding、PGVector 检索、溯源。
+      当前状态：阶段 1 仅建骨架，完整实现见阶段 7。
+    -->
+    <artifactId>insight-engine-kb</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-kb</name>
+    <description>智擎 AI 知识库服务</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+</project>

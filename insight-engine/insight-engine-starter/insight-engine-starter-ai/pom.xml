@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-starter</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-starter-ai：AI 能力起步依赖
+      职责（TD §9.1 / ADR-3）：
+        1. Spring AI（ChatModel/EmbeddingModel 统一抽象，主框架）
+        2. LangChain4j（AiServices、@Tool 注解、ReAct，辅助）
+      当前状态：阶段 1 仅建骨架，具体 Bean 装配在阶段 6（模型网关）实现。
+    -->
+    <artifactId>insight-engine-starter-ai</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-starter-ai</name>
+    <description>智擎 AI 能力起步依赖（Spring AI + LangChain4j）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!--
+          Spring AI / LangChain4j 具体依赖在阶段 6（模型网关）引入并锁定版本。
+          阶段 1 骨架不引入，避免在未确定 Spring AI BOM 版本前出现依赖解析失败。
+        -->
+    </dependencies>
+</project>

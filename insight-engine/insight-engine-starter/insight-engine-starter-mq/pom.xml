@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-starter</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-starter-mq：RabbitMQ 起步依赖
+      职责（TD §12.1~§12.5）：
+        1. RabbitMQ 连接与交换机/队列拓扑声明
+        2. 消息统一信封（eventId/eventType/traceId）
+        3. 生产者确认 + 消费者手动 ACK + 重试与死信
+      当前状态：阶段 1 仅建骨架，具体能力在阶段 7（知识库）实现。
+    -->
+    <artifactId>insight-engine-starter-mq</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-starter-mq</name>
+    <description>智擎 AI RabbitMQ 起步依赖（信封/确认/重试死信）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- RabbitMQ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+    </dependencies>
+</project>

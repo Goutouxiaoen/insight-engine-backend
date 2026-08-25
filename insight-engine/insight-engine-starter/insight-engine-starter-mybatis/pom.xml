@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-starter</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-starter-mybatis：MyBatis-Plus 起步依赖
+      职责（TD §3.1 / §5.1 / §7.5）：
+        1. MyBatis-Plus 配置（逻辑删除、MetaObjectHandler 审计字段自动填充）
+        2. 数据权限拦截器（DataScopeInterceptor，行级隔离）
+      当前状态：阶段 1 仅建骨架，具体能力在阶段 5（工作空间/数据权限）实现。
+    -->
+    <artifactId>insight-engine-starter-mybatis</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-starter-mybatis</name>
+    <description>智擎 AI MyBatis-Plus 起步依赖（逻辑删除/审计填充/数据权限）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- MyBatis-Plus Spring Boot 3 starter -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+        </dependency>
+    </dependencies>
+</project>

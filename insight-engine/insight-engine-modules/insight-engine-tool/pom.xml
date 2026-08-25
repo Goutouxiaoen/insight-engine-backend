@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-modules</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-tool：工具市场服务
+      职责（TD §11.4 / IF §11，宿主端口 7106）：
+        内置工具、HTTP/函数工具、工具调试、调用记录。
+      当前状态：阶段 1 仅建骨架，完整实现见阶段 8。
+    -->
+    <artifactId>insight-engine-tool</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-tool</name>
+    <description>智擎 AI 工具市场服务</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+</project>

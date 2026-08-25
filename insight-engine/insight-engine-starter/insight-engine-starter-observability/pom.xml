@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.insightengine</groupId>
+        <artifactId>insight-engine-starter</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <!--
+      insight-engine-starter-observability：可观测性起步依赖
+      职责（TD §14.1 / §14.2）：
+        1. Micrometer 指标暴露（Prometheus registry + actuator）
+        2. 自定义业务指标埋点辅助
+      当前状态：阶段 1 仅建骨架，具体指标在阶段 11（计费+监控）实现。
+    -->
+    <artifactId>insight-engine-starter-observability</artifactId>
+    <packaging>jar</packaging>
+
+    <name>insight-engine-starter-observability</name>
+    <description>智擎 AI 可观测性起步依赖（Micrometer/Prometheus）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- Actuator：暴露 health/prometheus 等端点 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Micrometer Prometheus registry：指标以 Prometheus 格式输出 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+    </dependencies>
+</project>

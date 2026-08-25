@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      智擎 AI（InsightEngine）父 POM
+      职责：
+        1. 统一项目坐标（groupId/version），子模块继承后无需重复声明
+        2. 聚合所有子模块（<modules>），支持一次 mvn 命令全量构建
+        3. 统一 import 三份版本 BOM（Spring Boot / Spring Cloud / Spring Cloud Alibaba），
+           再引用本项目自研 BOM（insight-engine-dependencies）统一内部模块版本
+      约定：
+        - 编译目标 Java 17（release=17），满足 MVP 目标（本机 JDK21 也能产出 17 字节码）
+        - 编码 UTF-8，避免 Windows 下中文注释乱码
+    -->
+    <groupId>com.insightengine</groupId>
+    <artifactId>insight-engine</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>insight-engine</name>
+    <description>智擎 AI · 企业级 AI Agent 编排与知识中枢平台</description>
+
+    <modules>
+        <module>insight-engine-dependencies</module>
+        <module>insight-engine-common</module>
+        <module>insight-engine-api</module>
+        <module>insight-engine-starter</module>
+        <module>insight-engine-modules</module>
+    </modules>
+
+    <properties>
+        <!-- 统一编码，避免 Windows 控制台/文件中文乱码 -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- Java 版本：MVP 目标 17，本机 JDK21 编译用 release=17 产出 17 字节码 -->
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+
+        <!-- 内部模块统一版本（由 insight-engine-dependencies BOM 管理，这里仅作占位兜底） -->
+        <revision>1.0.0-SNAPSHOT</revision>
+    </properties>
+
+    <!--
+      dependencyManagement：只声明版本、不引入依赖。
+      采用「BOM import」方式统一三方依赖版本，避免各子模块各自写版本号导致冲突。
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Boot 版本底座（锁定 3.2.5，与 TD §2.1 一致） -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>3.2.5</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud 版本底座（2023.0.1，与 Boot 3.2 对齐） -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>2023.0.1</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud Alibaba（Nacos/Sentinel）版本底座 -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>2023.0.1.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- 本项目自研 BOM：统一内部模块（common/api/starter）与三方补充依赖版本 -->
+            <dependency>
+                <groupId>com.insightengine</groupId>
+                <artifactId>insight-engine-dependencies</artifactId>
+                <version>${revision}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- 编译插件：release=17，确保 JDK21 环境产出 Java17 字节码 -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                    <configuration>
+                        <release>17</release>
+                        <encoding>UTF-8</encoding>
+                        <!-- 让 Lombok 注解处理器在编译期生效 -->
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>1.18.30</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+                <!-- Spring Boot 打包插件：供各业务服务打成可执行 jar -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>3.2.5</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

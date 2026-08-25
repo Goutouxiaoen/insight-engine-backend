@@ -298,10 +298,10 @@
 我正在开发"智擎 AI"项目（企业级 AI Agent 编排平台）。
 
 请先阅读以下文件，建立完整上下文：
-1. d:/CodexProject/docs/PRD.md（产品需求）
-2. d:/CodexProject/docs/TD.md（技术方案）
-3. d:/CodexProject/docs/IF.md（接口设计）
-4. d:/CodexProject/docs/PROGRESS.md（当前进度）
+1. d:/CodexProject/insight-engine/docs/PRD.md（产品需求）
+2. d:/CodexProject/insight-engine/docs/TD.md（技术方案）
+3. d:/CodexProject/insight-engine/docs/IF.md（接口设计）
+4. d:/CodexProject/insight-engine/docs/PROGRESS.md（当前进度）
 
 读完后，请先用 5 行以内的话复述：我们现在做到哪了、下一步要做什么。
 
@@ -623,8 +623,8 @@ docs/LEARNING.md 结构：
 代码路径：d:/CodexProject/insight-engine-modules/insight-engine-xxx/
 
 请对照以下文档审查：
-- 技术方案：d:/CodexProject/docs/TD.md
-- 接口设计：d:/CodexProject/docs/IF.md
+- 技术方案：d:/CodexProject/insight-engine/docs/TD.md
+- 接口设计：d:/CodexProject/insight-engine/docs/IF.md
 
 请重点检查：
 1. 业务逻辑是否正确、完整（对照 PRD/IF）
@@ -668,8 +668,8 @@ docs/LEARNING.md 结构：
 【前端开发】请为"智擎 AI"开发管理端 XX 页面。
 
 - 技术栈：Vue 3 + Vite + TypeScript + Arco Design + Pinia + Axios
-- 接口契约：请读 d:/CodexProject/docs/IF.md 中的 XX 章节
-- 页面要求：请读 d:/CodexProject/docs/PRD.md 第 11 章信息架构
+- 接口契约：请读 d:/CodexProject/insight-engine/docs/IF.md 中的 XX 章节
+- 页面要求：请读 d:/CodexProject/insight-engine/docs/PRD.md 第 11 章信息架构
 
 请实现：
 1. XX 页面的完整组件
@@ -768,7 +768,7 @@ docs/LEARNING.md 结构：
 【前端联调】我现在要联调 XX 模块的前后端。
 
 请执行：
-1. 读 d:/CodexProject/docs/IF.md 的 XX 章节，确认接口契约
+1. 读 d:/CodexProject/insight-engine/docs/IF.md 的 XX 章节，确认接口契约
 2. 用 curl 验证后端真实接口（地址：http://localhost:7000/...）
    返回是否与 IF 一致（字段名、类型、错误码）
 3. 不一致的地方，明确告诉我：是后端问题还是 IF 问题
@@ -854,10 +854,10 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 我正在开发"智擎 AI"项目（企业级 AI Agent 编排平台）。
 
 请先阅读以下文件建立上下文：
-1. d:/CodexProject/docs/PROGRESS.md   （当前进度，最重要）
-2. d:/CodexProject/docs/TD.md         （技术方案）
-3. d:/CodexProject/docs/IF.md         （接口设计，写接口时读）
-4. d:/CodexProject/docs/PRD.md        （产品需求，需要时读）
+1. d:/CodexProject/insight-engine/docs/PROGRESS.md   （当前进度，最重要）
+2. d:/CodexProject/insight-engine/docs/TD.md         （技术方案）
+3. d:/CodexProject/insight-engine/docs/IF.md         （接口设计，写接口时读）
+4. d:/CodexProject/insight-engine/docs/PRD.md        （产品需求，需要时读）
 
 读完后用 5 行内复述当前进度与下一步。
 
@@ -890,7 +890,7 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 ```
 本任务已完成。请执行：
 1. 先自查代码质量（分层/异常/入参校验/魔法数字/注释/TODO），逐条说明
-2. 更新 d:/CodexProject/docs/PROGRESS.md（状态、决策、踩坑）
+2. 更新 d:/CodexProject/insight-engine/docs/PROGRESS.md（状态、决策、踩坑）
 3. 输出本次总结：做了什么 / 怎么运行验证 / 遗留问题 / 下一步
 4. 告诉我该执行哪些 git 命令提交
 ```
@@ -906,7 +906,7 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 ```
 我在 XX 模块遇到问题：XXX（贴报错）
 
-请先读 d:/CodexProject/docs/PROGRESS.md 了解背景，
+请先读 d:/CodexProject/insight-engine/docs/PROGRESS.md 了解背景，
 然后定位问题原因，给出最小可验证的修复方案。
 ```
 
@@ -992,10 +992,10 @@ CodeBuddy 里开新对话的方式（二选一）：
 我正在开发"智擎 AI"项目（企业级 AI Agent 编排平台，Spring Boot 3 + Spring Cloud Alibaba + Spring AI）。
 
 请先阅读以下文件，建立完整上下文：
-1. d:/CodexProject/docs/PROGRESS.md   （当前进度，最重要）
-2. d:/CodexProject/docs/TD.md         （技术方案）
-3. d:/CodexProject/docs/IF.md         （接口设计，写接口时读）
-4. d:/CodexProject/docs/PRD.md        （产品需求，需要时读）
+1. d:/CodexProject/insight-engine/docs/PROGRESS.md   （当前进度，最重要）
+2. d:/CodexProject/insight-engine/docs/TD.md         （技术方案）
+3. d:/CodexProject/insight-engine/docs/IF.md         （接口设计，写接口时读）
+4. d:/CodexProject/insight-engine/docs/PRD.md        （产品需求，需要时读）
 
 读完后，请用 5 行以内复述：现在做到哪了、下一步要做什么、有无阻塞。
 
@@ -1008,7 +1008,7 @@ CodeBuddy 里开新对话的方式（二选一）：
 
 ```
 本任务已完成。请执行收尾：
-1. 更新 d:/CodexProject/docs/PROGRESS.md（模块状态、决策、踩坑、下一步）
+1. 更新 d:/CodexProject/insight-engine/docs/PROGRESS.md（模块状态、决策、踩坑、下一步）
 2. 用 5 行总结：本次做了什么 / 怎么验证 / 遗留问题
 3. 给我要执行的 git 命令（add + commit）
 ```
@@ -1025,10 +1025,10 @@ CodeBuddy 里开新对话的方式（二选一）：
 我正在开发"智擎 AI"项目（企业级 AI Agent 编排平台）。
 
 请先阅读以下文件建立完整上下文：
-1. d:/CodexProject/docs/PROGRESS.md
-2. d:/CodexProject/docs/TD.md
-3. d:/CodexProject/docs/IF.md
-4. d:/CodexProject/docs/PRD.md
+1. d:/CodexProject/insight-engine/docs/PROGRESS.md
+2. d:/CodexProject/insight-engine/docs/TD.md
+3. d:/CodexProject/insight-engine/docs/IF.md
+4. d:/CodexProject/insight-engine/docs/PRD.md
 
 读完后用 5 行以内复述当前进度与下一步。
 
@@ -1053,11 +1053,11 @@ CodeBuddy 里开新对话的方式（二选一）：
 
 要求：
 1. 先讲原理（认证流程、JWT 结构、过滤器链）
-2. 再结合我项目 d:/CodexProject/docs/TD.md 第 7 章的设计讲怎么落地
+2. 再结合我项目 d:/CodexProject/insight-engine/docs/TD.md 第 7 章的设计讲怎么落地
 3. 最后给 3 个面试可能追问的问题和答案要点
 ```
 
-学完让 AI 帮你把笔记追加到 `d:/CodexProject/docs/LEARNING.md`。
+学完让 AI 帮你把笔记追加到 `d:/CodexProject/insight-engine/docs/LEARNING.md`。
 
 ## D7. Review 对话怎么开（每个里程碑做一次）
 
@@ -1065,7 +1065,7 @@ CodeBuddy 里开新对话的方式（二选一）：
 【Review 模式】请以资深 Java 架构师身份审查我刚完成的 XX 模块。
 
 代码路径：d:/CodexProject/insight-engine-modules/insight-engine-xxx/
-对照文档：d:/CodexProject/docs/TD.md 和 d:/CodexProject/docs/IF.md
+对照文档：d:/CodexProject/insight-engine/docs/TD.md 和 d:/CodexProject/insight-engine/docs/IF.md
 
 重点检查：业务逻辑正确性 / 异常处理 / 分层约定 / 安全隐患 / 性能隐患。
 按 🔴必须修 / 🟡建议修 / 🟢可选 三级输出，每条给"文件:行号 + 问题 + 建议"。
