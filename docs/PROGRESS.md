@@ -25,7 +25,7 @@
 | 产品/技术/接口文档 | ✅ 完成 | 100% | PRD/TD/IF | 已定稿 |
 | 协作指导文档 | ✅ 完成 | 100% | DEVGUIDE.md | 已定稿 |
 | 环境准备（JDK/Maven/Docker/Node） | ✅ 完成 | 100% | 本机 JDK21/Maven3.9.9/Docker29/Node24 | 全部就绪，Docker 引擎已启动 |
-| Git 仓库初始化 | ⚪ 未开始 | 0% | | |
+| Git 仓库初始化 | ✅ 完成 | 100% | .gitignore | master 分支，已有 5 次提交，无远程 |
 | 工程骨架（父POM/BOM/common/starter） | ⚪ 未开始 | 0% | | |
 | 基础设施（docker-compose/init.sql） | ⚪ 未开始 | 0% | | |
 | UMS 认证服务 | ⚪ 未开始 | 0% | | |
@@ -64,7 +64,7 @@
 
 ## 五、当前阻塞 / 待解决问题
 
-- [ ] 待确认：MVP 目标 JDK17，本机仅 JDK21；建议直接用 JDK21 + `--release 17` 编译（免装 17），待确认
+- [x] 已确认：JDK 直接用本机 JDK21 + `--release 17` 编译产出 17 字节码，免装 JDK17
 - [ ] 待确认：PostgreSQL/Redis/Nacos/MinIO 本机是否已有其他容器占用对应宿主端口（阶段 2 逐一核实，若有冲突按 TD §18.2.3 端口表调整）
 
 ---
