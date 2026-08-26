@@ -11,6 +11,7 @@ import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 /**
  * 全链路 TraceID 过滤器。
@@ -32,14 +33,20 @@ public class TraceFilter extends OncePerRequestFilter {
     /** MDC 中 traceId 的 key，与 logback pattern 中的 %X{traceId} 对应 */
     private static final String MDC_TRACE_ID = "traceId";
 
+    /** traceId 最大长度，防止超长字符串导致 MDC/响应头/日志膨胀 */
+    private static final int MAX_TRACE_ID_LEN = 64;
+
+    /** 合法 traceId 字符集：字母/数字/连字符，杜绝换行、ANSI 等日志注入字符 */
+    private static final Pattern TRACE_ID_PATTERN = Pattern.compile("[A-Za-z0-9-]{1,64}");
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         // 优先复用上游（网关/上游服务）透传的 traceId，保证跨服务链路可串联
         String traceId = request.getHeader(Constants.HEADER_TRACE_ID);
-        if (StrUtil.isBlank(traceId)) {
-            // 无上游 traceId 时（本服务作为入口），生成一个短 UUID 作为链路起点
+        // 请求头完全可控，非法/缺失一律丢弃并重新生成，绝不信任用户输入
+        if (traceId == null || !TRACE_ID_PATTERN.matcher(traceId).matches()) {
             traceId = IdUtil.fastSimpleUUID();
         }
 
