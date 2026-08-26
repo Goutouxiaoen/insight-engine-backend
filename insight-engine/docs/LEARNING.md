@@ -17,6 +17,7 @@
 - [x] Java 包级元数据：package-info.java / 包级注解（2026-08-25 已学，见下方笔记）
 - [x] Web 安全基础：日志注入 / 越权面 / 白名单校验（2026-08-26 已学，见下方笔记）
 - [x] Git 提交/拉取标准动作与冲突规避（2026-08-26 已学，见下方笔记）
+- [x] PostgreSQL 自增主键与序列（BIGSERIAL / sequence / nextval / setval）（2026-08-26 已学，见下方笔记）
 - [ ] Spring Boot 3 与 Java 17 新特性
 - [ ] Spring Security + JWT 认证
 - [ ] RBAC / ABAC 权限模型
@@ -754,6 +755,71 @@ git push origin dev-xuy
 4. **坑：push 被拒（non-fast-forward）就懵了**
    - 现象：报 `rejected ... non-fast-forward` 后不知道怎么处理。
    - 规避：这是"本地落后于远程"的正常提示，`git pull origin dev-xuy`（可能产生冲突）→ 解决 → 再 `git push`。
+
+---
+
+## PostgreSQL 自增主键：BIGSERIAL / 序列（sequence）/ nextval / setval
+
+- 学于：2026-08-26
+- 关联模块：`init.sql`（数据库初始化脚本，35 张表 + 种子数据）
+- 来源决策：架构师 review 发现的 🔴 级问题（种子数据显式 id 未重置序列）、PROGRESS 五
+
+> 目标：从 MySQL 背景彻底搞懂 PG 的"自增"——为什么它不像 MySQL 那样"自动"，为什么显式插 id 后会撞号。核心差异就一句：**MySQL 把计数器藏在表里（无名字），PG 把计数器做成独立对象「序列」（有名字）。**
+
+### 直观类比（银行取号机）
+
+把自增主键想成**银行取号机**：
+
+- 正常自增 = 按一下取号机，机器"咔"吐一个号（`nextval` 自动 +1）；
+- 种子数据显式写 id = **不按取号机**，自己手写"1 号"小票交柜台；
+- 结果：取号机不知道你手写了 1 号，它下一个还是吐"1 号" → 两张 1 号**撞号**。
+
+修复 `setval` = 手动把取号机计数器拨到"1 号已经发过了"，下次才吐 2 号。
+
+### 核心原理
+
+1. **`BIGSERIAL` 不是数据类型，是语法糖**。你写 `id BIGSERIAL`，PG 背后展开成三件事：
+
+   ```sql
+   CREATE SEQUENCE ie_user_id_seq;                          -- ① 造一个计数器对象（序列）
+   CREATE TABLE ie_user (id BIGINT NOT NULL DEFAULT nextval('ie_user_id_seq'));  -- ② 列默认值 = 取号
+   ALTER SEQUENCE ie_user_id_seq OWNED BY ie_user.id;       -- ③ 计数器挂靠到 id 列
+   ```
+
+2. **序列（sequence）= 有名字的独立计数器对象**。它内部记一个数字 `last_value`，独立于表存在，可单独 `SELECT`/`setval`。每张 `BIGSERIAL` 表自动配一个 `表名_列名_seq`。
+
+3. **两个动作控制序列**：
+   - `nextval('seq')`：取号，返回当前值并 +1；
+   - `setval('seq', N)`：手动拨计数器到 N（默认 `is_called=true`，下次 nextval 返回 N+1）。
+
+4. **关键差异（bug 根因）**：显式 `INSERT` 指定 id 时**绕过**列的 `nextval` 默认值，序列不动。MySQL InnoDB 的 `AUTO_INCREMENT` 显式插入后会**自动**调到 `max+1`，PG **不会**，必须手动 `setval`。
+
+### 我在项目里怎么用的
+
+阶段 2 `init.sql` 种子数据为了固定 id（管理员=1、角色=1~5、权限=101~148），显式写了 id，导致序列停在初始值，阶段 3 自增插入必撞号。修复——末尾对 7 张表逐一重置：
+
+```sql
+SELECT setval(
+  pg_get_serial_sequence('ie_user', 'id'),     -- 动态解析序列名，不硬编码
+  (SELECT COALESCE(MAX(id), 1) FROM ie_user)   -- 拨到最大 id；空表用 1 兜底
+);
+-- 同理：ie_organization / ie_workspace / ie_member / ie_role / ie_permission / ie_tool
+```
+
+实机验证：7 表序列 `last_value` 全等于各自 `MAX(id)`，自增插入返回 `id=2`（不再撞 1）。
+
+### 面试可能追问
+
+- **Q1：`SERIAL`/`BIGSERIAL` 是类型吗？** 答：不是，语法糖。等价于 `BIGINT` 列 + 自动建序列 + 列默认值 `nextval`，真正自增靠序列对象。
+- **Q2：为什么显式插 id 后序列不推进？** 答：序列是独立对象，只在 `nextval`/`setval` 时变；显式 id 绕过默认值，序列不动。这是与 MySQL 的关键差异。
+- **Q3：批量导入带 id 的种子数据有几种安全做法？** 答：① 插完 `setval` 重置到 `MAX(id)`（最通用）；② PG 10+ `INSERT ... OVERRIDING SYSTEM VALUE`；③ 种子不写 id，用业务键（code）做唯一约束，id 全交序列。
+- **Q4：PG 删表后序列会残留吗？** 答：会。若序列没被 `OWNED BY` 关联，`DROP TABLE` 不删序列，留"孤儿序列"；`BIGSERIAL` 或手动 `OWNED BY` 才会级联删。
+
+### 踩坑提醒
+
+1. **显式插 id 忘 setval → 后续自增主键冲突**：症状"种子数据正常，应用一插就 `duplicate key`"。铁律：凡显式指定自增主键的批量导入，末尾必须 `setval`。
+2. **空表 `MAX(id)=NULL` 导致 setval 报错**：务必 `COALESCE(MAX(id), 1)`。
+3. **硬编码序列名脆弱**：用 `pg_get_serial_sequence('表','列')` 动态解析，表/列改名也不破。
 
 ---
 

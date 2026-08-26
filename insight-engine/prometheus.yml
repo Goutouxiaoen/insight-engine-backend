@@ -1,0 +1,28 @@
+# =============================================================================
+# 智擎 AI —— Prometheus 抓取配置
+# 阶段 2 基础设施阶段：仅抓取 Prometheus 自身。
+# 业务微服务（gateway/ums/... 暴露 /actuator/prometheus）实现后，在下方
+# insight-engine 静态目标中追加，或改用 docker 服务发现 / Nacos 服务发现。
+# =============================================================================
+
+global:
+  scrape_interval: 15s      # 抓取间隔
+  evaluation_interval: 15s  # 告警规则评估间隔
+
+scrape_configs:
+  # Prometheus 自身监控
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # 业务微服务（阶段 3+ 实现后逐个追加，metrics_path 统一 /actuator/prometheus）
+  # 示例：
+  # - job_name: "insight-engine"
+  #   metrics_path: "/actuator/prometheus"
+  #   static_configs:
+  #     - targets:
+  #         - "gateway:7000"
+  #         - "ums:8081"
+  #         - "model:8083"
+  #         - "kb:8084"
+  #         - "agent:8085"
