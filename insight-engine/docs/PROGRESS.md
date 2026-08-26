@@ -76,6 +76,7 @@
 ## 五、当前阻塞 / 待解决问题
 
 - [ ] 待确认：PostgreSQL/Redis/Nacos/MinIO 本机是否已有其他容器占用对应宿主端口（阶段 2 逐一核实，若有冲突按 TD §18.2.3 端口表调整）
+- [ ] 待处理：`UserContextFilter` 无条件信任明文身份头（X-User-Id/X-Tenant-Id/X-Roles），存在水平+垂直越权面（review 红级问题）。既定决策见 TD ADR-5（网关下发明文头、服务不解析 JWT），**留待阶段 3 落地 UMS 时补齐**，至少一项：网络层端口隔离 / 代码层 HMAC 签名（X-User-Sign）/ 最低成本 IP 网段校验
 
 ---
 
@@ -89,6 +90,6 @@
 
 ## 七、最近一次对话摘要
 
-- 日期：2026-08-25
-- 内容：阶段 1 工程骨架闭环并进入收尾——① 目录层级重构为 `insight-engine/` 自包含项目（`d:/CodexProject/` 成为多工程容器）；② 父 POM + BOM + common + api + 8 starter + 12 业务模块占位，`mvn clean install -DskipTests` 全量编译通过；③ 排查并解决 `package-info.java` 在 IDEA 中不被识别的问题，最终回归企业标准：`package-info.java` 保持「包级文档」本分、不写类型锚点，接受骨架阶段 api 模块暂空的过渡显示；④ 清理 21 个 target 构建产物；⑤ 沉淀 3 篇学习笔记（Docker 端口映射 / Maven 多模块工程 / package-info.java 包级元数据）；⑥ 已 git 提交（`0a79d77`）。
+- 日期：2026-08-26
+- 内容：阶段 1 工程骨架 review 问题修复——① **已修复** `TraceFilter` 红级问题（traceId 未校验）：`X-Trace-Id` 完全可控，原样写入 MDC/响应头存在日志注入（%0d%0a 换行、ANSI 控制字符）+ 超长字符串资源耗尽风险；现以正则 `[A-Za-z0-9-]{1,64}` 校验，非法/缺失一律丢弃并重新生成 `fastSimpleUUID()`；② `UserContextFilter` 越权面（红级）本次**暂不修改**，留待阶段 3 落地 UMS 时补齐（已记入「五、待解决问题」）。
 - 下一步：进入阶段 2，编写 docker-compose.yml + init.sql 基础设施
