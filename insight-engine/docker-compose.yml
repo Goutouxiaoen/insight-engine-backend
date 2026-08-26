@@ -1,0 +1,213 @@
+# =============================================================================
+# 智擎 AI（InsightEngine）—— 基础设施层编排
+#
+# 本文件只负责「中间件基础设施」：PostgreSQL / Redis / RabbitMQ / Nacos /
+# MinIO / Prometheus / Grafana。业务微服务（gateway/ums/...）在阶段 3+ 各自
+# 实现后，再以独立 compose 文件（如 docker-compose.apps.yml）追加，避免本文件
+# 与业务服务耦合、避免中间件被业务重启拖累。
+#
+# 端口约定（详见 docs/TD.md §18.2，务必遵守）：
+#   - 冒号「右边」= 容器内端口（进程监听端口，固定不变，服务间通信用，永远不改）
+#   - 冒号「左边」= 宿主映射端口（仅供本机 IDE 直连调试 / 浏览器访问管理界面，
+#     统一加偏移，避开本机已有服务）
+#
+# 微服务之间走 compose 内部网络（用「服务名:容器内端口」），完全不经过宿主端口。
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 15 + PGVector（主库 + 向量库，ADR-1/ADR-2）
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: insight-postgres
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: insight            # 业务库账号（与微服务 datasource 一致）
+      POSTGRES_PASSWORD: insight123
+      POSTGRES_DB: insight_engine       # 业务库名
+    ports:
+      - "5433:5432"                     # 宿主 5433 -> 容器 5432（避开本机 5432）
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # init.sql 仅在数据卷「首次初始化」时执行（DDL + 扩展 + 种子数据），
+      # 之后修改 init.sql 不会重跑，需手工 psql 执行或重建数据卷。
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insight -d insight_engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-net
+
+  # ---------------------------------------------------------------------------
+  # Redis 7（缓存 / 会话 / 配额计数 / 分布式锁）
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: insight-redis
+    hostname: redis
+    restart: unless-stopped
+    # AOF 持久化 + 密码，密码与微服务 spring.data.redis.password 一致
+    command: ["redis-server", "--requirepass", "insight123", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"                     # 宿主 6380 -> 容器 6379
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "insight123", "--no-auth-warning", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-net
+
+  # ---------------------------------------------------------------------------
+  # RabbitMQ 3.13（异步任务 / 事件 / 通知，ADR-12 锁定 3.13 不复用本机 4.2）
+  # ---------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: insight-rabbitmq
+    # hostname 固定，保证 mnesia 节点名（rabbit@rabbitmq）在容器重建后不变，
+    # 否则已持久化的队列元数据会对不上节点。
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: insight
+      RABBITMQ_DEFAULT_PASS: insight123
+    ports:
+      - "5673:5672"                     # AMQP：宿主 5673 -> 容器 5672
+      - "15673:15672"                   # 管理界面：宿主 15673 -> 容器 15672
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-net
+
+  # ---------------------------------------------------------------------------
+  # Nacos 2.3.2（注册中心 + 配置中心）
+  # MVP 阶段 standalone 单机模式，内置 Derby 存配置（免额外 MySQL）；
+  # 多节点/生产再切 MySQL 与集群模式。
+  # ---------------------------------------------------------------------------
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: insight-nacos
+    hostname: nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone                   # 单机模式（MVP）
+      NACOS_AUTH_ENABLE: "false"         # MVP 关闭鉴权，生产开启
+      JVM_XMS: 256m                      # 控制内存占用，避免单机资源紧张
+      JVM_XMX: 256m
+      JVM_XMN: 128m
+    ports:
+      - "8850:8848"                     # 主端口：宿主 8850 -> 容器 8848
+      - "9850:9848"                     # gRPC：宿主 9850 -> 容器 9848（客户端 2.x 必需）
+    volumes:
+      - nacos_data:/home/nacos/data
+      - nacos_logs:/home/nacos/logs
+    healthcheck:
+      # nacos 就绪探测端点；镜像内置 curl
+      test: ["CMD-SHELL", "curl -fs http://localhost:8848/nacos/v1/console/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s                 # nacos 启动较慢，放宽首检等待
+    networks:
+      - insight-net
+
+  # ---------------------------------------------------------------------------
+  # MinIO（对象存储：文档 / 头像 / 账单文件）
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-08-26T15-33-07Z
+    container_name: insight-minio
+    hostname: minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: insight           # 根账号（至少 8 位密码）
+      MINIO_ROOT_PASSWORD: insight123
+    ports:
+      - "9010:9000"                     # API：宿主 9010 -> 容器 9000
+      - "9011:9001"                     # 控制台：宿主 9011 -> 容器 9001
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-net
+
+  # ---------------------------------------------------------------------------
+  # Prometheus（指标抓取，Micrometer 暴露 /actuator/prometheus 后接入）
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: insight-prometheus
+    hostname: prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"                     # 宿主 9091 -> 容器 9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-net
+
+  # ---------------------------------------------------------------------------
+  # Grafana（可视化看板，数据源在界面手动配置，MVP 不自动 provisioning）
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: insight-grafana
+    hostname: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin      # 初始管理员账号（生产用 secret 覆盖）
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"                     # 宿主 3001 -> 容器 3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-net
+
+# -----------------------------------------------------------------------------
+# 内部网络：所有中间件与后续业务微服务加入同一网络，服务间用「服务名」互通
+# -----------------------------------------------------------------------------
+networks:
+  insight-net:
+    driver: bridge
+
+# -----------------------------------------------------------------------------
+# 命名数据卷：容器重建不丢数据
+# -----------------------------------------------------------------------------
+volumes:
+  pg_data:
+  redis_data:
+  rabbitmq_data:
+  nacos_data:
+  nacos_logs:
+  minio_data:
+  prometheus_data:
+  grafana_data:
