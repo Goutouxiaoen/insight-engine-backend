@@ -1,0 +1,43 @@
+# =============================================================================
+# UMS 服务配置
+# 端口 7101（PRD §9.2）；数据源/Redis 走本机 docker-compose 中间件的宿主映射端口
+# （PG 5433 / Redis 6380，见 TD §18.2.3）。JWT 密钥仅开发默认，生产务必覆盖。
+# =============================================================================
+server:
+  port: 7101
+
+spring:
+  application:
+    name: insight-engine-ums
+  datasource:
+    url: jdbc:postgresql://localhost:5433/insight_engine
+    username: insight
+    password: insight123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+  data:
+    redis:
+      host: localhost
+      port: 6380
+      password: insight123
+      database: 0
+      timeout: 3000
+
+# MyBatis-Plus 基础配置
+mybatis-plus:
+  configuration:
+    # 蛇形列名 → 驼峰属性自动映射（TD §5.1）
+    map-underscore-to-camel-case: true
+    # 开发期打印 SQL，生产关闭
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# JWT 配置（insight.security.*，由 starter-security 读取）
+insight:
+  security:
+    # 开发默认密钥；生产通过环境变量 INSIGHT_SECURITY_JWT_SECRET 覆盖
+    jwt-secret: insight-engine-dev-secret-key-change-me-in-prod-2026-08
+    access-token-ttl-seconds: 7200      # 2 小时（TD §7.2）
+    refresh-token-ttl-seconds: 604800   # 7 天（TD §7.2）
