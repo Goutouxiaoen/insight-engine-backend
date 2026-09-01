@@ -10,21 +10,28 @@
 
 > 按模块/主题组织，学一个补一个。
 
-### 待学习清单（对应 TD 技术栈）
+### 学习进度索引
 
-- [x] Docker 网络模型与端口映射（2026-08-25 已学，见下方笔记）
-- [x] Maven 多模块工程与依赖管理（2026-08-25 已学，见下方笔记）
-- [x] Java 包级元数据：package-info.java / 包级注解（2026-08-25 已学，见下方笔记）
-- [x] Web 安全基础：日志注入 / 越权面 / 白名单校验（2026-08-26 已学，见下方笔记）
-- [x] Git 提交/拉取标准动作与冲突规避（2026-08-26 已学，见下方笔记）
-- [x] PostgreSQL 自增主键与序列（BIGSERIAL / sequence / nextval / setval）（2026-08-26 已学，见下方笔记）
-- [x] Spring Boot 自动装配机制（AutoConfiguration.imports）（2026-08-26 已学，见下方笔记）
+**已沉淀**：
+
+- [x] Docker 网络模型与端口映射（2026-08-25）
+- [x] Maven 多模块工程与依赖管理（2026-08-25）
+- [x] Java 包级元数据：package-info.java / 包级注解（2026-08-25）
+- [x] Web 安全基础：日志注入 / 越权面 / 白名单校验（2026-08-26）
+- [x] Git 提交/拉取标准动作与冲突规避（2026-08-26）
+- [x] PostgreSQL 自增主键与序列（BIGSERIAL / sequence / nextval / setval）（2026-08-26）
+- [x] Spring Boot 自动装配机制（AutoConfiguration.imports）（2026-08-26）
+- [x] Spring Security + JWT 认证：无状态 vs 黑名单/登录态（登出/改密/禁用三种失效）+ 关 CSRF 原因 + @PreAuthorize 原理（2026-08-26）
+- [x] RBAC vs ABAC + 权限进 JWT 的权衡（2026-08-26）
+- [x] JWT 密钥管理与 fail-fast 校验（2026-08-27）
+- [x] 微服务身份传递的信任边界（2026-08-27）
+- [x] Nacos 服务注册与配置中心（2026-08-26，配置中心待学）
+- [x] Redis 登录失败锁定 + Token 黑名单 + 登录态缓存（2026-08-26）
+
+**待学习**：
+
 - [ ] Spring Boot 3 与 Java 17 新特性
-- [x] Spring Security + JWT 认证：无状态 vs 黑名单/登录态（登出/改密/禁用三种失效）+ 关 CSRF 原因 + @PreAuthorize 原理（2026-08-26 已学，见下方笔记）
-- [x] RBAC vs ABAC + 权限进 JWT 的权衡（2026-08-26 已学，见下方笔记）
-- [x] UMS 安全 review 红级必修项：token 失效 / JWT 密钥硬编码 / 双身份源越权（2026-08-27 已学，见下方笔记）
 - [ ] Spring Cloud Gateway 与过滤器链
-- [x] Nacos 服务注册与配置中心（2026-08-26 已学服务注册/发现，配置中心待学）
 - [ ] OpenFeign 服务调用
 - [ ] MyBatis-Plus 与数据权限拦截器
 - [ ] PostgreSQL + PGVector 向量检索
@@ -32,8 +39,7 @@
 - [ ] LangChain4j 与 Agent
 - [ ] ReAct 与 Function Calling 原理
 - [ ] RabbitMQ 异步任务与死信
-- [x] Redis 登录失败锁定 + Token 黑名单 + 登录态缓存（2026-08-26 已学，见下方笔记）
-- [ ] Redis 分布式锁 / 缓存穿透·击穿·雪崩（待学）
+- [ ] Redis 分布式锁 / 缓存穿透·击穿·雪崩
 - [ ] Sentinel 限流熔断
 - [ ] Micrometer + Prometheus 可观测
 - [ ] Docker / Docker Compose 部署
@@ -61,7 +67,9 @@
 
 - 学于：2026-08-25
 - 关联模块：基础设施（docker-compose 编排 RabbitMQ / PostgreSQL / Redis / Nacos / MinIO 等中间件）
-- 来源决策：TD §18.2、ADR-11 / ADR-12、PROGRESS 三/四
+- 来源：TD §18.2、ADR-11 / ADR-12
+
+> 目标：搞懂 Docker 里「容器内端口 vs 宿主端口」两套端口体系，以及微服务之间到底走「内部网络」还是「宿主端口映射」——这是本项目中间件端口偏移（5673/5433 等）决策的根因。
 
 ### 直观类比（公寓楼，先建立直觉）
 
@@ -147,7 +155,7 @@ spring:
   
   - 答：有。内部网络是 bridge 网桥直连，不经过宿主机端口 NAT 转发，路径更短、无端口冲突风险、默认不暴露到公网更安全；宿主端口映射则会把服务暴露到宿主机所有网卡（可用 `127.0.0.1:5673:5672` 绑定回环收紧）。所以"服务间通信走内部网络、宿主端口仅用于调试"是更干净也更安全的做法。
 
-### 踩坑提醒（3 个易踩坑 + 规避）
+### 踩坑提醒
 
 1. **坑：误把宿主端口写进服务间连接串（写成 `rabbitmq:5673`）**
    
@@ -170,7 +178,7 @@ spring:
 
 - 学于：2026-08-25
 - 关联模块：整个 `insight-engine/` 工程骨架（阶段 1）
-- 来源决策：TD §3「工程结构与模块依赖」、PRD §9.3、PROGRESS 三/四
+- 来源：TD §3、PRD §9.3
 
 > 目标：把"一大堆模块"一次性讲清楚——**为什么这么分、每一层是干嘛的、谁依赖谁**。这是理解后续所有开发的地基。
 
@@ -308,7 +316,7 @@ spring:
 
 - 学于：2026-08-25
 - 关联模块：`insight-engine-api`（跨服务契约层）的 `package-info.java`
-- 来源决策：PROGRESS 踩坑记录（IDEA 文件识别问题引出）
+- 来源：实际开发踩坑（IDEA 对空包 package-info 的识别问题）
 
 > 目标：讲清楚一个**很多人用了多年 Java 却从没注意过的冷知识**——`package-info.java` 到底是干嘛的、为什么它这么"特殊"、有什么规范约束。这次是踩了 IDEA 的坑才被迫搞懂的。
 
@@ -421,7 +429,7 @@ package com.insightengine.api;
 
 - 学于：2026-08-26
 - 关联模块：服务治理（Nacos 注册中心 + OpenFeign 服务调用）
-- 来源决策：TD §8「微服务治理设计」
+- 来源：TD §8
 
 > 目标：回答一个很多人绕晕的问题——"微服务还没部署到 Docker，在宿主机上直接跑，它们之间是怎么互相找到对方的？"答案是：**靠 Nacos，不靠 Docker 网络**。
 
@@ -527,10 +535,10 @@ spring:
 ## Web 安全基础：日志注入、越权面与白名单校验
 
 - 学于：2026-08-26
-- 关联模块：`starter-web` 的 `TraceFilter`（已修复）与 `UserContextFilter`（暂缓）
-- 来源决策：阶段 1 工程骨架 review 的两个红级问题、TD ADR-5、PROGRESS 七
+- 关联模块：`starter-web` 的 `TraceFilter` 与 `UserContextFilter`
+- 来源：TD ADR-5
 
-> 目标：用一次真实的安全 review 讲透三条安全常识——**日志注入、越权面、白名单校验思想**。它们共用一条主线：**永远不要无条件信任客户端可控的输入。**
+> 目标：讲透三条安全常识——**日志注入、越权面、白名单校验思想**。它们共用一条主线：**永远不要无条件信任客户端可控的输入。**
 
 ### 直观类比（门口签到本 + 员工证）
 
@@ -583,7 +591,7 @@ spring:
 
 ### 我在项目里怎么用的
 
-**① `TraceFilter`（已修复，白名单校验 + 非法重生成）**
+**① `TraceFilter`（白名单校验 + 非法重生成）**
 
 ```java
 private static final Pattern TRACE_ID_PATTERN = Pattern.compile("[A-Za-z0-9-]{1,64}");
@@ -599,11 +607,11 @@ try { filterChain.doFilter(request, response); }
 finally { MDC.remove("traceId"); }   // 防线程复用串号
 ```
 
-**② `UserContextFilter`（暂缓，红级已知问题）**
+**② `UserContextFilter`（信任网关明文身份头）**
 
-现状：无条件信任网关下发的明文身份头（`X-User-Id`/`X-Tenant-Id`/`X-Roles`），直接组装 `LoginUser`。这是 TD ADR-5 的既定权衡（网关唯一入口、内网可信），但若业务服务被绕过网关直连，即可伪造身份越权。
+现状：无条件信任网关下发的明文身份头（`X-User-Id`/`X-Tenant-Id`/`X-Roles`），直接组装 `LoginUser`。这是 TD ADR-5 的既定权衡（网关唯一入口、内网可信），但若业务服务被绕过网关直连，即可伪造身份越权（完整拆解见《微服务身份传递的信任边界》）。
 
-留待阶段 3 的三种补救（至少做一项）：
+越权面的防护手段（三选一）：
 
 | 方案 | 做法 | 代价 |
 |------|------|------|
@@ -641,8 +649,8 @@ finally { MDC.remove("traceId"); }   // 防线程复用串号
 ## Git 提交与拉取的标准动作（减少代码冲突）
 
 - 学于：2026-08-26
-- 关联模块：整个项目的版本管理（当前 `master` 单分支无远程，未来多人协作）
-- 来源决策：DEVGUIDE §9.2 Git 提交规范、PROGRESS 进度管理
+- 关联模块：整个项目的版本管理
+- 来源：DEVGUIDE §9.2
 
 > 目标：把"提交、拉取代码的标准动作"讲清楚，核心就一句——**先拉后推、小步提交、及时合主线**，能极大减少代码冲突。
 
@@ -765,7 +773,7 @@ git push origin dev-xuy
 
 - 学于：2026-08-26
 - 关联模块：`init.sql`（数据库初始化脚本，35 张表 + 种子数据）
-- 来源决策：架构师 review 发现的 🔴 级问题（种子数据显式 id 未重置序列）、PROGRESS 五
+- 来源：实际开发踩坑（种子数据显式 id 未重置序列）
 
 > 目标：从 MySQL 背景彻底搞懂 PG 的"自增"——为什么它不像 MySQL 那样"自动"，为什么显式插 id 后会撞号。核心差异就一句：**MySQL 把计数器藏在表里（无名字），PG 把计数器做成独立对象「序列」（有名字）。**
 
@@ -820,9 +828,17 @@ SELECT setval(
 
 ### 踩坑提醒
 
-1. **显式插 id 忘 setval → 后续自增主键冲突**：症状"种子数据正常，应用一插就 `duplicate key`"。铁律：凡显式指定自增主键的批量导入，末尾必须 `setval`。
-2. **空表 `MAX(id)=NULL` 导致 setval 报错**：务必 `COALESCE(MAX(id), 1)`。
-3. **硬编码序列名脆弱**：用 `pg_get_serial_sequence('表','列')` 动态解析，表/列改名也不破。
+1. **坑：显式插 id 忘 setval → 后续自增主键冲突**
+   - 现象：种子数据导入正常，应用一插新记录就报 `duplicate key`（序列还停在旧值）。
+   - 规避：凡显式指定自增主键的批量导入，末尾必须 `setval` 把序列重置到 `MAX(id)`。
+
+2. **坑：空表 `MAX(id)=NULL` 导致 setval 报错**
+   - 现象：对空表执行 `setval(seq, (SELECT MAX(id) FROM t))` 时 `MAX(id)` 为 NULL，导致 setval 报错。
+   - 规避：务必写成 `COALESCE(MAX(id), 1)`。
+
+3. **坑：硬编码序列名脆弱**
+   - 现象：表名/列名一改，写死的序列名（如 `public.t_user_id_seq`）就对不上，脚本失效。
+   - 规避：用 `pg_get_serial_sequence('表','列')` 动态解析序列名，改名也不破。
 
 ---
 
@@ -830,7 +846,7 @@ SELECT setval(
 
 - 学于：2026-08-26
 - 关联模块：`insight-engine-ums` 的 `AuthServiceImpl` + `RedisTokenBlacklistService` + `AuthConstants` + `JwtAuthFilter`
-- 来源决策：PRD §12.1.5（登录安全策略）、TD §6.1（缓存 Key 规范）、TD ADR-10（JWT 黑名单）、PROGRESS 七
+- 来源：PRD §12.1.5、TD §6.1、TD ADR-10
 
 > 目标：把 UMS 用 Redis 实现的三件事**彻底掰开揉碎**——① 登录失败锁定（防暴力破解）、② Token 黑名单（主动登出）、③ 登录态缓存（支持踢人）。先纠正一个概念：**登录失败锁定不是「限流」**，两者的本质区别见下方「核心原理」。
 
@@ -899,7 +915,7 @@ JWT 无状态，服务端无法「撤销」已签发的 token。登出后 token 
 
 #### 链路①：登录失败锁定
 
-常量定义 `AuthConstants.java:17-29`：
+常量定义 `AuthConstants.java`：
 
 ```java
 public static final int MAX_LOGIN_FAIL_COUNT = 5;        // 阈值 5 次
@@ -911,20 +927,20 @@ public static final String KEY_LOGIN_LOCK = "ie:auth:lock:";        // 锁 key
 登录主流程 `AuthServiceImpl.login()`：
 
 ```java
-// 1. 锁定检查：命中锁 key 直接拒绝，不查库、不比密码（84 行）
+// 1. 锁定检查：命中锁 key 直接拒绝，不查库、不比密码
 if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(KEY_LOGIN_LOCK + account))) {
     throw new BizException(ErrorCode.ACCOUNT_LOCKED);
 }
-// 4. 密码错误 → 递增计数（100-103 行）
+// 4. 密码错误 → 递增计数
 if (!passwordEncoder.matches(...)) {
     handleLoginFail(account);
     throw new BizException(ErrorCode.PASSWORD_ERROR);
 }
-// 5. 登录成功 → 清空失败计数（106 行）
+// 5. 登录成功 → 清空失败计数
 stringRedisTemplate.delete(KEY_LOGIN_FAIL + account);
 ```
 
-核心算法 `handleLoginFail()`（215-229 行）：
+核心算法 `handleLoginFail()`：
 
 ```java
 private void handleLoginFail(String account) {
@@ -963,7 +979,7 @@ private String blacklistKey(String token) {
 }
 ```
 
-登出时加入黑名单 `AuthServiceImpl.logout()`（145-157 行）：
+登出时加入黑名单 `AuthServiceImpl.logout()`：
 
 ```java
 public void logout(String accessToken) {
@@ -975,7 +991,7 @@ public void logout(String accessToken) {
 }
 ```
 
-校验时黑名单优先 `JwtAuthFilter.doFilterInternal()`（76-81 行）：
+校验时黑名单优先 `JwtAuthFilter.doFilterInternal()`：
 
 ```java
 // 黑名单优先于签名校验（TD §8.3：黑名单 → 签名 → 过期）
@@ -987,7 +1003,7 @@ if (blacklistService != null && blacklistService.isBlacklisted(token)) {
 
 #### 链路③：登录态缓存（支持踢人）
 
-登录/刷新成功后写缓存 `AuthServiceImpl.cacheToken()`（302-307 行）：
+登录/刷新成功后写缓存 `AuthServiceImpl.cacheToken()`：
 
 ```java
 // ie:auth:token:{userId} = access token，TTL = 2h（access 有效期）
@@ -1050,7 +1066,7 @@ stringRedisTemplate.opsForValue().set(KEY_AUTH_TOKEN + userId, accessToken,
 
 - 学于：2026-08-26
 - 关联模块：4 个 starter 的 `config` 包（`WebAutoConfiguration` / `SecurityAutoConfiguration` / `MybatisAutoConfiguration` / `RedisAutoConfiguration`）+ 各 starter 的 `META-INF/spring/...AutoConfiguration.imports` 文件
-- 来源决策：TD §3.1（starter 能力包设计）、阶段 1/3 工程落地
+- 来源：TD §3.1
 
 > 目标：彻底搞懂「starter 引进来为什么 Bean 就自动生效了」。核心就一个词——**自动装配（Auto-Configuration）**。
 
@@ -1125,7 +1141,7 @@ com.insightengine.starter.web.config.WebAutoConfiguration
 
 **① `@ConditionalOnWebApplication`（只在 Servlet 栈生效）**
 
-`WebAutoConfiguration.java:34-36`：
+`WebAutoConfiguration.java`：
 
 ```java
 @Configuration
@@ -1138,7 +1154,7 @@ public class WebAutoConfiguration {
 
 **② `@ConditionalOnMissingBean`（容器里已有就不重复创建）**
 
-`SecurityAutoConfiguration.java:55-58`：
+`SecurityAutoConfiguration.java`：
 
 ```java
 @Bean
@@ -1153,7 +1169,7 @@ public PasswordEncoder passwordEncoder() {
 
 **③ `@ConditionalOnMissingBean(name=...)`（按名字判断）**
 
-`RedisAutoConfiguration.java:39-41`：
+`RedisAutoConfiguration.java`：
 
 ```java
 @Bean
@@ -1197,7 +1213,7 @@ public class UmsApplication {
 
 它**没有** `@Import` 任何 starter 的配置类，也没有大范围 `@ComponentScan`，但 UMS 启动后 `JwtAuthFilter`、`RedisTemplate`、分页插件、全局异常处理**全部自动生效**——这就是 4 个 imports 文件在幕后起的作用。
 
-`SecurityAutoConfiguration.java:45-48` 还叠加了多个注解，是「配置类怎么增强」的典型：
+`SecurityAutoConfiguration.java` 还叠加了多个注解，是「配置类怎么增强」的典型：
 
 ```java
 @Configuration
@@ -1248,7 +1264,7 @@ public class SecurityAutoConfiguration {
 
 - 学于：2026-08-26
 - 关联模块：`AuthServiceImpl.logout()` / `UserServiceImpl.updatePassword()` / `UserServiceImpl.updateStatus()` + `RedisTokenBlacklistService` + `JwtAuthFilter`
-- 来源决策：TD ADR-10、PRD §12、PROGRESS 七
+- 来源：TD ADR-10、PRD §12
 
 > 目标：搞懂「JWT 无状态」到底带来什么问题、三种「要让已签发 token 失效」的场景分别怎么处理、它们背后的设计权衡。
 
@@ -1266,7 +1282,7 @@ public class SecurityAutoConfiguration {
 
 #### 1. JWT 登录完整流程（三步走）
 
-**第 1 步：登录（一次性）**——`AuthServiceImpl.login()`（80-112 行）依次做 5 件事：
+**第 1 步：登录（一次性）**——`AuthServiceImpl.login()` 依次做 5 件事：
 
 ```
 ① 查锁定：Redis 里有没有 ie:auth:lock:{account}
@@ -1418,7 +1434,7 @@ public void logout(String accessToken) {
 
 **② 改密（单用户 → 删登录态）**
 
-`UserServiceImpl.updatePassword()`（147-162 行）：
+`UserServiceImpl.updatePassword()`：
 
 ```java
 userMapper.updateById(update);  // 先改密码
@@ -1428,7 +1444,7 @@ stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + userId);
 
 **③ 禁用（单用户 → 删登录态）**
 
-`UserServiceImpl.updateStatus()`（137-140 行）：
+`UserServiceImpl.updateStatus()`：
 
 ```java
 if (request.getStatus() == AuthConstants.ACCOUNT_DISABLED) {
@@ -1452,6 +1468,45 @@ JwtPayload payload = jwtUtil.parseAccessToken(token);
 
 > 关键设计：**黑名单检查在签名校验之前**——因为一个 token 即使签名有效、没过期，只要登出过就必须拒绝。
 
+#### 7. 改密/禁用的失效机制其实不完整（深入拆解）
+
+上面这套方案看着「逻辑自洽」，但落到代码上有致命缺口：**「删缓存」和「查缓存」两头只做了一头**。
+
+**根因**：
+
+- 写入方删了缓存：`UserServiceImpl.updateStatus()` 禁用时 `delete(ie:auth:token:{id})`；`updatePassword()` 改密时同样删。
+- 校验方从不读缓存：`JwtAuthFilter.doFilterInternal()` 只查黑名单 `isBlacklisted(token)`，**从不读 `ie:auth:token:{userId}`**。删了等于白删——过滤器根本不知道缓存被删了。
+
+**现象（时序）**：
+
+```
+① 用户 A 已登录，拿到 access token（2h 有效）
+② 管理员禁用 A（updateStatus → 删了 ie:auth:token:A）
+③ A 拿旧 token 继续请求 → JwtAuthFilter 不读缓存 → 验签通过 → 正常放行 ✅（本该拒绝 ❌）
+④ A 还能继续用最多 2 小时，直到 token 自然过期
+```
+
+**附带问题**：`AuthServiceImpl.cacheToken()` 是「死代码」——写进去没人读，纯浪费 Redis 内存；且存的是**完整 token 明文**（注释却说「存摘要」，自相矛盾），Redis 被拖库即泄露可用 token。
+
+**修复方案**（三选一，推荐 B）：
+
+| 方案 | 做法 | 特点 |
+|------|------|------|
+| A | `JwtAuthFilter` 验签后额外查 `ie:auth:token:{userId}` 存在且摘要匹配 | 改动最小，但每次请求多一次 Redis 查询 |
+| **B（推荐）** | JWT 引入 `jti` + `ver` 会话版本号，禁用/改密时 `ver`+1 写 Redis，过滤器比对版本 | 无状态友好、可扩展 |
+| C | 改密/禁用时枚举该用户全部会话 token 加黑名单 | 需维护 userId→tokenHash 集合，最复杂 |
+
+**方案 B（`jti` + `ver`）怎么落地**：
+
+- `jti`（JWT ID）：每个 token 的唯一编号，放进 JWT claim，用于精确标记「某一个」token。
+- `ver`（version）：用户级「会话版本号」，改密/禁用时 `ver+1` 写 Redis（key=`ie:auth:ver:{userId}`）。
+- 签发时把当前 `ver` 也放进 JWT claim；校验时拿「JWT 里的 ver」和「Redis 里的 ver」比对，不一致就拒绝。
+- 好处：**不用枚举每个 token**，一个用户一个 `ver` 就管住他所有 token；且对 JWT 的「无状态」破坏最小（只在版本变化时需要查一次 Redis）。
+
+> 一句话总结：**JWT 无状态无法主动撤销，凡是「要让已签发 token 失效」的诉求，都必须引入一个「有状态的标记」来补——黑名单（单 token）、登录态缓存（单用户）、`ver` 版本号（单用户，更优雅）。**
+
+**附带修复**：`cacheToken` 一律改存 SHA-256 摘要（与 `RedisTokenBlacklistService` 对齐），杜绝明文 token 落 Redis。
+
 ### 面试可能追问
 
 - **Q1：JWT 无状态，怎么实现「登出」？**
@@ -1464,7 +1519,8 @@ JwtPayload payload = jwtUtil.parseAccessToken(token);
   - 答：粒度不同。登出只作废「当前这一次」token，用黑名单按 token 记；改密/禁用要作废「这个用户全部」token，用登录态按 userId 记（删一个 key 全失效）。技术上能统一（都删登录态），但黑名单还能覆盖「token 被泄露、主动作废某个 token」的场景，职责更清晰。
 
 - **Q4（深入）：只删登录态缓存，但 JWT 本身没过期，真的能拦住吗？**
-  - 答：**关键点**——删缓存本身不会自动拦住请求，必须在**校验时查这个缓存**才有效。如果认证过滤器只看 JWT 签名+过期、不查登录态缓存，那删了也没用。所以「删缓存」和「校验时查缓存」必须配套。本项目 `JwtAuthFilter` 目前查了黑名单但未查登录态缓存（登录态缓存的真正拦截力依赖后续补强），这是设计权衡点。
+  - 答：**关键点**——删缓存本身不会自动拦住请求，必须在**校验时查这个缓存**才有效。如果认证过滤器只看 JWT 签名+过期、不查登录态缓存，那删了也没用。所以「删缓存」和「校验时查缓存」必须配套。本项目 `JwtAuthFilter` 目前查了黑名单但未查登录态缓存，正是「删了没人读」的缺口。
+  - 更优雅的解法是 **`jti` + `ver` 版本号**：签发时把用户级会话版本 `ver` 放进 JWT，改密/禁用时 `ver+1` 写 Redis，校验时比对版本，不一致即拒绝——一个用户一个版本号就管住他全部 token，无需枚举。
 
 - **Q5：为什么黑名单/登录态放 Redis 而不是本地内存？**
   - 答：微服务多实例部署，本地内存各实例不共享（登出写实例 A、请求打到实例 B 就失效）。Redis 是集中式共享存储，所有实例读同一份。这是「分布式下状态一致性」的核心认知。
@@ -1483,13 +1539,17 @@ JwtPayload payload = jwtUtil.parseAccessToken(token);
    - 现象：想作废「用户全部 token」，却按「单个 token」去删，导致其他设备的 token 还能用。
    - 规避：明确粒度——单 token 用黑名单（key 含 token 摘要），单用户用登录态（key 含 userId）。
 
+4. **坑：把完整 token 明文写进 Redis 登录态缓存**
+   - 现象：`cacheToken` 存的是完整 token 明文（注释却写「存摘要」），Redis 一旦被拖库，攻击者直接拿到可用 token。
+   - 规避：缓存一律存 **SHA-256 摘要**（和黑名单服务一致），存摘要既能比对、又不暴露原文。
+
 ---
 
 ## RBAC vs ABAC + 权限进 JWT 的权衡
 
 - 学于：2026-08-26
 - 关联模块：`PermissionMapper.selectPermissionCodesByUserId()` / `RoleMapper` / `Role.scope` 字段 / `JwtUtil.createAccessToken()` / `JwtAuthFilter.authenticate()`
-- 来源决策：PRD §12.2（RBAC）、TD §7.4（方法级权限）、PROGRESS 七
+- 来源：PRD §12.2、TD §7.4
 
 > 目标：搞懂 RBAC 和 ABAC 的区别、项目用的是哪种、以及「把权限展开写进 JWT」背后的三个权衡。
 
@@ -1650,7 +1710,7 @@ JWT 里存 "100000000000000100010"（21字符）或 16进制（12字符）
 
 **为什么权限查询要 DISTINCT？**
 
-`PermissionMapper` 的 SQL（26 行）：
+`PermissionMapper` 的 SQL：
 
 ```sql
 SELECT DISTINCT p.code
@@ -1707,7 +1767,7 @@ JOIN ie_role_permission rp ...
 
 - 学于：2026-08-26
 - 关联模块：`SecurityAutoConfiguration.securityFilterChain()`（csrf.disable）+ `UserController` 的 `@PreAuthorize` + `JwtAuthFilter.authenticate()`
-- 来源决策：TD §7.3 / §7.4、PROGRESS 七
+- 来源：TD §7.3 / §7.4
 
 > 目标：讲透两个面试高频点——① 为什么无状态 JWT 可以关闭 CSRF 防护；② `@PreAuthorize` 到底是怎么工作的（原理 + 完整调用链）。
 
@@ -1791,7 +1851,7 @@ Cookie 只存一个「凭证号」（sessionId），**真正的用户数据存�
 | 浏览器自动携带？ | ✅ 会 | ❌ 不会 |
 | CSRF 风险 | 高（恶意站能借你 Cookie） | 无（恶意站带不上你的 JWT） |
 
-项目代码 `SecurityAutoConfiguration.java:102`：
+项目代码 `SecurityAutoConfiguration.java`：
 
 ```java
 http.csrf(csrf -> csrf.disable())   // JWT 放请求头、不依赖 Cookie，天然免疫 CSRF
@@ -1807,7 +1867,7 @@ http.csrf(csrf -> csrf.disable())   // JWT 放请求头、不依赖 Cookie，天
 
 - 全类名：`org.springframework.security.access.prepost.PreAuthorize`
 - 作用对象：**方法**（贴在方法上）
-- 激活前提：必须有 `@EnableMethodSecurity`（`SecurityAutoConfiguration.java:47`），否则注解是「死注解」，写了不生效
+- 激活前提：必须有 `@EnableMethodSecurity`（`SecurityAutoConfiguration.java`），否则注解是「死注解」，写了不生效
 
 **② 注解怎么用？—— 括号里写一个 SpEL 表达式**
 
@@ -1830,14 +1890,14 @@ public Result<PageResult<UserPageVO>> page(...) { ... }
 
 **③ 当前项目代码位置在哪？**
 
-- 使用处：`UserController.java:47` 等（用户/角色管理接口都贴了）
+- 使用处：`UserController.java` 等（用户/角色管理接口都贴了）
   ```java
   @PreAuthorize("hasAuthority('member:read')")   // 用户分页需 member:read
   @PreAuthorize("hasAuthority('member:create')") // 创建用户需 member:create
   @PreAuthorize("hasAuthority('role:write')")    // 角色写操作需 role:write
   ```
-- 激活处：`SecurityAutoConfiguration.java:47` 的 `@EnableMethodSecurity`
-- 权限来源处：`JwtAuthFilter.authenticate()`（100-107 行）把 JWT 的 `perms` 转成 `SimpleGrantedAuthority`
+- 激活处：`SecurityAutoConfiguration.java` 的 `@EnableMethodSecurity`
+- 权限来源处：`JwtAuthFilter.authenticate()` 把 JWT 的 `perms` 转成 `SimpleGrantedAuthority`
 
 **④ 它是什么作用？—— 替代「在每个方法里写 if 判断」**
 
@@ -1879,7 +1939,7 @@ public Result<?> page(...) {
 
 关键前提（两个，缺一不可）：
 
-1. **SecurityContext 里必须先有权限**：这是 `JwtAuthFilter.authenticate()`（100-107 行）在请求进入时，把 JWT 的 `perms` 转成 `SimpleGrantedAuthority` 塞进去的：
+1. **SecurityContext 里必须先有权限**：这是 `JwtAuthFilter.authenticate()` 在请求进入时，把 JWT 的 `perms` 转成 `SimpleGrantedAuthority` 塞进去的：
    ```java
    List<SimpleGrantedAuthority> authorities = payload.getPermissions().stream()
            .map(SimpleGrantedAuthority::new).toList();
@@ -1937,70 +1997,40 @@ public Result<?> page(...) {
 
 ---
 
-## UMS 安全 review：三个 🔴 红级必修项（token 失效 / JWT 密钥 / 双身份源）
+## JWT 密钥管理与 fail-fast 校验
 
 - 学于：2026-08-27
-- 关联模块：`AuthServiceImpl` / `UserServiceImpl` / `JwtAuthFilter` / `UserContextFilter` / `SecurityProperties` / `WebAutoConfiguration`
-- 来源决策：PROGRESS 第五节「Review 🔴 必须修」清单
+- 关联模块：`SecurityProperties` / `JwtUtil` / `application.yml`
+- 来源：TD ADR-10、PRD §12
 
-> 目标：完整理解 UMS 代码 review 出的三个红级安全问题——每个问题的「是什么 / 为什么发生 / 现象 / 如何修复」，以及背后的安全设计原则。
+> 目标：搞懂 HS256 对称签名的本质、密钥泄露的后果，以及「密钥为什么不能有代码默认值、必须 fail-fast 校验」。
 
-### 背景
+### 直观类比（先建立直觉）
 
-对照 TD/IF 完整 review 了 UMS 代码，产出 3 🔴 / 8 🟡 / 6 🟢 待修清单。三个红级问题都集中在「认证安全」的核心，是这次 review 最有价值的部分。
+**JWT 签名密钥 = 印钞机的母版**
 
----
+- 验签就像验钞：母版（密钥）只有一个，印出来的钞票（token）谁都能验，但**能印假钞的只有拿到母版的人**。
+- HS256 是「对称」的——**印钞和验钞用同一块母版**。所以母版一旦泄露，攻击者不仅能验，还能自己印。
 
-### 🔴 问题 1：禁用/改密后 token 不失效（踢人机制形同虚设）
+> 一句话记忆：**HS256 签发与校验用同一把密钥，密钥泄露 = 认证体系被整个攻破，比密码泄露更严重。**
 
-**问题是什么**：管理员禁用用户、或用户改密后，已签发的 access token 依然能用（最长 2 小时），代码注释宣称的「强制重新登录」不成立。
+### 核心原理
 
-**为什么会发生**：根因是「删缓存」和「查缓存」两头只做了一头。
+#### 1. HS256 为什么是「对称签名」
 
-- 写入方删了缓存：`UserServiceImpl.updateStatus()`（138-140 行）禁用时 `delete(ie:auth:token:{id})`；`updatePassword()`（161 行）改密时同样删。
-- 校验方从不读缓存：`JwtAuthFilter.doFilterInternal()`（78-81 行）只查黑名单 `isBlacklisted(token)`，**从不读 `ie:auth:token:{userId}`**。删了等于白删，过滤器根本不知道缓存被删了。
+- 签发：`base64url(header).base64url(payload).HMACSHA256(secret)` —— 用 secret 算出签名。
+- 校验：服务端用**同一个 secret** 重新算一遍签名，比对是否一致，一致才相信 payload 没被篡改。
+- 关键：谁有 secret，谁就能对任意 `userId/roles/perms` 算出一个「合法」签名，等于**完全绕过认证与授权**。而且攻击者无需登录、无异常流量，可长期潜伏。
 
-附带问题：`AuthServiceImpl.cacheToken()`（302-307 行）是「死代码」——写进去没人读，纯浪费 Redis 内存；且存的是**完整 token 明文**（注释却说「存摘要」，自相矛盾），Redis 被拖库即泄露可用 token。
+#### 2. 密钥硬编码的危险
 
-**问题现象**：
+- 硬编码默认值（`SecurityProperties.jwtSecret` 代码里写死、`application.yml` 里同值）意味着：**只要代码/仓库泄露，密钥就泄露**。
+- 更糟的是「可预测」：写死一个固定的默认值，攻击者甚至不需要泄露，直接猜/在 GitHub 搜同名默认值就能伪造 token。
+- 带默认值上线的隐蔽风险：开发者「忘记配密钥」不会被发现，系统**默默用默认值跑起来**，等于默认裸奔。
 
-```
-① 用户 A 已登录，拿到 access token（2h 有效）
-② 管理员禁用 A（updateStatus → 删了 ie:auth:token:A）
-③ A 拿旧 token 继续请求 → JwtAuthFilter 不读缓存 → 验签通过 → 正常放行 ✅（本该拒绝 ❌）
-④ A 还能继续用最多 2 小时，直到 token 自然过期
-```
+#### 3. fail-fast 启动校验（把危险暴露在启动期）
 
-**如何修复**（三方案，推荐 B）：
-
-| 方案 | 做法 | 特点 |
-|------|------|------|
-| A | `JwtAuthFilter` 验签后额外查 `ie:auth:token:{userId}` 存在且摘要匹配 | 改动最小，但每次请求多一次 Redis 查询 |
-| **B（推荐）** | JWT 引入 `jti` + `ver` 会话版本号，禁用/改密时 `ver`+1 写 Redis，过滤器比对版本 | 无状态友好、可扩展 |
-| C | 改密/禁用时枚举该用户全部会话 token 加黑名单 | 需维护 userId→tokenHash 集合，最复杂 |
-
-附带必修：`cacheToken` 一律改存 SHA-256 摘要（与 `RedisTokenBlacklistService` 对齐），杜绝明文 token 落 Redis。
-
----
-
-### 🔴 问题 2：JWT 密钥硬编码且可预测
-
-**问题是什么**：HS256 签名密钥在代码里写死了默认值（`SecurityProperties.jwtSecret:26` + `application.yml:41` 两处同值 `insight-engine-dev-secret-key-change-me-in-prod-2026-08`），若带默认值上线，任何人可伪造 token。
-
-**为什么会是严重问题（HS256 本质）**：HS256 是对称签名，签发和校验用**同一密钥**。谁拿到 secret，谁就能离线伪造任意 `userId/roles/perms` 的 JWT，等于**完全绕过认证与授权**——比密码泄露更严重（密码泄露能改密码，密钥泄露且未发现可长期潜伏）。
-
-**如何修复**：
-
-1. 删代码默认值：`SecurityProperties.jwtSecret` 不再赋默认值
-2. fail-fast 启动校验：密钥为空或 <32 字节直接抛异常拒绝启动
-3. 密钥只经环境变量/配置中心注入
-
-**配置详解（本地 vs 生产）**：Spring Boot 配置三层优先级——**环境变量 > application.yml > 代码默认值**。
-
-- **本地开发**：yml 里留开发密钥，或用占位符 `${JWT_SECRET:dev-local-secret-2026-08}`（没设环境变量就用冒号后的默认值）
-- **生产**：环境变量注入随机密钥 `export JWT_SECRET="$(openssl rand -base64 48)"`，**绝不写进 yml**（会进 git 泄露）。`@ConfigurationProperties(prefix="insight.security")` 的 relaxed binding 会自动把环境变量 `INSIGHT_SECURITY_JWT_SECRET` 映射到 `jwtSecret` 字段
-
-**fail-fast 校验示例**（`JwtUtil` 构造时）：
+把「忘记配密钥」从「默默用默认值跑起来（危险）」变成「启动就报错（安全）」：
 
 ```java
 String secret = properties.getJwtSecret();
@@ -2009,26 +2039,74 @@ if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
 }
 ```
 
-> 价值：把「忘记配密钥」从「默默用默认值跑起来（危险）」变成「启动就报错（安全）」。
+- HS256 官方建议密钥至少 256 bit（32 字节），低于这个长度有被暴力枚举的风险。
+- 校验放在 `JwtUtil` 构造时（Bean 初始化阶段），启动即校验，不留给运行时。
+
+#### 4. 密钥的配置分层（本地 vs 生产）
+
+Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默认值**。
+
+- **本地开发**：yml 里留开发密钥，或用占位符 `${JWT_SECRET:dev-local-secret-2026-08}`（没设环境变量就用冒号后的默认值）。
+- **生产**：环境变量注入随机密钥 `export JWT_SECRET="$(openssl rand -base64 48)"`，**绝不写进 yml**（会进 git 泄露）。
+- `@ConfigurationProperties(prefix="insight.security")` 的 relaxed binding 会自动把环境变量 `INSIGHT_SECURITY_JWT_SECRET` 映射到 `jwtSecret` 字段。
+
+### 面试可能追问
+
+- **Q1：JWT 密钥该怎么管？**
+  - 答：三原则——① 不进代码、不进 git（环境变量/配置中心注入）；② 启动时 fail-fast 校验长度（HS256 ≥32 字节）；③ 生产用随机密钥，开发与生产分离。
+
+- **Q2：HS256 和 RS256 的区别？**
+  - 答：HS256 是对称签名（同一个 secret 签发和校验），适合单体/内部服务，密钥必须保密；RS256 是非对称（私钥签发、公钥校验），适合第三方鉴权场景，公钥可公开分发。本项目用 HS256 是因为 UMS 自己签、自己验，没有跨系统验签需求。
+
+- **Q3：为什么密钥泄露比密码泄露更严重？**
+  - 答：密码泄露 → 攻击者只能登录「某个用户」的账号，且可被发现、可改密止损；密钥泄露 → 攻击者能伪造「任意用户、任意权限」的 token，等于绕过整个认证体系，且无登录痕迹、难发现。
+
+### 踩坑提醒
+
+1. **坑：密钥带默认值上线**
+   - 现象：开发者忘记配密钥，系统默默用写死的默认值跑起来，攻击者用同名默认值即可伪造任意身份 token。
+   - 规避：代码不赋默认值 + 启动 fail-fast 校验长度，缺密钥直接拒绝启动。
+
+2. **坑：密钥写进 application.yml 提交到 git**
+   - 现象：yml 进仓库，密钥随代码历史永久泄露，删掉也追不回。
+   - 规避：生产密钥只走环境变量/配置中心；yml 里最多放开发占位符，绝不放真实密钥。
 
 ---
 
-### 🔴 问题 3：双身份源并存（UserContextFilter 无条件信任明文头）
+## 微服务身份传递的信任边界（双身份源问题）
 
-**问题是什么**：系统有「两套身份来源」——UserContextFilter 信「请求头明文」（可伪造），JwtAuthFilter 信「JWT」（可信），后者覆盖前者。安全依赖「filter 顺序」这个脆弱前提。
+- 学于：2026-08-27
+- 关联模块：`UserContextFilter` / `JwtAuthFilter` / `UserContext` / `WebAutoConfiguration`
+- 来源：TD ADR-5
 
-**核心：盒子 + 谁往盒子里放身份**（用 UserContext 类比）：
+> 目标：搞懂「一个系统里为什么不能有两套身份来源」、请求头身份为什么不可信、以及身份传递的正确边界。
 
-`UserContext` 是装「当前用户是谁」的盒子（ThreadLocal），业务代码 `UserContext.getUserId()` 从盒子里取身份（`UserContext.java:45-48`）。
+### 直观类比（先建立直觉）
 
-两个过滤器都往盒子塞身份：
+**`UserContext` = 一个「我是谁」的盒子（ThreadLocal）**
+
+- 业务代码需要知道「当前用户是谁」时，就从盒子里取（`UserContext.getUserId()`），不关心是谁放进去的。
+- 危险在于：**如果盒子里装的身份，是一个「任何人都能自己写」的来源放进去的，那这个盒子就不安全了。**
+
+> 一句话记忆：**身份只能有一个可信来源（服务端签名），绝不能信客户端可任意填写的明文。**
+
+### 核心原理
+
+#### 1. 两套身份来源并存（隐患根源）
+
+系统有两个过滤器都在往 `UserContext` 盒子里塞身份：
 
 | 过滤器 | 身份从哪来 | 客户端能伪造吗 | 执行顺序 |
 |--------|-----------|--------------|---------|
-| UserContextFilter | 请求头 `X-User-Id`/`X-Roles` | **能！随便填** | 先（order=HIGHEST+1） |
-| JwtAuthFilter | JWT（服务端签名） | 不能（没密钥） | 后 |
+| `UserContextFilter` | 请求头 `X-User-Id`/`X-Roles` | **能！随便填** | 先（order=HIGHEST+1） |
+| `JwtAuthFilter` | JWT（服务端签名） | 不能（没密钥） | 后 |
 
-**危险场景（白名单接口）**：`/auth/login`、`/auth/register`、`/auth/refresh` 是白名单（permitAll，不经过 JwtAuthFilter 校验），但 UserContextFilter 是 `/*` 全路径**照样执行**：
+- 正常情况下，`JwtAuthFilter` 后执行，会用「可信的 JWT 身份」覆盖 `UserContextFilter` 塞进去的「明文身份」，所以业务代码读到的通常是对的。
+- 但**安全依赖「后执行的过滤器一定覆盖先执行的」这个脆弱前提**。
+
+#### 2. 危险场景：白名单接口
+
+`/auth/login`、`/auth/register`、`/auth/refresh` 是白名单（permitAll，**不经过 JwtAuthFilter 校验**），但 `UserContextFilter` 是 `/*` 全路径**照样执行**：
 
 ```
 ① 攻击者请求 POST /auth/register（白名单，不需要 token）
@@ -2041,49 +2119,31 @@ if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
 ④ 盒子里残留伪造身份 → 业务代码读 UserContext 就中招
 ```
 
-**现在危险吗**：`register` 接口目前没读 `UserContext`，所以**还没被实际利用**，但这是「随时会爆的越权面」——将来任何白名单接口/内部接口读 `UserContext.getUserId()` 立刻中招，且「安全依赖 filter 顺序」本身就很脆弱。
+- `register` 接口目前没读 `UserContext`，所以还没被实际利用，但这是「随时会爆的越权面」——将来任何白名单接口/内部接口读 `UserContext.getUserId()` 立刻中招。
 
-**如何修复**（二选一）：
+#### 3. 修复方案（二选一）
 
-- **方案 A（推荐，UMS 走 JWT）**：给 UserContextFilter 加条件装配开关，默认关闭：
+- **方案 A（UMS 走 JWT，默认关闭网关头）**：给 `UserContextFilter` 加条件装配开关，默认关闭：
   ```java
   @ConditionalOnProperty(name = "insight.web.trust-gateway-headers", havingValue = "true")
   public FilterRegistrationBean<UserContextFilter> userContextFilterRegistration() { ... }
   ```
-  UMS 不配开关 → UserContextFilter 不生效 → 盒子里只有 JwtAuthFilter 塞的「可信身份」
-- **方案 B（走 TD ADR-5 明文头方案）**：加 HMAC 签名头 `X-User-Sign` 验签 / IP 网段校验兜底
-
----
-
-### 三个问题的共性（安全设计原则）
-
-| 原则 | 对应问题 |
-|------|---------|
-| 校验必须和写入配套（删了要有人读） | 问题 1 |
-| 密钥永远不进代码/仓库 | 问题 2 |
-| 身份永远只信服务端签名，不信客户端明文 | 问题 3 |
-
-> 一句话：这三个红级问题的本质都是**「信任了不该信任的，或没配套校验该校验的」**。
+  UMS 不配开关 → `UserContextFilter` 不生效 → 盒子里只有 `JwtAuthFilter` 塞的「可信身份」。
+- **方案 B（走 TD ADR-5 明文头方案）**：给网关下发的头加 HMAC 签名 `X-User-Sign` 验签，或 IP 网段校验兜底。
 
 ### 面试可能追问
 
-- **Q1：JWT 无状态，禁用用户后怎么让它立即失效？**
-  - 答：删缓存必须配套「校验时查缓存」（问题1方案A），或引入 `jti`+`ver` 版本号（方案B）。核心是：JWT 无状态无法撤销，必须引入「有状态」的标记来补。
-
-- **Q2：JWT 密钥该怎么管？**
-  - 答：三原则——① 不进代码、不进 git（环境变量/配置中心注入）；② 启动时 fail-fast 校验长度（HS256 ≥32 字节）；③ 生产用随机密钥，开发与生产分离。
-
-- **Q3：为什么不能让业务服务信任请求头里的 X-User-Id？**
+- **Q1：为什么不能让业务服务信任请求头里的 X-User-Id？**
   - 答：请求头是客户端完全可控的，信任它等于把「我是谁」的决定权交给攻击者，构成水平/垂直越权。身份必须来自服务端签名的 JWT（或加 HMAC 签名/IP 校验的网关头）。
 
-- **Q4：两个过滤器都写 UserContext，为什么这是隐患？**
+- **Q2：两个过滤器都写 UserContext，为什么这是隐患？**
   - 答：因为安全依赖「后执行的过滤器一定覆盖先执行的」这个脆弱前提。一旦某个接口不经过后执行的过滤器（如白名单接口），先执行过滤器塞的「不可信身份」就会暴露。
 
 ### 踩坑提醒
 
-1. **「删缓存」和「查缓存」必须配套**：只删不查，失效逻辑形同虚设（问题1）。
-2. **密钥带默认值上线 = 认证体系裸奔**：默认值可预测，攻击者能伪造任意身份 token，一定要 fail-fast（问题2）。
-3. **两套身份源并存很脆弱**：白名单接口是越权重灾区，身份只能有一个可信来源（问题3）。
+1. **坑：白名单接口是越权重灾区**
+   - 现象：permitAll 接口不校验 token，但全路径过滤器照常解析请求头，伪造头直接生效。
+   - 规避：身份只能有一个可信来源；走 JWT 就关闭明文头过滤器（条件装配开关），走网关头就加签名/IP 校验。
 
 ---
 
