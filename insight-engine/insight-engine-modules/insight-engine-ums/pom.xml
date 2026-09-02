@@ -14,7 +14,11 @@
       insight-engine-ums：用户与权限服务
       职责（PRD §12.1~§12.3 / IF §3~§6，宿主端口 7101）：
         登录/注册/刷新/登出、用户、角色、权限、RBAC、JWT 签发。
-      当前状态：阶段 1 仅建骨架，完整实现见阶段 3（UMS 认证服务）。
+      依赖说明：starter-web（统一响应/异常/TraceID/上下文）
+                starter-security（JWT 签发校验 + Security 过滤链 + 方法级权限）
+                starter-mybatis（MP + 逻辑删除 + 审计填充）
+                starter-redis（登录态/黑名单）
+                postgresql（主库驱动）
     -->
     <artifactId>insight-engine-ums</artifactId>
     <packaging>jar</packaging>
@@ -27,5 +31,47 @@
             <groupId>com.insightengine</groupId>
             <artifactId>insight-engine-starter-web</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-mybatis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-redis</artifactId>
+        </dependency>
+        <!-- PostgreSQL 驱动（版本由 Spring Boot BOM 管理） -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Lombok（编译期注解处理） -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Knife4j 在线接口文档（OpenAPI3，版本由 BOM 锁定 4.5.0，TD §2.1） -->
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 打成可执行 jar（spring-boot-maven-plugin） -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.insightengine.ums.UmsApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

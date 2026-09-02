@@ -28,6 +28,11 @@
             <groupId>com.insightengine</groupId>
             <artifactId>insight-engine-common</artifactId>
         </dependency>
+        <!-- 依赖 starter-web，复用 UserContext 获取当前操作人，供审计字段（created_by/updated_by）自动填充 -->
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-web</artifactId>
+        </dependency>
         <!-- MyBatis-Plus Spring Boot 3 starter -->
         <dependency>
             <groupId>com.baomidou</groupId>

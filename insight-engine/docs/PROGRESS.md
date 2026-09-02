@@ -7,12 +7,12 @@
 
 ## 一、总体状态
 
-| 项     | 值                      |
-| ----- | ---------------------- |
-| 当前阶段  | 阶段 2：基础设施层（已完成，待进入阶段 3） |
-| 当前里程碑 | M2：基础设施（docker-compose + init.sql） |
-| 当前任务  | 中间件编排 + 数据库初始化脚本（已实机验证） |
-| 整体完成度 | 约 20%（阶段 1+2 完成，进入阶段 3 UMS） |
+| 项     | 值                                  |
+| ----- | ---------------------------------- |
+| 当前阶段  | 阶段 3：UMS 认证服务（第一个完整微服务，已实机验证登录闭环） |
+| 当前里程碑 | M3：UMS 认证服务                      |
+| 当前任务  | UMS 认证 + 用户 + 角色/权限（已实机验证登录/me/角色/权限树） |
+| 整体完成度 | 约 27%（阶段 1+2 完成，UMS 完成，待 gateway/workspace） |
 
 ---
 
@@ -20,28 +20,28 @@
 
 > 状态图例：✅ 完成 / 🔵 进行中 / ⚪ 未开始 / ⛔ 阻塞
 
-| 模块                                        | 状态    | 完成度  | 关键产物                                  | 备注                                     |
-| ----------------------------------------- | ----- | ---- | ------------------------------------- | -------------------------------------- |
-| 产品/技术/接口文档                                | ✅ 完成  | 100% | PRD/TD/IF                             | 已定稿                                    |
-| 协作指导文档                                    | ✅ 完成  | 100% | DEVGUIDE.md                           | 已定稿                                    |
-| 环境准备（JDK/Maven/Docker/Node）               | ✅ 完成  | 100% | 本机 JDK21/Maven3.9.9/Docker29/Node24   | 全部就绪，Docker 引擎已启动                      |
-| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                            | master 分支，已有 6 次提交，无远程                 |
-| 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位 | `mvn clean install -DskipTests` 全量编译通过 |
-| 基础设施（docker-compose/init.sql）             | ✅ 完成 | 100% | docker-compose.yml / init.sql / prometheus.yml | 7 中间件实机启动全部 healthy；PG 建表 35 表全注释验证通过 |
-| UMS 认证服务                                  | ⚪ 未开始 | 0%   |                                       |                                        |
-| gateway 网关                                | ⚪ 未开始 | 0%   |                                       |                                        |
-| workspace 工作空间                            | ⚪ 未开始 | 0%   |                                       |                                        |
-| model 模型网关                                | ⚪ 未开始 | 0%   |                                       |                                        |
-| kb 知识库                                    | ⚪ 未开始 | 0%   |                                       |                                        |
-| tool 工具市场                                 | ⚪ 未开始 | 0%   |                                       |                                        |
-| agent Agent编排                             | ⚪ 未开始 | 0%   |                                       |                                        |
-| conv 对话服务                                 | ⚪ 未开始 | 0%   |                                       |                                        |
-| billing 计费                                | ⚪ 未开始 | 0%   |                                       |                                        |
-| obs 监控审计                                  | ⚪ 未开始 | 0%   |                                       |                                        |
-| notify 通知                                 | ⚪ 未开始 | 0%   |                                       |                                        |
-| 前端 admin                                  | ⚪ 未开始 | 0%   |                                       |                                        |
-| 前端 chat                                   | ⚪ 未开始 | 0%   |                                       |                                        |
-| docker-compose 全量编排                       | ⚪ 未开始 | 0%   |                                       |                                        |
+| 模块                                        | 状态    | 完成度  | 关键产物                                           | 备注                                     |
+| ----------------------------------------- | ----- | ---- | ---------------------------------------------- | -------------------------------------- |
+| 产品/技术/接口文档                                | ✅ 完成  | 100% | PRD/TD/IF                                      | 已定稿                                    |
+| 协作指导文档                                    | ✅ 完成  | 100% | DEVGUIDE.md                                    | 已定稿                                    |
+| 环境准备（JDK/Maven/Docker/Node）               | ✅ 完成  | 100% | 本机 JDK21/Maven3.9.9/Docker29/Node24            | 全部就绪，Docker 引擎已启动                      |
+| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                                     | master 分支，已有 6 次提交，无远程                 |
+| 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位          | `mvn clean install -DskipTests` 全量编译通过 |
+| 基础设施（docker-compose/init.sql）             | ✅ 完成  | 100% | docker-compose.yml / init.sql / prometheus.yml | 7 中间件实机启动全部 healthy；PG 建表 35 表全注释验证通过  |
+| UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 已实机验证登录/me/角色列表/权限树，文档页 200 |
+| gateway 网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
+| workspace 工作空间                            | ⚪ 未开始 | 0%   |                                                |                                        |
+| model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
+| kb 知识库                                    | ⚪ 未开始 | 0%   |                                                |                                        |
+| tool 工具市场                                 | ⚪ 未开始 | 0%   |                                                |                                        |
+| agent Agent编排                             | ⚪ 未开始 | 0%   |                                                |                                        |
+| conv 对话服务                                 | ⚪ 未开始 | 0%   |                                                |                                        |
+| billing 计费                                | ⚪ 未开始 | 0%   |                                                |                                        |
+| obs 监控审计                                  | ⚪ 未开始 | 0%   |                                                |                                        |
+| notify 通知                                 | ⚪ 未开始 | 0%   |                                                |                                        |
+| 前端 admin                                  | ⚪ 未开始 | 0%   |                                                |                                        |
+| 前端 chat                                   | ⚪ 未开始 | 0%   |                                                |                                        |
+| docker-compose 全量编排                       | ⚪ 未开始 | 0%   |                                                |                                        |
 
 ---
 
@@ -62,6 +62,14 @@
 - [2026-08-26] ✅ 已决策：镜像拉取走 DaoCloud 加速器（`docker.m.daocloud.io`），以 `docker pull <加速器前缀>/<镜像>` + `docker tag` 回标准名的方式绕过 Docker Hub 直连失败；`docker-compose.yml` 保持标准镜像名（可移植），本机 daemon 不改配置
 - [2026-08-26] ✅ 已决策：本机已有镜像 rabbitmq `4.2-management-alpine`、nacos `v3.1.1`、minio `latest` **均不复用**——版本与 TD 锁定（RabbitMQ 3.13 / Nacos 2.3.2 / MinIO RELEASE.2024）不符，复用会引入不可控版本差异，统一按 TD 拉取锁定版本
 - [2026-08-26] ✅ 已产出：`docs/DB.md` 数据库设计文档（35 表 / 356 字段全注释 / 69 索引 / ER 关系 / 种子数据，与 init.sql 一一对应）；`docs/LEARNING.md` 沉淀「PG 自增主键与序列」笔记（MySQL→PG 对照讲解，含原理/类比/面试点/踩坑）
+- [2026-08-26] ✅ 已决策：阶段 3 从 master 切出 `feature/ums-auth` 分支，实现完整 UMS（auth 5 + user 5 + role/permission 6 接口）
+- [2026-08-26] ✅ 已决策：三个 starter 骨架（mybatis/redis/security）在 UMS 阶段一并实现——UMS 要连 PG 查表、要存登录态/黑名单、要签发校验 JWT，三个骨架缺一不可，属于 TD 既定分层而非越界
+- [2026-08-26] ✅ 已决策：starter-security 通过「可选 TokenBlacklistService 接口 + ObjectProvider 注入」支持登出黑名单（TD ADR-10），starter 本身不依赖 Redis，未提供实现的服务退化为纯无状态 JWT 校验
+- [2026-08-26] ✅ 已决策：JWT 载荷在 TD §7.2 基础上扩展 `perms` Claim（登录时由角色展开的权限编码列表），这是 @PreAuthorize 方法级权限能无状态工作的前提
+- [2026-08-26] ✅ 已决策：注册用户默认挂 org=1/ws=1、角色 end_user（MVP 单租户开放注册）；/auth/me 的 workspaceName 由 UMS 直查 ie_workspace（同库只读临时方案），待 workspace 服务落地改走 Feign
+- [2026-08-26] ✅ 已决策：登录失败锁定（5 次/30 分钟）用 Redis 计数实现（PRD §12.1.5），因锁定是临时态无需落库
+- [2026-08-26] ✅ 已决策：UMS 接入 Knife4j 4.5.0（TD §2.1 选型，BOM 已锁版本），文档入口 http://localhost:7101/doc.html；Controller 统一加 @Tag/@Operation 注解分组
+- [2026-08-26] ✅ 已产出：`docs/FEATURES.md` 功能模块实现清单（定位：每完成一个模块沉淀「实现哪些功能 + 如何实现」，后续模块持续追加）
 
 ---
 
@@ -85,7 +93,34 @@
 - [x] 已解决：Docker Hub 无法直连 → 改用 DaoCloud 镜像加速器，7 个中间件镜像全部拉取并实机启动，healthcheck 全部 healthy
 - [x] 已解决：PG 实机建表验证通过（35 表 / 356 字段全注释 / 69 索引 / 种子数据齐全，管理员密码 hash 与 Admin@123 匹配）
 - [x] 已解决（review 🔴）：种子数据显式 id 未重置自增序列 → 已在 init.sql 末尾对 7 张表补 setval 重置，实机验证序列同步正确、自增插入不冲突
-- [ ] 待处理：`UserContextFilter` 无条件信任明文身份头（X-User-Id/X-Tenant-Id/X-Roles），存在水平+垂直越权面（review 红级问题）。既定决策见 TD ADR-5（网关下发明文头、服务不解析 JWT），**留待阶段 3 落地 UMS 时补齐**，至少一项：网络层端口隔离 / 代码层 HMAC 签名（X-User-Sign）/ 最低成本 IP 网段校验
+
+### Review 🔴 必须修（UMS 阶段 3，2026-08-26 review 产出，下次对话优先处理）
+
+- [x] 🔴 **禁用/改密后 token 不失效 —— 踢人机制形同虚设**（2026-09-02 已修复，分支 `feature/ums-auth`）
+  - 修复落点（采用方案 A：补上「过滤器消费登录态缓存」这一缺失环节，改动最小、符合 TD §6.1 既有单 key 设计）：
+    - starter-security 新增可选接口 `TokenSessionService`（与 `TokenBlacklistService` 同模式，starter 保持零 Redis 依赖）；
+    - `JwtAuthFilter` 签名校验通过后、建立认证前调用 `sessionService.isActive(userId, token)`，登录态失效（缓存被删/摘要不匹配）→ 401 拒绝；未注入实现的服务退化为纯无状态 JWT 校验；
+    - `SecurityAutoConfiguration` 通过 `ObjectProvider<TokenSessionService>` 可选装配；
+    - UMS 新增 `RedisTokenSessionService`：校验 `ie:auth:token:{userId}` 存在且 == sha256(当前 token)；
+    - UMS 新增 `TokenDigestUtil`（JDK MessageDigest 实现 SHA-256，不引 hutool crypto）；
+    - `AuthServiceImpl.cacheToken` 由存明文 token 改为存 SHA-256 摘要（与注释及黑名单服务对齐）。
+  - 附带说明：方案 A 是「单会话语义」——同 userId 后登录/刷新会覆盖缓存，旧 access token 立即失效（含多设备互踢）；TD §6.1 本就是单 key 设计，符合既定意图。若未来需多设备并存，再演进方案 B（`jti`+`ver`）。
+  - 备注：方案 B（`jti`+`ver`）与 C（枚举黑名单）未采用，理由见 LEARNING.md 实战复盘。
+
+- [x] 🔴 **JWT 密钥硬编码且可预测**（2026-09-02 已修复，分支 `feature/ums-auth`）
+  - 修复落点：
+    - `SecurityProperties.jwtSecret` 删除代码内默认值（原先第 26 行写死开发密钥）；
+    - `SecurityAutoConfiguration.jwtUtil` Bean 初始化处 fail-fast 校验：密钥为空/长度不足 32 字节 → 拒绝启动；`prod` profile 下密钥含 `change-me` 占位 → 拒绝启动（密钥仅经环境变量/配置中心注入）；
+    - `application.yml` 密钥改为 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}`，生产注入独立随机密钥即覆盖。
+  - 影响：HS256 对称密钥若以默认值上线，攻击者可离线伪造任意 userId/roles/perms 的 JWT，等于完全绕过认证与授权。
+  - 备注：本地开发默认值仍含 `change-me` 字样以便 fail-fast 兜底识别；生产切换 `prod` profile 必须显式注入。
+
+- [ ] 🔴 **双身份源并存 —— UserContextFilter 无条件信任明文身份头（承自骨架阶段 review 红级问题）**
+  - 定位：UMS 同时依赖 `starter-web`（自动装配 `UserContextFilter`，`WebAutoConfiguration:56-60`，从 `X-User-Id/X-Tenant-Id/X-Roles` 明文头解析并 `UserContext.set`，order=HIGHEST+1 先执行）与 `starter-security`（`JwtAuthFilter:98-112` 解析 JWT 覆盖 `UserContext`）。
+  - 影响：需认证接口虽被 JwtAuthFilter 覆盖，但白名单接口（login/register/refresh）及未来新增接口中，伪造的明文头身份会直接进入 `UserContext`，构成水平+垂直越权面；两套身份源并存，安全依赖"filter 顺序"这一脆弱前提。
+  - 修复（二选一）：
+    - 方案 A（推荐，UMS 走 JWT 解析）：给 `UserContextFilter` 加条件装配开关（如 `insight.web.trust-gateway-headers=false`），仅"网关下发明文头"方案的服务开启；
+    - 方案 B（走 TD ADR-5 明文头方案）：加 HMAC 签名头（X-User-Sign）校验 / IP 网段校验兜底。
 
 ### Review 🟡 建议修（随对应阶段推进修复，本次不处理）
 
@@ -96,25 +131,57 @@
 - [ ] 🟡 `ie_user.phone` 无唯一索引（手机号登录歧义）→ 补 `uk_user_phone` 部分唯一索引
 - [ ] 🟡 `ie_agent_invocation` 缺 `status`/`error_msg`（无法记录失败调用）→ 补列对齐 `ie_tool_invocation`
 - [ ] 🟡 权限编码二级/三级混用（`kb:read` vs `model:vendor:write`）→ 阶段 3 约定统一编码规范
+- [ ] 🟡 refresh token 无法主动失效（`AuthServiceImpl.logout:145-157` 只黑名单 access token；refresh token 7d 无黑名单/无轮换/无 jti）→ 窃取后 7 天内可无限刷新、登出无法终止；建议 refresh 一次性轮换（每次 refresh 旧 token 作废、签发新 token 对）或纳入黑名单
+- [ ] 🟡 删除角色未检查成员引用（`RoleServiceImpl.delete:92-103` 只逻辑删 role + 删 role_permission，未处理 `ie_member.role_id`）→ 删除后该角色成员登录时 `selectRoleCodesByUserId`（`RoleMapper:28` 的 r.deleted=0）查不到角色，用户角色静默丢失 + 孤儿 member 数据；建议删除前检查引用（有则拒绝 1003 或先迁移）
+- [ ] 🟡 创建用户未校验 roleId 存在（`UserServiceImpl.create:97-104` 直接 set roleId 插入 member）→ 可能写入孤儿 member；建议先 requireRole(roleId) 返回 RESOURCE_NOT_FOUND
+- [ ] 🟡 登录失败计数 increment+expire 竞态（`AuthServiceImpl.handleLoginFail:215-228` increment 返回 1 后单独 expire 非原子）→ 首次失败后进程崩溃/Redis 抖动导致 failKey 永不过期；建议 Lua 原子化（INCR+EXPIRE）或 SET NX EX + INCR
+- [ ] 🟡 并发"先查后插"唯一索引冲突返回 500（`AuthServiceImpl.register:167-171` / `UserServiceImpl.create:81-85` / `RoleServiceImpl.create:58-62` 均 check-then-act；`GlobalExceptionHandler:85-91` 未捕获 DuplicateKeyException）→ 并发下唯一索引兜底触发后落到 500 系统内部错误而非"邮箱已注册"；建议捕获 DuplicateKeyException 映射 PARAM_ERROR 友好文案
+- [ ] 🟡 密码复杂度低于 TD 约定（`RegisterRequest:26` / `UserCreateRequest:32` / `PasswordUpdateRequest:23` 正则 `^(?=.*[A-Za-z])(?=.*\d).+$` 只要求字母+数字，注释宣称"含大小写"但未强制大写）→ 建议改为 `(?=.*[a-z])(?=.*[A-Z])(?=.*\d)`
+- [ ] 🟡 application.yml 明文密码（`application.yml:15,25` 数据库/Redis 密码 `insight123` 明文）→ 建议环境变量占位 `${DB_PASSWORD:insight123}` 等
+- [ ] 🟡 WorkspaceMapper 跨服务直查 `ie_workspace`（`WorkspaceMapper:21` 违反 TD §3.2 服务边界，MVP 临时方案）→ workspace 服务落地后改走 Feign，避免隐性数据库耦合
 
 ### Review 🟢 可选优化（低优先级，择机处理）
 
 - [ ] 🟢 无 Schema 迁移机制（init.sql 一次性执行）→ 阶段 3 起引入 Flyway，转 `V1__init.sql`
 - [ ] 🟢 `ie_user` 缺「email / phone 至少其一」CHECK 约束
 - [ ] 🟢 部分容器 healthcheck 缺 `start_period`（除 nacos）
+- [ ] 🟢 组装用户信息多次查库（`AuthServiceImpl.buildUserInfo:264-268` 登录 4 次/`me` 3 次查询）→ 可合并为 1~2 条联表 SQL 或一次查询复用
+- [ ] 🟢 默认角色 ID 每次注册查库（`AuthServiceImpl.resolveDefaultRoleId:315-322` end_user 是预置常量）→ 可启动时加载本地缓存/常量，避免每次注册 selectOne
+- [ ] 🟢 logout 重复解析 token（`AuthServiceImpl.logout:146,152` getRemainingSeconds 与 parseAccessToken 各 parse 一次）→ 可一次解析复用
+- [ ] 🟢 RoleCreateRequest.scope 未设默认值（`RoleCreateRequest:31` 可选，`RoleServiceImpl` 直接 setScope 若为 null 且表列 NOT NULL 会插入失败）→ 建议默认 SELF
+- [ ] 🟢 status=null 跳过禁用检查（`AuthServiceImpl:95,132` 判空后放行）→ 建议改为 `!ACCOUNT_NORMAL.equals(status)` 拦截
+- [ ] 🟢 登录无验证码/IP 限流（`CAPTCHA_ERROR(2005)` 已定义未使用）→ MVP 靠账号锁定可接受，V1.0 补 IP 维度限流 + 验证码
+
+### TODO：JWT 权限载荷优化（后续迭代，MVP 不处理）
+
+- [ ] 🔧 **JWT `perms` Claim 膨胀优化**：当前把权限编码全量塞进 token（超管 48 权限，`perms` 占约 1.3KB，整条 token ~2KB，每次请求全量携带）。MVP 阶段单租户权限量小可接受；待权限规模上来后，二选一演进：
+  - 方案 A（推荐）：JWT 只存角色编码 + Redis 缓存「角色→权限」映射（`ie:auth:role:perms:{roleCode}`），兼顾体积与实时性，但引入缓存一致性（改权限主动删缓存/短 TTL）
+  - 方案 B：权限编码位图压缩（权限表加 `bit_index`，bitmap 存 16 进制），token 最小但可读性差
+  - 详见 LEARNING.md「RBAC vs ABAC + 权限进 JWT 的权衡」权衡③详解
 
 ---
 
 ## 六、下一步计划（Top 3）
 
-1. 启动 UMS 认证服务（第一个可运行微服务，验证分层规范落地）
-2. 阶段 3 落地时补齐 UserContextFilter 越权面（HMAC 签名 / IP 网段校验）
-3. 阶段 3 完成后接入 Nacos 注册/配置中心，打通服务发现
+1. 处理 UMS review 🔴 清单（token 失效 / JWT 密钥 / 明文头越权，详见第五节），修复后回归验证
+2. 实现 gateway 网关（Spring Cloud Gateway，路由 + AuthGlobalFilter 校验 JWT 下发明文头）
+3. UMS/gateway 完成后接入 Nacos 注册/配置中心，打通服务发现
 
 ---
 
 ## 七、最近一次对话摘要
 
+- 日期：2026-09-02
+- 内容：① 梳理 git 真实状态——发现本地未配 remote（用户误以为远程已建 master/dev），给出 IDEA2026 标准步骤（commit 干净 → `git remote add origin` → `push -u origin master` → `push -u origin feature/ums-auth`）；② 讲透 Git Flow vs GitHub Flow 分支模型对比（本项目用 GitHub Flow，远程只建 master + 各 feature/xxx，不需要 develop）；③ 精准指出用户 4 个误解（基于原笔记的命名错乱：把 dev 当 GitHub Flow 的 master 用、又用 Git Flow 命名 dev-xuy），承认原笔记带病；④ 给出 GitHub Flow 完整动作（pull master → 切 feature → 提交 → push feature → PR 合 master → 删 feature）与 Git Flow 对照动作；⑤ 重写 `docs/LEARNING.md` 中 Git 笔记（原 line 684-812 整段替换）：明确「同名 ≠ 同一对象」、破三个致命误解（push 永远同名推送 / 本地 master ≠ origin/master / pull 只同步一个分支）、补 Git Flow 对照章节与标准动作、扩展面试追问至 6 题（新增"远程 dev-xuy 与远程 dev 什么关系"专项澄清）。
+- 日期：2026-09-02
+- 内容：学习沉淀「ThreadLocal 线程隔离与 remove 防串号」到 `docs/LEARNING.md`——讲透①为什么 ThreadLocal 能做到线程隔离（底层 = 每个 Thread 自带 ThreadLocalMap，数据存在线程身上，不加锁）；②容器线程池复用时为什么必须 remove（线程回池不销毁，残留脏上下文导致下一个请求串号/越权）；③为什么清理必须放 finally。串联项目三处 ThreadLocal 全家桶：`UserContext.HOLDER`（业务上下文）/ `TraceFilter`+MDC（日志上下文）/ `SecurityContextHolder`（安全上下文），三者共用同一套规则（请求级数据放 ThreadLocal，请求结束 finally remove）。含面试追问（原理/为什么必须 remove/set(null) vs remove/弱引用泄漏/子线程取不到）与 5 条踩坑（忘 remove 串号、清理没放 finally、普通 static 字段串号、异步读不到、线程池内存泄漏）。
+- 日期：2026-09-02
+- 内容：修复 UMS review 🔴 清单第 2 项「JWT 密钥硬编码且可预测」——① 删除 `SecurityProperties.jwtSecret` 代码内默认值；② `SecurityAutoConfiguration` 的 `jwtUtil` Bean 初始化处加 fail-fast 启动校验（空/长度不足 32 字节拒绝启动；`prod` profile 下含 `change-me` 占位密钥拒绝启动）；③ `application.yml` 密钥改为 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}` 环境变量注入；④ 编译通过（starter-security + ums 模块）；⑤ LEARNING.md 沉淀讲解；⑥ 未提交，等待用户确认。未处理：🔴 其余 2 项（token 失效、双身份源）。
+- 日期：2026-09-02
+- 内容：修复 UMS review 🔴 清单第 1 项「禁用/改密后 token 不失效（踢人机制形同虚设）」——采用方案 A（改动最小、贴合 TD §6.1 单 key 设计）：① starter-security 新增可选接口 `TokenSessionService`（零 Redis 依赖模式与 `TokenBlacklistService` 一致）；② `JwtAuthFilter` 在签名校验后、建立认证前校验 `sessionService.isActive(userId, token)`，登录态失效即 401；③ `SecurityAutoConfiguration` 经 `ObjectProvider` 可选装配；④ UMS 新增 `RedisTokenSessionService` 实现（缓存存在 + SHA-256 摘要匹配）；⑤ UMS 新增 `TokenDigestUtil`；⑥ `AuthServiceImpl.cacheToken` 改存 SHA-256 摘要（不再落明文 token）；⑦ 编译通过。语义注意：方案 A 为单会话，同 userId 重新登录/刷新会顶掉旧 token（多设备互踢）。未处理：🔴 双身份源（UserContextFilter）。
+- 下一步：按第五节 🔴 清单修复剩余项（双身份源），然后实现 gateway 网关，接入 Nacos
 - 日期：2026-08-26
-- 内容：阶段 2 基础设施层——① 分支策略定为 GitHub Flow，切出 `feature/infra-docker-compose`；② 编写 `docker-compose.yml`（7 中间件）、`init.sql`（35 表 + 全字段 COMMENT 注释 + 种子数据）、`prometheus.yml`、`DB.md`（数据库设计文档）；③ 端口核实全部空闲；④ 用 DaoCloud 镜像加速器绕过 Docker Hub 直连失败，评估本机已有镜像（rabbitmq 4.2 / nacos 3.1.1 / minio latest 因版本与 TD 锁定不符均不复用），拉取 6 个缺失镜像 + pgvector；⑤ 7 个中间件全部实机启动且 healthcheck 全部 healthy；PG 实机建表验证：35 表 / 356 字段全注释 / 69 索引 / 种子数据齐全；⑥ 架构师 review：🔴 种子数据显式 id 未重置序列（已修 + 实机验证不冲突），🟡 7 项 + 🟢 3 项已记入「五、待解决问题」。
-- 下一步：进入阶段 3，启动 UMS 认证服务
+- 内容：阶段 3 UMS 认证服务（第一个完整微服务）——① 从 master 切出 `feature/ums-auth`；② 实现三个 starter 骨架：starter-mybatis（MP 装配 + 逻辑删除全局配置 + 审计字段填充）、starter-redis（RedisTemplate JSON 序列化）、starter-security（SecurityFilterChain 无状态 + JWT 签发/解析 + 认证过滤器 + 未认证/无权限统一 Result 处理 + 可选黑名单）；③ 实现 UMS 完整业务：认证 5 接口（登录含 5 次锁定/刷新/登出黑名单/注册/当前用户）、用户 5 接口（分页/创建/更新/启停/改密）、角色 5 + 权限树 1 接口（含内置角色禁删 1003、授权先删后插）；④ 入参 JSR-303 校验 + @PreAuthorize 方法级权限（member:read/role:write 等）全部落地；⑤ 编译通过，实机冒烟验证：登录返回 48 权限的 JWT、/auth/me 返回工作空间、角色列表 5 个、权限树 27 组、未带 token 访问返回 401；⑥ 接入 Knife4j（文档页 200、OpenAPI 15 路径）+ 产出 FEATURES.md 功能模块实现清单。
+- 日期：2026-08-26
+- 内容：UMS 服务完整代码 review（对照 TD/IF）——产出 3 🔴 / 8 🟡 / 6 🟢 待修清单，已全部写入第五节"当前阻塞/待解决问题"分级子节。核心三红：① 禁用/改密后 token 不失效（踢人机制失效 + cacheToken 存明文死代码）；② JWT 密钥硬编码默认值可预测；③ UserContextFilter 信任明文头与 JwtAuthFilter 双身份源并存（越权面）。
+- 下一步：按第五节 🔴 清单修复 UMS，然后实现 gateway 网关，接入 Nacos
