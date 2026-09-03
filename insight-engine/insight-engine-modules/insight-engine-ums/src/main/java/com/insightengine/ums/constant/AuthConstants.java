@@ -31,6 +31,9 @@ public final class AuthConstants {
     /** 登录态 Key：ie:auth:token:{userId}，值=access token 摘要，TTL=2h */
     public static final String KEY_AUTH_TOKEN = "ie:auth:token:";
 
+    /** refresh 会话 Key：ie:auth:refresh:{userId}，值=当前有效 refresh token 的 jti 摘要，TTL=7d */
+    public static final String KEY_AUTH_REFRESH = "ie:auth:refresh:";
+
     /** 登出黑名单 Key：ie:auth:blacklist:{tokenHash}，TTL=token 剩余有效期 */
     public static final String KEY_AUTH_BLACKLIST = "ie:auth:blacklist:";
 

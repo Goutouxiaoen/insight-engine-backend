@@ -43,8 +43,9 @@ import java.util.List;
  *       与 EntryPoint 统一处理，职责单一；</li>
  *   <li>token 过期返回 {@code 2007}、其他非法返回 {@code 2001}，
  *       与 IF 附录 A 对齐，便于前端区分「需刷新」与「需重新登录」；</li>
- *   <li>{@link UserContext} 的清理由 starter-web 的 {@code UserContextFilter} 兜底，
- *       本过滤器不做 finally 清理，避免过早清空导致下游读不到上下文。</li>
+ *   <li>{@link UserContext} 由本过滤器写入，并在 finally 中清除（方案 A：
+ *       starter-web 的 {@code UserContextFilter} 默认不装配，清理职责在此闭环），
+ *       防止线程池复用导致上下文串号。</li>
  * </ul>
  */
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -100,6 +101,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         } catch (JwtException | IllegalArgumentException e) {
             // 签名非法 / 类型不符 / 格式错误：视为未登录
             writeUnauthorized(response, ErrorCode.UNAUTHORIZED);
+        } finally {
+            // 本过滤器是 UserContext 的写入方；UserContextFilter 默认已关闭（方案 A），
+            // 必须在此 finally 清除，否则线程池复用时旧请求的登录态串到下一请求
+            UserContext.clear();
         }
     }
 
