@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.insightengine.common.core.BizException;
 import com.insightengine.common.core.ErrorCode;
 import com.insightengine.starter.security.blacklist.TokenBlacklistService;
+import com.insightengine.starter.security.util.JwtRefreshPayload;
 import com.insightengine.starter.security.util.JwtUtil;
 import com.insightengine.ums.constant.AuthConstants;
 import com.insightengine.ums.dto.request.LoginRequest;
@@ -114,17 +115,27 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * 刷新：校验 refresh token 有效性后重签令牌对。
+     * 刷新：校验 refresh token + 登录态 + 会话 jti，通过后一次性轮换签发新令牌对。
+     *
+     * <p>安全设计（UMS review / ADR-10）：</p>
+     * <ul>
+     *   <li>refresh token 携带 {@code jti}，服务端按用户记录当前有效 jti 摘要；</li>
+     *   <li>refresh 时旧 jti 作废并签发新对（一次性轮换）；旧 jti 再次出现（重放）
+     *       视为泄露 → 吊销该用户全部会话（删登录态 + refresh 会话）；</li>
+     *   <li>兜底：登录态缓存已删（改密/禁用/登出）则 refresh 一并拒绝。</li>
+     * </ul>
      */
     @Override
     public LoginResponse refresh(RefreshRequest request) {
-        Long userId;
+        JwtRefreshPayload payload;
         try {
-            userId = jwtUtil.parseRefreshToken(request.getRefreshToken());
+            payload = jwtUtil.parseRefreshToken(request.getRefreshToken());
         } catch (JwtException | IllegalArgumentException e) {
             // 刷新令牌非法/过期：要求重新登录（2001）
             throw new BizException(ErrorCode.UNAUTHORIZED, "刷新令牌无效或已过期");
         }
+        Long userId = payload.getUserId();
+        String jti = payload.getJti();
 
         User user = userMapper.selectById(userId);
         if (user == null) {
@@ -134,13 +145,27 @@ public class AuthServiceImpl implements AuthService {
             throw new BizException(ErrorCode.ACCOUNT_DISABLED);
         }
 
+        // jti 会话校验（吊销兜底）：logout/改密/禁用已删除 refresh 会话 key，
+        // key 缺失即「该用户 refresh 已被吊销」→ 拒绝续期；旧 jti（重放）同样视为泄露。
+        // 注意不能以 access 登录态 key 是否存在做兜底：它 TTL=2h，而 refresh 有效 7 天，
+        // 用它会误伤「超过 2h 未活动后的正常刷新」。
+        String refreshKey = AuthConstants.KEY_AUTH_REFRESH + userId;
+        String activeDigest = stringRedisTemplate.opsForValue().get(refreshKey);
+        if (activeDigest == null || !activeDigest.equals(TokenDigestUtil.sha256Hex(jti))) {
+            // 吊销该用户全部会话（含 access 登录态与 refresh 会话），强制重新登录
+            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + userId);
+            stringRedisTemplate.delete(refreshKey);
+            throw new BizException(ErrorCode.UNAUTHORIZED, "刷新令牌已失效或检测到重放，已注销全部会话");
+        }
+
+        // 一次性轮换：buildLoginResponse 生成新 access + refresh（新 jti）并覆盖会话记录
         LoginResponse response = buildLoginResponse(user);
         cacheToken(user.getId(), response.getToken());
         return response;
     }
 
     /**
-     * 登出：token 加黑名单 + 删除登录态缓存。
+     * 登出：token 加黑名单 + 删除登录态与 refresh 会话（access 与 refresh 一并失效）。
      */
     @Override
     public void logout(String accessToken) {
@@ -148,10 +173,11 @@ public class AuthServiceImpl implements AuthService {
         if (remainingSeconds > 0) {
             tokenBlacklistService.blacklist(accessToken, remainingSeconds);
         }
-        // 删除登录态：即便剩余有效期已为 0，也确保缓存不残留
+        // 删除登录态与 refresh 会话：即便剩余有效期已为 0，也确保缓存不残留
         try {
             Long userId = jwtUtil.parseAccessToken(accessToken).getUserId();
             stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + userId);
+            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_REFRESH + userId);
         } catch (JwtException e) {
             // token 已不可解析，登录态本就失效，忽略即可（登出幂等）
         }
@@ -241,6 +267,10 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * 组装登录响应：查角色/权限/工作空间，签发令牌。
+     *
+     * <p>refresh token 每次签发携带新 {@code jti}，并把摘要写入 Redis 会话
+     * （{@code ie:auth:refresh:{userId}}），作为「当前有效 refresh」的唯一凭据：
+     * 轮换时旧 jti 摘要被覆盖，旧 refresh token 再次使用即被判重放而失效。</p>
      */
     private LoginResponse buildLoginResponse(User user) {
         List<String> roles = roleMapper.selectRoleCodesByUserId(user.getId());
@@ -249,7 +279,9 @@ public class AuthServiceImpl implements AuthService {
 
         String accessToken = jwtUtil.createAccessToken(
                 user.getId(), user.getTenantId(), workspaceId, roles, permissions);
-        String refreshToken = jwtUtil.createRefreshToken(user.getId());
+        String refreshJti = java.util.UUID.randomUUID().toString().replace("-", "");
+        String refreshToken = jwtUtil.createRefreshToken(user.getId(), refreshJti);
+        cacheRefreshToken(user.getId(), refreshJti);
 
         LoginResponse response = new LoginResponse();
         response.setToken(accessToken);
@@ -309,6 +341,19 @@ public class AuthServiceImpl implements AuthService {
                 AuthConstants.KEY_AUTH_TOKEN + userId,
                 TokenDigestUtil.sha256Hex(accessToken),
                 Duration.ofSeconds(jwtUtil.getAccessTtlSeconds()));
+    }
+
+    /**
+     * 写 refresh 会话缓存（TTL = refresh token 有效期，7d）。
+     *
+     * <p>存 jti 摘要而非明文（与黑名单/登录态同安全约定）；值为「当前有效 refresh」，
+     * refresh 轮换即覆盖旧值，旧 jti 摘要不匹配即重放信号。</p>
+     */
+    private void cacheRefreshToken(Long userId, String refreshJti) {
+        stringRedisTemplate.opsForValue().set(
+                AuthConstants.KEY_AUTH_REFRESH + userId,
+                TokenDigestUtil.sha256Hex(refreshJti),
+                Duration.ofSeconds(jwtUtil.getRefreshTtlSeconds()));
     }
 
     /**

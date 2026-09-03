@@ -2,6 +2,11 @@
 
 > 本文件是「开发者」与「AI」之间的**共享进度真相源**，是跨对话记忆的唯一可靠载体。
 > **铁律：每次对话结束前必须更新本文件；每次新对话开始必须先读本文件。**
+>
+> **文档口径（2026-09-02 起执行）**：
+> - 「§五 当前阻塞 / 待解决问题」= **必须修且尚未解决**的项，阻塞对应交付收口；已办结项不在此滞留。
+> - 「§六 后续待办」= **建议修（🟡）/ 可选优化（🟢）**，属后续要完成的任务池，按处理阶段归类。
+> - 文档只写「项目任务视角」的进展与待办，不再粘贴 review 输出格式标题。
 
 ---
 
@@ -9,10 +14,10 @@
 
 | 项     | 值                                  |
 | ----- | ---------------------------------- |
-| 当前阶段  | 阶段 3：UMS 认证服务（第一个完整微服务，已实机验证登录闭环） |
+| 当前阶段  | 阶段 3：UMS 认证服务 —— 功能完成，安全收尾已修复待回归合入 |
 | 当前里程碑 | M3：UMS 认证服务                      |
-| 当前任务  | UMS 认证 + 用户 + 角色/权限（已实机验证登录/me/角色/权限树） |
-| 整体完成度 | 约 27%（阶段 1+2 完成，UMS 完成，待 gateway/workspace） |
+| 当前任务  | 回归验证 UMS 安全收尾（UMS-1/UMS-2）并合入 master → 之后启动 gateway 网关 |
+| 整体完成度 | 约 27%（阶段 1+2 完成，UMS 功能完成，安全收尾修复待验证合入，其余模块未开始） |
 
 ---
 
@@ -25,10 +30,10 @@
 | 产品/技术/接口文档                                | ✅ 完成  | 100% | PRD/TD/IF                                      | 已定稿                                    |
 | 协作指导文档                                    | ✅ 完成  | 100% | DEVGUIDE.md                                    | 已定稿                                    |
 | 环境准备（JDK/Maven/Docker/Node）               | ✅ 完成  | 100% | 本机 JDK21/Maven3.9.9/Docker29/Node24            | 全部就绪，Docker 引擎已启动                      |
-| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                                     | master 分支，已有 6 次提交，无远程                 |
+| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                                     | master 主干 + GitHub Flow；PR #1 已合入，远程无远程额外分支                |
 | 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位          | `mvn clean install -DskipTests` 全量编译通过 |
 | 基础设施（docker-compose/init.sql）             | ✅ 完成  | 100% | docker-compose.yml / init.sql / prometheus.yml | 7 中间件实机启动全部 healthy；PG 建表 35 表全注释验证通过  |
-| UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 已实机验证登录/me/角色列表/权限树，文档页 200 |
+| UMS 认证服务                                  | 🔵 收尾中 | 95%   | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能已实机验证（登录/me/角色/权限树/文档页 200）；红级修复① token 失效、② JWT 密钥 fail-fast 已合入 master；**遗留 2 项安全收尾阻塞见 §五** |
 | gateway 网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | workspace 工作空间                            | ⚪ 未开始 | 0%   |                                                |                                        |
 | model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
@@ -70,6 +75,10 @@
 - [2026-08-26] ✅ 已决策：登录失败锁定（5 次/30 分钟）用 Redis 计数实现（PRD §12.1.5），因锁定是临时态无需落库
 - [2026-08-26] ✅ 已决策：UMS 接入 Knife4j 4.5.0（TD §2.1 选型，BOM 已锁版本），文档入口 http://localhost:7101/doc.html；Controller 统一加 @Tag/@Operation 注解分组
 - [2026-08-26] ✅ 已产出：`docs/FEATURES.md` 功能模块实现清单（定位：每完成一个模块沉淀「实现哪些功能 + 如何实现」，后续模块持续追加）
+- [2026-09-02] ✅ 已决策并实施（登录态踢人，红级修复①）：采用方案 A「单会话 + 单 key 摘要」——starter-security 新增可选 `TokenSessionService`，`JwtAuthFilter` 在签名校验后校验 `ie:auth:token:{userId}` 存在且摘要匹配，改密/禁用删缓存即 401；UMS 提供 `RedisTokenSessionService` 实现，`cacheToken` 改存 SHA-256 摘要（不落明文）。TD §6.1 本就是单 key 设计，多设备并存（jti+ver）留待需要时演进（见 §六 6.6）
+- [2026-09-02] ✅ 已决策并实施（JWT 密钥加固，红级修复②）：`SecurityProperties.jwtSecret` 删除代码内默认值；`SecurityAutoConfiguration.jwtUtil` Bean 初始化 fail-fast（为空/不足 32 字节拒绝启动；prod profile 下含 `change-me` 拒绝启动）；`application.yml` 密钥改 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}` 环境变量注入。**部署纪律：非本地环境必须注入独立随机密钥并启用 prod profile**
+- [2026-09-02] ✅ 已决策并实施（UMS 收尾 UMS-1 双身份源，方案 A）：`UserContextFilter` 改为条件装配，默认**关闭**（`insight.web.trust-gateway-headers=true` 才注册）；身份只信 `JwtAuthFilter` 解析的 JWT；`UserContext` 的 finally 清理职责移交 `JwtAuthFilter`（原依赖 `UserContextFilter` 兜底）。与 TD ADR-5（网关明文头）的最终裁决保留到 gateway 阶段（见 §六 6.4），届时服务走网关方案则把开关打开即可
+- [2026-09-02] ✅ 已决策并实施（UMS 收尾 UMS-2 refresh 无撤销/无轮换）：refresh token 增加 `jti`；UMS 新增 refresh 会话缓存 `ie:auth:refresh:{userId}`（存 jti 摘要，TTL=7d）；`refresh()` 校验 jti 匹配后**一次性轮换**（旧 jti 作废、签发新对），旧 jti 重放视为泄露 → 吊销该用户全部会话；`logout`/改密/禁用删除 refresh 会话 key（refresh 不再无限续期）。**注意：不能用 access 登录态 key 存在性做 refresh 兜底（其 TTL=2h 会误伤超 2h 未活动的正常刷新）**
 
 ---
 
@@ -84,104 +93,106 @@
 - [2026-08-25] 协作教训：用户**直接判断**"在 package-info.java 里写一个类就能被识别"方向正确（javac 确实允许），我凭"javac 会禁止"的错误认知反驳是错的——应实测验证而非先入为主；但最终「是否该这么做」要回到企业规范判断：javac 允许 ≠ 规范推荐
 - [2026-08-25] 坑：`DEVGUIDE.md` 被 `LEARNING.md` 内容覆盖（两文件内容完全相同，指导手册内容丢失）→ 规避：① 从 git 历史 `git checkout HEAD -- docs/DEVGUIDE.md` 无损恢复；② 覆盖后已将 DEVGUIDE 内 27 处旧路径 `d:/CodexProject/docs/` 统一改为 `d:/CodexProject/insight-engine/docs/`；③ 教训：写文件前先读原文件确认，同名文件操作需谨慎，所有文档以 git 为兜底
 - [2026-08-26] 坑：Docker Hub（registry-1.docker.io:443）无法直连（Docker Desktop 无 HTTPS 代理）→ 规避：改用 DaoCloud 镜像加速器（`docker.m.daocloud.io`，实测可达，返回 401 即服务正常），以 `docker pull docker.m.daocloud.io/pgvector/pgvector:pg15` 拉取后 `docker tag` 回标准名，成功实机建表；其余中间件镜像同样走该加速器
+- [2026-08-26] 坑：`init.sql` 种子数据显式指定 `id`，不推进 `BIGSERIAL` 序列 → 应用层首次自增插入与已有主键冲突 → 规避：`init.sql` 末尾对 7 张种子表补 `setval(pg_get_serial_sequence(...))` 重置到 `MAX(id)`，实机验证自增插入正常
 
 ---
 
-## 五、当前阻塞 / 待解决问题
+## 五、当前阻塞 / 待解决问题（= 必须修，未完成前阻塞交付收口）
 
-- [x] 已解决：本机宿主端口占用核实完毕，本项目规划的宿主映射端口（PG/Redis/RabbitMQ/Nacos/MinIO/Prom/Grafana）全部空闲无冲突
-- [x] 已解决：Docker Hub 无法直连 → 改用 DaoCloud 镜像加速器，7 个中间件镜像全部拉取并实机启动，healthcheck 全部 healthy
-- [x] 已解决：PG 实机建表验证通过（35 表 / 356 字段全注释 / 69 索引 / 种子数据齐全，管理员密码 hash 与 Admin@123 匹配）
-- [x] 已解决（review 🔴）：种子数据显式 id 未重置自增序列 → 已在 init.sql 末尾对 7 张表补 setval 重置，实机验证序列同步正确、自增插入不冲突
+> 本节只保留**尚未解决**的必须修项；已办结项已移入 §三（决策/修复留档）/ §四（踩坑）/ §八（对话摘要），不再滞留于此。
 
-### Review 🔴 必须修（UMS 阶段 3，2026-08-26 review 产出，下次对话优先处理）
+> 当前无未解决的必须修项。UMS 收尾 UMS-1/UMS-2 代码已修复（见 §三 决策留档与 §八 摘要），待回归验证并合入 master 后正式关闭（见 §七）。
 
-- [x] 🔴 **禁用/改密后 token 不失效 —— 踢人机制形同虚设**（2026-09-02 已修复，分支 `feature/ums-auth`）
-  - 修复落点（采用方案 A：补上「过滤器消费登录态缓存」这一缺失环节，改动最小、符合 TD §6.1 既有单 key 设计）：
-    - starter-security 新增可选接口 `TokenSessionService`（与 `TokenBlacklistService` 同模式，starter 保持零 Redis 依赖）；
-    - `JwtAuthFilter` 签名校验通过后、建立认证前调用 `sessionService.isActive(userId, token)`，登录态失效（缓存被删/摘要不匹配）→ 401 拒绝；未注入实现的服务退化为纯无状态 JWT 校验；
-    - `SecurityAutoConfiguration` 通过 `ObjectProvider<TokenSessionService>` 可选装配；
-    - UMS 新增 `RedisTokenSessionService`：校验 `ie:auth:token:{userId}` 存在且 == sha256(当前 token)；
-    - UMS 新增 `TokenDigestUtil`（JDK MessageDigest 实现 SHA-256，不引 hutool crypto）；
-    - `AuthServiceImpl.cacheToken` 由存明文 token 改为存 SHA-256 摘要（与注释及黑名单服务对齐）。
-  - 附带说明：方案 A 是「单会话语义」——同 userId 后登录/刷新会覆盖缓存，旧 access token 立即失效（含多设备互踢）；TD §6.1 本就是单 key 设计，符合既定意图。若未来需多设备并存，再演进方案 B（`jti`+`ver`）。
-  - 备注：方案 B（`jti`+`ver`）与 C（枚举黑名单）未采用，理由见 LEARNING.md 实战复盘。
+---
 
-- [x] 🔴 **JWT 密钥硬编码且可预测**（2026-09-02 已修复，分支 `feature/ums-auth`）
-  - 修复落点：
-    - `SecurityProperties.jwtSecret` 删除代码内默认值（原先第 26 行写死开发密钥）；
-    - `SecurityAutoConfiguration.jwtUtil` Bean 初始化处 fail-fast 校验：密钥为空/长度不足 32 字节 → 拒绝启动；`prod` profile 下密钥含 `change-me` 占位 → 拒绝启动（密钥仅经环境变量/配置中心注入）；
-    - `application.yml` 密钥改为 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}`，生产注入独立随机密钥即覆盖。
-  - 影响：HS256 对称密钥若以默认值上线，攻击者可离线伪造任意 userId/roles/perms 的 JWT，等于完全绕过认证与授权。
-  - 备注：本地开发默认值仍含 `change-me` 字样以便 fail-fast 兜底识别；生产切换 `prod` profile 必须显式注入。
+## 六、后续待办与优化池（🟡 建议修 = 后续要完成 / 🟢 可选优化 = 低优先级择机）
 
-- [ ] 🔴 **双身份源并存 —— UserContextFilter 无条件信任明文身份头（承自骨架阶段 review 红级问题）**
-  - 定位：UMS 同时依赖 `starter-web`（自动装配 `UserContextFilter`，`WebAutoConfiguration:56-60`，从 `X-User-Id/X-Tenant-Id/X-Roles` 明文头解析并 `UserContext.set`，order=HIGHEST+1 先执行）与 `starter-security`（`JwtAuthFilter:98-112` 解析 JWT 覆盖 `UserContext`）。
-  - 影响：需认证接口虽被 JwtAuthFilter 覆盖，但白名单接口（login/register/refresh）及未来新增接口中，伪造的明文头身份会直接进入 `UserContext`，构成水平+垂直越权面；两套身份源并存，安全依赖"filter 顺序"这一脆弱前提。
-  - 修复（二选一）：
-    - 方案 A（推荐，UMS 走 JWT 解析）：给 `UserContextFilter` 加条件装配开关（如 `insight.web.trust-gateway-headers=false`），仅"网关下发明文头"方案的服务开启；
-    - 方案 B（走 TD ADR-5 明文头方案）：加 HMAC 签名头（X-User-Sign）校验 / IP 网段校验兜底。
+> 本节任务**不阻塞当前交付**，按处理阶段归类；完成一条勾一条。
 
-### Review 🟡 建议修（随对应阶段推进修复，本次不处理）
+### 6.1 UMS 服务收尾（🟡，随 UMS 阶段完成）
 
-- [ ] 🟡 `ie_usage_record` 缺幂等唯一键（违背 TD §12.5，MQ 重投会重复计量）→ billing 阶段补 `event_id` 列 + 唯一索引
-- [ ] 🟡 中间件密码明文且全服务同密码 `insight123`（docker-compose.yml）→ 生产改 `.env`/secrets 分离 + 密码差异化
-- [ ] 🟡 `ie_chunk.embedding` 维度硬编码 `vector(1024)`（切换 768 维本地模型会失败）→ 模型网关阶段约束 Embedding 维度统一 1024
-- [ ] 🟡 `ie_message."references"` / `ie_audit_log."before"/"after"` 双引号关键字列名（ORM 映射有坑）→ 建议改 `refs`/`before_data`/`after_data` 并同步 PRD
-- [ ] 🟡 `ie_user.phone` 无唯一索引（手机号登录歧义）→ 补 `uk_user_phone` 部分唯一索引
-- [ ] 🟡 `ie_agent_invocation` 缺 `status`/`error_msg`（无法记录失败调用）→ 补列对齐 `ie_tool_invocation`
-- [ ] 🟡 权限编码二级/三级混用（`kb:read` vs `model:vendor:write`）→ 阶段 3 约定统一编码规范
-- [ ] 🟡 refresh token 无法主动失效（`AuthServiceImpl.logout:145-157` 只黑名单 access token；refresh token 7d 无黑名单/无轮换/无 jti）→ 窃取后 7 天内可无限刷新、登出无法终止；建议 refresh 一次性轮换（每次 refresh 旧 token 作废、签发新 token 对）或纳入黑名单
-- [ ] 🟡 删除角色未检查成员引用（`RoleServiceImpl.delete:92-103` 只逻辑删 role + 删 role_permission，未处理 `ie_member.role_id`）→ 删除后该角色成员登录时 `selectRoleCodesByUserId`（`RoleMapper:28` 的 r.deleted=0）查不到角色，用户角色静默丢失 + 孤儿 member 数据；建议删除前检查引用（有则拒绝 1003 或先迁移）
-- [ ] 🟡 创建用户未校验 roleId 存在（`UserServiceImpl.create:97-104` 直接 set roleId 插入 member）→ 可能写入孤儿 member；建议先 requireRole(roleId) 返回 RESOURCE_NOT_FOUND
-- [ ] 🟡 登录失败计数 increment+expire 竞态（`AuthServiceImpl.handleLoginFail:215-228` increment 返回 1 后单独 expire 非原子）→ 首次失败后进程崩溃/Redis 抖动导致 failKey 永不过期；建议 Lua 原子化（INCR+EXPIRE）或 SET NX EX + INCR
-- [ ] 🟡 并发"先查后插"唯一索引冲突返回 500（`AuthServiceImpl.register:167-171` / `UserServiceImpl.create:81-85` / `RoleServiceImpl.create:58-62` 均 check-then-act；`GlobalExceptionHandler:85-91` 未捕获 DuplicateKeyException）→ 并发下唯一索引兜底触发后落到 500 系统内部错误而非"邮箱已注册"；建议捕获 DuplicateKeyException 映射 PARAM_ERROR 友好文案
-- [ ] 🟡 密码复杂度低于 TD 约定（`RegisterRequest:26` / `UserCreateRequest:32` / `PasswordUpdateRequest:23` 正则 `^(?=.*[A-Za-z])(?=.*\d).+$` 只要求字母+数字，注释宣称"含大小写"但未强制大写）→ 建议改为 `(?=.*[a-z])(?=.*[A-Z])(?=.*\d)`
-- [ ] 🟡 application.yml 明文密码（`application.yml:15,25` 数据库/Redis 密码 `insight123` 明文）→ 建议环境变量占位 `${DB_PASSWORD:insight123}` 等
-- [ ] 🟡 WorkspaceMapper 跨服务直查 `ie_workspace`（`WorkspaceMapper:21` 违反 TD §3.2 服务边界，MVP 临时方案）→ workspace 服务落地后改走 Feign，避免隐性数据库耦合
+- [ ] `ie_user.phone` 加部分唯一索引（`init.sql` 补 `uk_user_phone`，`DB.md` 同步）——手机号也是登录账号（IF §3.1），当前无唯一约束存在串号登录歧义
+- [ ] 邮箱大小写归一：注册/创建/登录/唯一性查询统一 `lower(trim)`，防 `A@x.com` 与 `a@x.com` 注册成双账号
+- [ ] 创建用户前校验 `roleId` 存在（`UserServiceImpl.create` 前置 `requireRole`），防孤儿 member
+- [ ] 角色授权/创建：`permissionIds` 先去重 + 校验有效性（`RoleServiceImpl.assignPermissions/create`；`batchInsert` 改 `ON CONFLICT DO NOTHING`），防联合主键冲突与垃圾关联
+- [ ] 删除角色前检查 `ie_member` 引用（`RoleServiceImpl.delete:92-103`）：被引用返回 1003 或级联清理，防用户角色静默丢失 + 孤儿数据
+- [ ] `GlobalExceptionHandler` 补 `DuplicateKeyException`（并发注册/创建/角色唯一冲突 → 1001 友好文案）与 `HttpMessageNotReadableException`（body 解析错误 → 1002），不再一律 500
+- [ ] 登录失败计数原子化（`AuthServiceImpl.handleLoginFail` increment+expire 竞态）：改 Lua（INCR+EXPIRE）或 SETNX EX + INCR，防 Redis 抖动导致计数 key 永不过期
+- [ ] 密码复杂度补强制大写：`RegisterRequest`/`UserCreateRequest`/`PasswordUpdateRequest` 正则改 `(?=.*[a-z])(?=.*[A-Z])(?=.*\d)`（当前只要求字母+数字，与注释宣称"含大小写"不符）
+- [ ] 账号枚举收敛：登录失败统一 2001 语义（勿用 2001/2002 区分账号存在性）；锁定/计数维度从「输入 account 字符串」改「用户维度」（email 被锁不能换 phone 绕过）
+- [ ] 禁用/改密后登录态删除失败补偿：先删缓存再更 DB，失败重试/告警，保证踢人必达（`UserServiceImpl.updateStatus/updatePassword`）
+- [ ] 超管等高权账号操作保护：禁止自禁用/同级互操作（防超管自锁死后台），并提供管理员解锁入口（清 `ie:auth:lock:*`）
+- [ ] 角色/权限变更即时生效：授权变更后按需吊销受影响用户的登录态缓存（缓解 JWT perms 2h 滞后）
+- [ ] 敏感操作审计留痕：登录成功/失败、授权变更、启停等输出结构化日志（含 traceId/IP/操作人），obs 服务落地后转 MQ 写 `ie_audit_log`
 
-### Review 🟢 可选优化（低优先级，择机处理）
+### 6.2 公共层 / 基础层（🟡，随对应模块或收尾处理）
 
-- [ ] 🟢 无 Schema 迁移机制（init.sql 一次性执行）→ 阶段 3 起引入 Flyway，转 `V1__init.sql`
-- [ ] 🟢 `ie_user` 缺「email / phone 至少其一」CHECK 约束
-- [ ] 🟢 部分容器 healthcheck 缺 `start_period`（除 nacos）
-- [ ] 🟢 组装用户信息多次查库（`AuthServiceImpl.buildUserInfo:264-268` 登录 4 次/`me` 3 次查询）→ 可合并为 1~2 条联表 SQL 或一次查询复用
-- [ ] 🟢 默认角色 ID 每次注册查库（`AuthServiceImpl.resolveDefaultRoleId:315-322` end_user 是预置常量）→ 可启动时加载本地缓存/常量，避免每次注册 selectOne
-- [ ] 🟢 logout 重复解析 token（`AuthServiceImpl.logout:146,152` getRemainingSeconds 与 parseAccessToken 各 parse 一次）→ 可一次解析复用
-- [ ] 🟢 RoleCreateRequest.scope 未设默认值（`RoleCreateRequest:31` 可选，`RoleServiceImpl` 直接 setScope 若为 null 且表列 NOT NULL 会插入失败）→ 建议默认 SELF
-- [ ] 🟢 status=null 跳过禁用检查（`AuthServiceImpl:95,132` 判空后放行）→ 建议改为 `!ACCOUNT_NORMAL.equals(status)` 拦截
-- [ ] 🟢 登录无验证码/IP 限流（`CAPTCHA_ERROR(2005)` 已定义未使用）→ MVP 靠账号锁定可接受，V1.0 补 IP 维度限流 + 验证码
+- [ ] `Result` traceId 统一回填：starter-web 增加 `ResponseBodyAdvice`，成功响应不再 `traceId=null`（IF §2.2 / TD §4.1）
+- [ ] `ie_user` 加「email / phone 至少其一」CHECK 约束（🟢，init.sql / DB.md）
 
-### TODO：JWT 权限载荷优化（后续迭代，MVP 不处理）
+### 6.3 后续模块落地跟随（🟡，各模块阶段处理）
 
-- [ ] 🔧 **JWT `perms` Claim 膨胀优化**：当前把权限编码全量塞进 token（超管 48 权限，`perms` 占约 1.3KB，整条 token ~2KB，每次请求全量携带）。MVP 阶段单租户权限量小可接受；待权限规模上来后，二选一演进：
-  - 方案 A（推荐）：JWT 只存角色编码 + Redis 缓存「角色→权限」映射（`ie:auth:role:perms:{roleCode}`），兼顾体积与实时性，但引入缓存一致性（改权限主动删缓存/短 TTL）
-  - 方案 B：权限编码位图压缩（权限表加 `bit_index`，bitmap 存 16 进制），token 最小但可读性差
+- [ ] `ie_usage_record` 补幂等唯一键 `event_id`（billing 阶段，TD §12.5，MQ 重投不重复计量）
+- [ ] `ie_chunk.embedding` 维度统一约束 1024（model 网关阶段，切换 768 维本地模型需同步约束）
+- [ ] `ie_message."references"`、`ie_audit_log."before"/"after"` 双引号关键字列名 → 改 `refs`/`before_data`/`after_data`（conv/obs 模块对应阶段，同步 PRD/DB）
+- [ ] `ie_agent_invocation` 补 `status`/`error_msg` 列（agent 阶段，对齐 `ie_tool_invocation`）
+- [ ] 权限编码二级/三级混用统一规范（`kb:read` vs `model:vendor:write`）——各模块开工前约定编码体系
+- [ ] `WorkspaceMapper` 直查 `ie_workspace` 改走 Feign（workspace 服务落地后，TD §3.2 服务边界）
+- [ ] DataScope 行级数据权限拦截器（TD §7.5）——多租户/V1.0 前必须完成，覆盖全部业务列表查询
+
+### 6.4 gateway / Nacos / 部署阶段（🟡）
+
+- [ ] **认证模型定案**：ADR-5（网关校验 JWT 下发明文头）vs 当前「服务自校验 JWT」双轨矛盾，gateway 落地前裁决并与 §五 UMS-1 联动
+- [ ] gateway 网关：路由 + AuthGlobalFilter + Cors（TD §8.3）
+- [ ] 服务接入 Nacos 注册/配置中心
+- [ ] 中间件与应用密码差异化：`insight123` / `application.yml` 明文密码改 `.env`/secrets + 环境变量占位注入
+- [ ] 引入 Flyway schema 迁移（替代一次性 init.sql）
+- [ ] 部分容器 healthcheck 补 `start_period`（🟢）
+
+### 6.5 长期优化池（🟢，MVP 择机处理）
+
+- [ ] 组装用户信息多次查库合并：登录 4~5 次 / `me` 3~4 次查询 → 1~2 条联表 SQL 或引入 TD §6.1 用户/权限缓存
+- [ ] `resolveDefaultRoleId` 每次注册查库 → 启动时加载 end_user 角色 ID 常量/缓存
+- [ ] `logout` 重复解析 token（`getRemainingSeconds` 与 `parseAccessToken` 各 parse 一次）→ 一次解析复用
+- [ ] `RoleCreateRequest.scope` 无默认值且表列可能 NOT NULL → 默认 SELF
+- [ ] `status` 判空语义收紧：`!ACCOUNT_NORMAL.equals(status)` 拦截，null/异常值不放行
+- [ ] 登录补图形验证码 + IP 维度限流（V1.0；`CAPTCHA_ERROR(2005)` 已定义未使用）
+- [ ] 创建类接口接 `X-Request-Id` 幂等（IF §2.1 / TD §13.3）
+- [ ] `TokenDigestUtil` 与黑名单内 `sha256Hex` 重复实现 → 抽公共工具
+- [ ] 权限树 `RESOURCE_NAMES` 本地映射与 DB 权限字典易 drift → 字典/注释生成
+
+### 6.6 JWT 权限载荷演进（后续迭代，MVP 不处理）
+
+- [ ] **JWT `perms` Claim 膨胀优化**：当前把权限编码全量塞进 token（超管 48 权限，`perms` 约 1.3KB，整条 ~2KB，每次请求全量携带）。MVP 单租户权限量小可接受；权限规模上来后二选一：
+  - 方案 A（推荐）：JWT 只存角色编码 + Redis 缓存「角色→权限」映射，兼顾体积与实时性（引入缓存一致性：改权限主动删缓存/短 TTL）
+  - 方案 B：权限编码位图压缩（权限表加 `bit_index`），token 最小但可读性差
   - 详见 LEARNING.md「RBAC vs ABAC + 权限进 JWT 的权衡」权衡③详解
 
 ---
 
-## 六、下一步计划（Top 3）
+## 七、下一步计划（Top 3）
 
-1. 处理 UMS review 🔴 清单（token 失效 / JWT 密钥 / 明文头越权，详见第五节），修复后回归验证
-2. 实现 gateway 网关（Spring Cloud Gateway，路由 + AuthGlobalFilter 校验 JWT 下发明文头）
-3. UMS/gateway 完成后接入 Nacos 注册/配置中心，打通服务发现
+1. **回归验证并合入 UMS 安全收尾**（分支 `feature/ums-security-fix`）：UMS-1（关闭明文头后 UMS 全链路仍正常）+ UMS-2（登录→刷新轮换→旧 refresh 重放被拒→登出/改密/禁用后 refresh 失效）实机验证后合入 master
+2. 完成 §6.1 高价值收尾项：`phone` 唯一索引、`roleId` 校验、授权集合去重校验、`DuplicateKey`/`1002` 友好映射、`Result` traceId 回填
+3. 实现 gateway 网关（路由 + AuthGlobalFilter + 认证模型定案，联动 UMS-1 开关），并接入 Nacos 注册/配置中心
 
 ---
 
-## 七、最近一次对话摘要
+## 八、最近一次对话摘要
 
 - 日期：2026-09-02
-- 内容：① 梳理 git 真实状态——发现本地未配 remote（用户误以为远程已建 master/dev），给出 IDEA2026 标准步骤（commit 干净 → `git remote add origin` → `push -u origin master` → `push -u origin feature/ums-auth`）；② 讲透 Git Flow vs GitHub Flow 分支模型对比（本项目用 GitHub Flow，远程只建 master + 各 feature/xxx，不需要 develop）；③ 精准指出用户 4 个误解（基于原笔记的命名错乱：把 dev 当 GitHub Flow 的 master 用、又用 Git Flow 命名 dev-xuy），承认原笔记带病；④ 给出 GitHub Flow 完整动作（pull master → 切 feature → 提交 → push feature → PR 合 master → 删 feature）与 Git Flow 对照动作；⑤ 重写 `docs/LEARNING.md` 中 Git 笔记（原 line 684-812 整段替换）：明确「同名 ≠ 同一对象」、破三个致命误解（push 永远同名推送 / 本地 master ≠ origin/master / pull 只同步一个分支）、补 Git Flow 对照章节与标准动作、扩展面试追问至 6 题（新增"远程 dev-xuy 与远程 dev 什么关系"专项澄清）。
+- 内容：UMS 安全收尾修复（分支 `feature/ums-security-fix`，UMS-1/UMS-2）——UMS-1 双身份源（方案 A）：`UserContextFilter` 改条件装配默认关闭（`insight.web.trust-gateway-headers=true` 才注册），身份只信 JWT，`UserContext` 清理职责移交 `JwtAuthFilter` finally；UMS-2 refresh 撤销/轮换：refresh token 增 `jti`，新增 refresh 会话 key `ie:auth:refresh:{userId}`（jti 摘要 TTL=7d），`refresh()` 校验匹配后一次性轮换、旧 jti 重放视为泄露吊销全会话，`logout`/改密/禁用连删 refresh 会话 key；新建 `JwtRefreshPayload`、`JwtUtil` 增 `createRefreshToken(userId,jti)`/`getRefreshTtlSeconds()`；编译通过。待回归验证合入 master。
 - 日期：2026-09-02
-- 内容：学习沉淀「ThreadLocal 线程隔离与 remove 防串号」到 `docs/LEARNING.md`——讲透①为什么 ThreadLocal 能做到线程隔离（底层 = 每个 Thread 自带 ThreadLocalMap，数据存在线程身上，不加锁）；②容器线程池复用时为什么必须 remove（线程回池不销毁，残留脏上下文导致下一个请求串号/越权）；③为什么清理必须放 finally。串联项目三处 ThreadLocal 全家桶：`UserContext.HOLDER`（业务上下文）/ `TraceFilter`+MDC（日志上下文）/ `SecurityContextHolder`（安全上下文），三者共用同一套规则（请求级数据放 ThreadLocal，请求结束 finally remove）。含面试追问（原理/为什么必须 remove/set(null) vs remove/弱引用泄漏/子线程取不到）与 5 条踩坑（忘 remove 串号、清理没放 finally、普通 static 字段串号、异步读不到、线程池内存泄漏）。
+- 内容：规范整理 `docs/PROGRESS.md`（本次）——① 口径调整：§五只放「未解决的必须修项」= 当前阻塞（现 2 项：UMS-1 双身份源并存、UMS-2 refresh token 无轮换/撤销）；② 建议修/可选优化统一收进 §六「后续待办与优化池」，按处理阶段（UMS 收尾 / 公共层 / 后续模块 / gateway部署 / 长期）分组；③ 已办结红级（token 失效、JWT 密钥 fail-fast、种子序列 setval 等）移出阻塞节，留档到 §三 决策 / §四 踩坑；④ 全文清除 "Review 🔴/🟡" 类 review 输出标题；⑤ git 状态确认：master 与 origin/master 同步，PR #1 已合入，工作区仅 docs 3 个文件未提交。
 - 日期：2026-09-02
-- 内容：修复 UMS review 🔴 清单第 2 项「JWT 密钥硬编码且可预测」——① 删除 `SecurityProperties.jwtSecret` 代码内默认值；② `SecurityAutoConfiguration` 的 `jwtUtil` Bean 初始化处加 fail-fast 启动校验（空/长度不足 32 字节拒绝启动；`prod` profile 下含 `change-me` 占位密钥拒绝启动）；③ `application.yml` 密钥改为 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}` 环境变量注入；④ 编译通过（starter-security + ums 模块）；⑤ LEARNING.md 沉淀讲解；⑥ 未提交，等待用户确认。未处理：🔴 其余 2 项（token 失效、双身份源）。
+- 内容：修复 UMS 红级①「禁用/改密后 token 不失效」——采用方案 A（单会话 + 单 key 摘要，符合 TD §6.1）：starter-security 新增可选 `TokenSessionService`；`JwtAuthFilter` 签名校验后、建立认证前校验登录态；`SecurityAutoConfiguration` ObjectProvider 可选装配；UMS 新增 `RedisTokenSessionService` 与 `TokenDigestUtil`；`cacheToken` 改存 SHA-256 摘要。语义注意：单会话语义，重新登录/刷新会顶掉旧 token（多设备互踢）。未处理：🔴 双身份源（UMS-1，现列入 §五）。
 - 日期：2026-09-02
-- 内容：修复 UMS review 🔴 清单第 1 项「禁用/改密后 token 不失效（踢人机制形同虚设）」——采用方案 A（改动最小、贴合 TD §6.1 单 key 设计）：① starter-security 新增可选接口 `TokenSessionService`（零 Redis 依赖模式与 `TokenBlacklistService` 一致）；② `JwtAuthFilter` 在签名校验后、建立认证前校验 `sessionService.isActive(userId, token)`，登录态失效即 401；③ `SecurityAutoConfiguration` 经 `ObjectProvider` 可选装配；④ UMS 新增 `RedisTokenSessionService` 实现（缓存存在 + SHA-256 摘要匹配）；⑤ UMS 新增 `TokenDigestUtil`；⑥ `AuthServiceImpl.cacheToken` 改存 SHA-256 摘要（不再落明文 token）；⑦ 编译通过。语义注意：方案 A 为单会话，同 userId 重新登录/刷新会顶掉旧 token（多设备互踢）。未处理：🔴 双身份源（UserContextFilter）。
-- 下一步：按第五节 🔴 清单修复剩余项（双身份源），然后实现 gateway 网关，接入 Nacos
+- 内容：修复 UMS 红级②「JWT 密钥硬编码且可预测」——`SecurityProperties.jwtSecret` 删除代码内默认值；`jwtUtil` Bean fail-fast（空/不足 32 字节拒绝启动；prod+`change-me` 拒绝启动）；`application.yml` 密钥改 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}`。部署纪律：生产必须注入独立随机密钥并启用 prod profile。
+- 日期：2026-09-02
+- 内容：Git 首次对接 GitHub 全流程实战走通（`github.com/Goutouxiaoen/insight-engine-backend`）——配 remote、代理 443、push master/feature、PR #1 合并 feature/ums-auth → master、改默认分支为 master 并删 main、本地 pull 同步；沉淀「Git 实操全流程复盘」到 `docs/LEARNING.md`。
+- 日期：2026-09-02
+- 内容：学习沉淀「ThreadLocal 线程隔离与 remove 防串号」到 `docs/LEARNING.md`（原理 / 必须 remove / finally 清理 / 串号踩坑），串联 `UserContext.HOLDER` / `TraceFilter`+MDC / `SecurityContextHolder` 三处 ThreadLocal。
 - 日期：2026-08-26
-- 内容：阶段 3 UMS 认证服务（第一个完整微服务）——① 从 master 切出 `feature/ums-auth`；② 实现三个 starter 骨架：starter-mybatis（MP 装配 + 逻辑删除全局配置 + 审计字段填充）、starter-redis（RedisTemplate JSON 序列化）、starter-security（SecurityFilterChain 无状态 + JWT 签发/解析 + 认证过滤器 + 未认证/无权限统一 Result 处理 + 可选黑名单）；③ 实现 UMS 完整业务：认证 5 接口（登录含 5 次锁定/刷新/登出黑名单/注册/当前用户）、用户 5 接口（分页/创建/更新/启停/改密）、角色 5 + 权限树 1 接口（含内置角色禁删 1003、授权先删后插）；④ 入参 JSR-303 校验 + @PreAuthorize 方法级权限（member:read/role:write 等）全部落地；⑤ 编译通过，实机冒烟验证：登录返回 48 权限的 JWT、/auth/me 返回工作空间、角色列表 5 个、权限树 27 组、未带 token 访问返回 401；⑥ 接入 Knife4j（文档页 200、OpenAPI 15 路径）+ 产出 FEATURES.md 功能模块实现清单。
+- 内容：阶段 3 UMS 认证服务（第一个完整微服务）——三个 starter 骨架（mybatis/redis/security）+ 认证 5 / 用户 5 / 角色权限 6 接口 + JSR-303 + @PreAuthorize 全落地；实机冒烟：登录 48 权限 JWT、/auth/me、角色列表、权限树 27 组、401 拦截、Knife4j 文档页 200；产出 FEATURES.md。
 - 日期：2026-08-26
-- 内容：UMS 服务完整代码 review（对照 TD/IF）——产出 3 🔴 / 8 🟡 / 6 🟢 待修清单，已全部写入第五节"当前阻塞/待解决问题"分级子节。核心三红：① 禁用/改密后 token 不失效（踢人机制失效 + cacheToken 存明文死代码）；② JWT 密钥硬编码默认值可预测；③ UserContextFilter 信任明文头与 JwtAuthFilter 双身份源并存（越权面）。
-- 下一步：按第五节 🔴 清单修复 UMS，然后实现 gateway 网关，接入 Nacos
+- 内容：UMS 服务完整代码 review（对照 TD/IF）——产出待修分级清单（3 🔴 / 8 🟡 / 6 🟢）。核心三红：① 禁用/改密后 token 不失效；② JWT 密钥硬编码默认值可预测；③ UserContextFilter 信任明文头与 JwtAuthFilter 双身份源并存。① ② 已修复（见上），③ 列为 §五 UMS-1 阻塞。

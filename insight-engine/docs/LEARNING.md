@@ -20,15 +20,18 @@
 - [x] Web 安全基础：日志注入 / 越权面 / 白名单校验（2026-08-26）
 - [x] Git 提交/拉取标准动作与冲突规避（2026-08-26）
 - [x] PostgreSQL 自增主键与序列（BIGSERIAL / sequence / nextval / setval）（2026-08-26）
-- [x] Spring Boot 自动装配机制（AutoConfiguration.imports）（2026-08-26）
+- [x] Spring Boot 启动流程主线 + 缓存预热钩子（降维记忆版：`run()` 六步骨架 / 三个钩子钉位 / Tomcat 端口开启时点）（2026-09-03）
+- [x] Spring Boot 自动装配机制（AutoConfiguration.imports）（2026-08-26；2026-09-03 标注它在 `run()` 的哪一步）
 - [x] Spring Security + JWT 认证：无状态 vs 黑名单/登录态（登出/改密/禁用三种失效）+ 关 CSRF 原因 + @PreAuthorize 原理（2026-08-26；2026-09-02 修复「写而不读」断链）
 - [x] RBAC vs ABAC + 权限进 JWT 的权衡（2026-08-26）
 - [x] JWT 密钥管理与 fail-fast 校验（2026-08-27；2026-09-02 实战修复复盘）
-- [x] 微服务身份传递的信任边界（2026-08-27）
+- [x] 微服务身份传递的信任边界（双身份源问题）——含架构现实（gateway 未落地 / UMS 7101 直连）、**无网关 & 有网关断点级调用栈**（精确到文件:行号）、剥头与 HMAC 签名、三种形态对照表、断点自查清单（2026-08-27；2026-09-02 UMS-1 方案 A 落地复盘；2026-09-03 大幅增强链路图与逐行定位）
+- [x] Refresh Token 安全：为什么必须轮换 + 一次性 jti 机制（2026-09-02，UMS-2）
 - [x] Nacos 服务注册与配置中心（2026-08-26，配置中心待学）
-- [x] Redis 三件事：登录失败锁定 + Token 黑名单 + 登录态缓存（防暴力破解 & 主动登出/踢人）（2026-08-26；2026-09-02 登录态缓存链路已接通）
+- [x] Redis 三件事：登录失败锁定 + Token 黑名单 + 登录态缓存（防暴力破解 & 主动登出/踢人）（2026-08-26；2026-09-02 登录态缓存链路已接通；2026-09-03 补「单槽」模型、白/黑名单失效模式、数据类型选型与 TTL 粒度限制）
 - [x] MDC 日志上下文 + TraceFilter：%X{traceId} 全链路日志串联（2026-09-02）
 - [x] ThreadLocal 线程隔离与 remove 防串号（UserContext / MDC / SecurityContextHolder 共同底层）（2026-09-02）
+- [x] Git 实操全流程：本地仓库推到 GitHub（首次对接：remote/push/代理443/PR/main默认分支/同步清理）（2026-09-02）
 
 **待学习**：
 
@@ -41,7 +44,10 @@
 - [ ] LangChain4j 与 Agent
 - [ ] ReAct 与 Function Calling 原理
 - [ ] RabbitMQ 异步任务与死信
-- [ ] Redis 分布式锁 / 缓存穿透·击穿·雪崩
+- [ ] Redis 分布式锁（Redisson）/ 缓存穿透·击穿·雪崩
+- [ ] Redis 内存淘汰策略（maxmemory-policy）与持久化（RDB/AOF）对「登录态丢失」的影响
+- [ ] Redis Pipeline / Lua 脚本（本项目待解决：`INCR`+`EXPIRE` 竞态）
+- [ ] Redis 底层编码（SDS / listpack / hashtable / skiplist）
 - [ ] Sentinel 限流熔断
 - [ ] Micrometer + Prometheus 可观测
 - [ ] Docker / Docker Compose 部署
@@ -637,9 +643,9 @@ try { filterChain.doFilter(request, response); }
 finally { MDC.remove("traceId"); }   // 防线程复用串号
 ```
 
-**② `UserContextFilter`（信任网关明文身份头）**
+**② `UserContextFilter`（解析明文身份头）**
 
-现状：无条件信任网关下发的明文身份头（`X-User-Id`/`X-Tenant-Id`/`X-Roles`），直接组装 `LoginUser`。这是 TD ADR-5 的既定权衡（网关唯一入口、内网可信），但若业务服务被绕过网关直连，即可伪造身份越权（完整拆解见《微服务身份传递的信任边界》）。
+`UserContextFilter` 是「走 TD ADR-5 网关明文头方案」时用的过滤器，解析 `X-User-Id`/`X-Tenant-Id`/`X-Roles` 组装 `LoginUser`。**2026-09-02 起默认不再注册**（`@ConditionalOnProperty(insight.web.trust-gateway-headers=true)` 才装配）——服务身份只信 `JwtAuthFilter` 解析的 JWT，防止业务服务无条件信任客户端可伪造的明文头造成越权。`UserContext` 的清理职责也随之下移到 `JwtAuthFilter` 的 finally（写入方负责清理，防线程串号）。走网关方案的服务显式开开关即可（完整拆解与方案对比见《微服务身份传递的信任边界》）。
 
 越权面的防护手段（三选一）：
 
@@ -925,6 +931,187 @@ git push origin feature/ums-auth
 
 ---
 
+## Git 实操全流程复盘：从零把本地仓库推到 GitHub（IDEA 2026）
+
+- 学于：2026-09-02（本次实战：本地 `insight-engine` 仓库 → 推到 `github.com/Goutouxiaoen/insight-engine-backend.git`）
+- 关联模块：版本管理实战（本工程首次接远程）
+- 来源：2026-09-02 实际完整走通一轮（含 5 个坑）
+
+> 目标：把「本地已有完整 git 历史、远程是空仓库」的**首次对接全流程**沉淀下来——每步做什么、为什么、对应哪个 git 命令、IDEA 里点哪里、会踩哪些坑。看完这份就能独立把任何本地仓库推上 GitHub。
+
+### 第 0 步：看清初始状态（先诊断再动手）
+
+对接前先跑三条命令搞清楚自己站在哪：
+
+```bash
+git branch -a          # 本地有哪些分支（含当前分支 *）
+git remote -v          # 配没配远程（空 = 还没配，这就是推不上去的 99% 原因）
+git status --short     # 工作区干不干净（有未提交改动先 commit/stash）
+```
+
+> 这次实战的初始状态：本地有 `master` + `feature/infra-docker-compose` + `feature/ums-auth` 三条分支、`git remote -v` 为空、有未提交改动。**远程仓库是空壳（GitHub 网页新建、只勾了 README）**——这是最典型的第一天场景。
+
+### 第 1 步：先把工作区变干净（Commit 或 Stash）
+
+推送前必须保证工作区没有"半截子改动"，否则 IDEA 的 Push 会拒绝或推不干净。
+
+```bash
+git add .
+git commit -m "feat(ums): 本次工作内容摘要"
+```
+
+**IDEA**：`Git → Commit...`（Ctrl+K）→ 勾选全部改动（Modified + Untracked）→ 写 message → Commit。
+
+> ⚠️ **坑 1：Commit Message 别粘贴外部文字**。这次我把"预期会出现的两条 git log 文字"发给用户当参考，用户直接整段粘进了 Commit Message 框，导致 `ba212bf` 这条 commit 的备注变成一长串废文字（内容无误、纯粹难看）。教训：**commit message 只写一句话描述，不要粘贴任何预览性文本**。
+
+### 第 2 步：添加远程仓库（Add Remote）
+
+```bash
+git remote add origin https://github.com/Goutouxiaoen/insight-engine-backend.git
+git remote -v   # 验证：应出现 fetch/push 两行
+```
+
+**IDEA**：`Git → Manage Remotes → +` → Name=`origin`，URL=上面 → OK。
+
+> 概念回顾（呼应《三世界模型》）：这一步是在本地仓库"登记文件柜地址"。`origin` 只是 URL 的昵称。**没配 remote，push 一定失败**——git 不知道往哪推。
+
+### 第 3 步：推 master（第一次对接的真正起点）
+
+```bash
+git push -u origin master
+# -u = --set-upstream：告诉 git「本地 master 以后默认跟踪远程 master」，只首次推需要
+```
+
+**IDEA**：切到 master（右下角分支名）→ `Git → Push`（Ctrl+Shift+K）→ Push → 提示 Set upstream 就选上。
+
+> 为什么先推 master：master 是所有协作模型的共同主干，先让远程有主干，后续分支才有"基准"。
+
+### ⚠️ 第 3.5 步（本次最大坑）：443 连不上 —— 网络代理问题
+
+推送时极可能报：
+
+```
+Failed to connect to github.com port 443 after 21000 ms: Couldn't connect to server
+```
+
+**诊断（先别乱猜）**：
+
+```bash
+ping github.com                 # 通 = DNS 正常
+Test-NetConnection github.com -Port 443   # 不通 = 443 被墙（中国大陆典型）
+netstat -ano | findstr "7890 1080 10809"  # 本机有没有代理在监听？
+git config --global --get http.proxy      # git 配没配代理
+```
+
+**本次结论**：Clash 代理开着（127.0.0.1:7890）但 **git 没走它** → 直连被墙。解法（永久生效）：
+
+```bash
+git config --global http.proxy http://127.0.0.1:7890
+git config --global https.proxy http://127.0.0.1:7890
+```
+
+**IDEA 也要配**（如果 IDEA 内置 git 不走命令行配置）：`File → Settings → Appearance & Behavior → System Settings → HTTP Proxy → Manual → Host=127.0.0.1 Port=7890`。
+
+> 判断经验：**ping 通但 443 连不上 = 八成是本机代理没让 git 走**；有代理就配 `http.proxy`，没代理就换 SSH（`git@github.com:` 协议走 22 端口）。本次走 SSH 也通（22 端口实测可连），但配代理最省事。
+
+### 第 4 步：推功能分支（feature/ums-auth）
+
+```bash
+git push -u origin feature/ums-auth
+```
+
+**IDEA**：右下角切到 feature/ums-auth → `Git → Push` → Set upstream。
+
+> 概念回顾（《三世界模型》§五误解 1）：**push 永远是「本地同名分支 → 远程同名分支」**。`git push origin feature/ums-auth` 只是给远程新增一条叫 feature/ums-auth 的独立分支，**跟 master 没有从属关系，更不是"推到 dev"**。
+
+### 第 5 步：GitHub 网页提 PR 合并到主干
+
+推送后 GitHub 仓库首页会出现黄色提示条：`feature/ums-auth had recent pushes → [Compare & pull request]`。
+
+**注意区分两条黄条**：`master had recent pushes` 那条**忽略**（master 是主干不是被合入对象）；点 **feature/ums-auth 那条**。
+
+1. 点 `Compare & pull request`
+2. 确认页面自动填好：**base = master**（合入目标）、**compare = feature/ums-auth**（来源）
+3. `Create pull request` → 写一句描述 → `Merge pull request` → `Confirm merge`
+
+> 概念回顾：PR 的本质 = 「请审查人把功能分支并入主干」。**master 只接受 PR，不直接 push**（《三世界模型》踩坑 3）。Merge 后远程 master 前进若干 commit，与 feature 分支内容对齐。
+
+### ⚠️ 第 5.5 步（GitHub 特有坑）：远程多了个 main 分支
+
+新建远程仓库时若勾选了 "Add a README"，GitHub 会**自动建 `main` 分支**（含一个 README commit），于是远程出现 main + master 两条平行分支，页面提示 "master is 14 commits ahead of, 1 commit behind main"。
+
+**删 main 的正确姿势**（直接删会报 `You can't delete the default branch`）：
+
+```
+① 先改默认分支：仓库 Settings → General → 拉到 Default branch → main 改成 master → Update
+   让 GitHub 输入仓库名确认（insight-engine-backend）
+② 再删 main：仓库 Branches 页 → main 行 → Delete
+```
+
+> 判断经验：**GitHub 默认分支名是 main（新建仓库自动生成）；你的团队约定若用 master，要把默认分支改过来再删掉多余的**。本项目用 master 作主干（GitHub Flow），main 是空壳，删掉后远程干净：只剩 master + feature/xxx。
+
+### 第 6 步：本地同步（把合并后的新 master 拉回来）
+
+PR 合并后远程 master 已前进，本地 master 还停在旧位置：
+
+```bash
+git checkout master
+git pull origin master        # 远程新 master → 本地 master
+git log --oneline master -3   # 验证：应看到 Merge pull request #1 ... 等新提交
+```
+
+**IDEA**：切到 master → `Git → Pull`（Ctrl+T）。
+
+> 概念回顾：pull = fetch（更新快照 `origin/master`）+ merge（快照合进当前分支）。**多人协作/合并后，本地 master 落后于远程时执行这一步**。
+
+### 第 7 步（可选）：清理已合并的功能分支
+
+PR 合入 master 后功能分支使命完成，可清理（保留也无害，只是仓库变乱）：
+
+```bash
+git branch -d feature/ums-auth              # 本地删（-d 安全检查：已合并才让删）
+git push origin --delete feature/ums-auth   # 远程删
+```
+
+### 全流程对照总表
+
+| 步骤 | 一句话做什么 | git 命令 | 对应《三世界》概念 |
+| --- | --- | --- | --- |
+| 0 | 诊断现状 | `git branch -a` / `git remote -v` | — |
+| 1 | 工作区变干净 | `git add . && git commit` | 铁律 1：commit 只改本地 |
+| 2 | 登记远程地址 | `git remote add origin <url>` | 认领文件柜 |
+| 3 | 上传主干 | `git push -u origin master` | 铁律 2：本地→远程 |
+| 3.5 | 网络被墙→配代理 | `git config --global http.proxy` | 网络层（与 git 无关） |
+| 4 | 上传功能分支 | `git push -u origin feature/xxx` | §五误解1：同名推送 |
+| 5 | 功能并入主干 | GitHub PR（base=master） | master 只接受 PR |
+| 5.5 | 删多余的 main | Settings→默认分支→master；删 main | GitHub 默认分支机制 |
+| 6 | 拉回新主干 | `git pull origin master` | pull = fetch+merge |
+| 7 | 清理功能分支 | `git branch -d` + `push --delete` | feature 短命 |
+
+### 本次 5 个坑速记
+
+1. **没配 remote 就想 push** → 报 `remote origin not found` / 或 IDEA 提示无 remote。先 `git remote -v` 确认。
+2. **443 连不上**（ping 通但连不上）→ 本机代理没给 git 用，配 `git config --global http.proxy http://127.0.0.1:<端口>`。
+3. **远程多了 main 删不掉** → GitHub 默认分支是 main，先改默认分支为 master 再删。
+4. **Commit Message 粘贴外部文字** → commit 备注变一长串废字（无害但难看），message 只写一句话。
+5. **cherry-pick 自己刚提交的 commit** → IDEA 误操作（`cherry-pick ba212bf` 对自己）→ 提示 empty → skip。无残留、无害，但要知道它在干嘛、怎么确认没残留（`git status` 看有没有 rebase/cherry 状态）。
+
+### 面试可能追问
+
+- **Q1：`git push -u` 的 `-u` 是干嘛的？**
+  
+  - 答：`--set-upstream`，设置"本地分支跟踪远程分支"的上游关系。设置后后续直接 `git push` / `git pull` 无需再带 `origin 分支名`。首次推送某条新分支时必须加。
+
+- **Q2：为什么第一次对接要先推 master？**
+  
+  - 答：master 是所有协作模型的共同主干。先让远程存在主干分支，后续的 feature 分支、PR 才有"合入基准"（base）。GitHub 空仓库只有自动生成的 main，没有 master，你的 master 是第一条实质分支。
+
+- **Q3：ping 通 github.com 但 push 报 443 超时，说明什么？**
+  
+  - 答：DNS 解析正常（ping 通），但 HTTPS（443 端口）的 TCP 连接被网络阻断——典型于大陆网络访问 GitHub。解决：让 git 走本机代理（`git config http.proxy`），或改用 SSH 协议（22 端口）推送。
+
+---
+
 ## PostgreSQL 自增主键：BIGSERIAL / 序列（sequence）/ nextval / setval
 
 - 学于：2026-08-26
@@ -1090,9 +1277,41 @@ JWT 无状态，服务端无法「撤销」已签发的 token。登出后 token 
 - 登出时：把 token 加入黑名单，TTL = token **剩余有效期**（token 过期后本就失效，无需继续保留，避免黑名单无限膨胀）
 - 校验时：黑名单检查**优先于签名校验**（顺序：黑名单 → 签名 → 过期），已登出的 token 即便未过期也必须拒绝
 
-#### 5. 为什么黑名单 key 用 SHA-256 摘要而非 token 明文？
+#### 5. 摘要（SHA-256）的三个特性，分别对应什么用途
 
-防止 token 泄露在 Redis 键中（运维排查 Redis 时不会直接看到可用 token）。用 JDK 自带 `MessageDigest` 计算 SHA-256，不引入额外依赖。
+登录态黑名单、登录态缓存**都不存 token 明文，只存 SHA-256 摘要**。为什么摘要能替代原文？因为它有三个特性，各自解决一个问题：
+
+| 特性     | 含义                     | 在本项目解决的问题                                    |
+| ------ | ---------------------- | -------------------------------------------- |
+| **定长**  | 任意长输入 → 固定 64 个十六进制字符  | token 有 200+ 字符且长度不定，摘要恒为 64 字符，**适合当 key / 定长 value** |
+| **单向**  | 无法从摘要反推原文             | **Redis 被拖库也拿不到可用 token**（核心安全收益）             |
+| **抗碰撞** | 不同输入几乎不可能得到同一摘要       | 摘要可安全当 token 的"代表"做**相等性比对**                 |
+
+> 一句话：**定长让它能当 key，单向让它安全，抗碰撞让它能比对**。三条缺一不可。
+>
+> 实现上用 JDK 自带 `MessageDigest`（`TokenDigestUtil.sha256Hex`），不引入额外依赖（项目 BOM 未带 hutool-crypto）。
+
+#### 6. 关键概念：「单槽」——一个用户只有一个坑位
+
+`ie:auth:token:{userId}` 的 key 里**没有会话/设备维度**，`cacheToken` 用的是 `SET` **覆盖**而非追加：
+
+```java
+// 注意是 opsForValue().set()，不是往集合里追加
+stringRedisTemplate.opsForValue().set(KEY_AUTH_TOKEN + userId, sha256Hex(accessToken), ...);
+```
+
+所以一个用户**同时只存在一份 access 登录态 + 一份 refresh 会话**。用户换设备登录 → 新摘要直接覆盖旧摘要 → 旧设备立刻失效。这就是 PROGRESS 里记的「单会话语义 / 多设备互踢」。
+
+> **由此得出一个重要推论（纠正常见误解）**：在当前单槽实现下，「登出删登录态」和「踢人删登录态」删的是**同一个 key**，对 access 的拦截效果**完全重合**。下方「登出 vs 踢人」表里"单个 token vs 该用户全部 token"说的是**设计意图**上的粒度，不是当前实现的效果差异——当前实现下"全部"就退化成"那唯一一个"。两者真正分道扬镳，要等改成多会话结构（见本章末尾「数据类型选型」）。
+
+#### 7. 当前 jwt 分布：refresh 有 jti，access 没有
+
+| 令牌      | 是否有 `jti` | 失效靠什么                                    |
+| ------- | --------- | ---------------------------------------- |
+| refresh | ✅ 有（UMS-2 已落地） | 服务端记当前 jti 摘要，一次性轮换；旧 jti 重放视为泄露 → 吊销全部会话 |
+| access  | ❌ 没有       | 靠登录态缓存的**摘要比对**（存在 + 相等才放行）               |
+
+原因：access 只有 2h、且请求量大，给它编号并逐个吊销成本高；登录态摘要比对已经能达到"只认最新那张"的等效效果。将来若上多设备，access 也需要带 `sid`（会话 ID）才能定位到 Hash 里的具体 field。
 
 ### 我在项目里怎么用的（完整代码链路）
 
@@ -1268,23 +1487,35 @@ stringRedisTemplate.delete(KEY_AUTH_TOKEN + userId);  // 再删登录态缓存
 |      | 登出（用户主动）                   | 踢人/改密（管理员或用户触发）                                       |
 | ---- | -------------------------- | ----------------------------------------------------- |
 | 触发方法 | `AuthServiceImpl.logout()` | `UserServiceImpl.updateStatus()` / `updatePassword()` |
-| 做了啥  | 加黑名单 + 删登录态（两件事都做）         | 只删登录态（一件事）                                            |
-| 失效粒度 | 单个 token（当前这一次登录）          | 该用户全部 token                                           |
+| 做了啥  | 加黑名单 + 删登录态 + 删 refresh 会话   | 删登录态 + 删 refresh 会话                                    |
+| 设计粒度 | 单个 token（当前这一次登录）          | 该用户全部 token                                           |
 | 实际效果 | ✅ 真失效（黑名单被过滤器读）            | ✅ 真失效（登录态被过滤器读，已修复）                                   |
+| ⚠️ 当前实现的真相 | 两者删的是**同一对 key**，对 access 的拦截效果**完全重合** | 同左（"全部" = 单槽里唯一那一份）                      |
 
-**登出为什么同时做两件事？**
+**登出为什么同时做三件事？**
 
 ```java
 public void logout(String accessToken) {
-    // ① 加黑名单：废掉「当前这个 token」
-    tokenBlacklistService.blacklist(accessToken, remainingSeconds);
-    // ② 删登录态：废掉「这个用户全部 token」+ 清在线状态
+    // ① 加黑名单：废掉「当前这张 access token」
+    if (remainingSeconds > 0) {
+        tokenBlacklistService.blacklist(accessToken, remainingSeconds);
+    }
+    // ② 删 refresh 会话：切断「续期能力」
+    stringRedisTemplate.delete(KEY_AUTH_REFRESH + userId);
+    // ③ 删登录态：废掉 access
     stringRedisTemplate.delete(KEY_AUTH_TOKEN + userId);
 }
 ```
 
-- **加黑名单**按 token 粒度废掉当前这次登录——同一次登录的其他"复制品"token 也会被拦（摘要相同）；
-- **删登录态**按用户粒度废掉该用户所有已签发 token（含其他设备），因为校验时 `JwtAuthFilter` 每次都会读 `ie:auth:token:{userId}`，key 没了 = 一律拒绝。
+- **① 加黑名单**：按 token 粒度废掉当前这张 access——但注意它**只管 access，refresh token 从没进过黑名单**；
+- **② 删 `ie:auth:refresh:{userId}` 才是登出的必需项**：它切断续期能力。若只加黑名单、不删 refresh 会话 key，持有旧 refresh token（7 天有效）的人照样能调 `/refresh` 换一对全新令牌，**登出形同虚设**；
+- **③ 删 `ie:auth:token:{userId}`**：按用户粒度废掉 access。但**当前实现下它和 ① 的效果对 access 是重合的**（单槽，见核心原理第 6 节），属于纵深防御，而非"缺了就出洞"。
+
+**反证一：只删 key、不加黑名单，登出能生效吗？** 能——旧 access 因登录态缺失/摘要不匹配被拒，旧 refresh 因会话 key 被删被拒。**所以黑名单对 access 而言是冗余的**。
+
+**反证二：只加黑名单、不删 key，登出能生效吗？不能**——旧 refresh 仍能换新令牌对，登出被绕过。
+
+> **一句话纠正**：登出"三件事都做"并不是因为"一个管单 token、一个管全部 token"（当前单槽下 ① 和 ③ 管的是同一份）。真正的分工是：**黑名单断「这张票」，删 refresh 会话 key 断「续期能力」**。后者才不可替代。
 
 **一句话串起来**：
 
@@ -1296,6 +1527,40 @@ public void logout(String accessToken) {
 - `JwtAuthFilter` 在「验签名通过后、建立认证前」调 `sessionService.isActive(userId, token)`：缓存不存在（被删）或摘要不匹配（非最新登录）→ 401；
 - UMS 提供 `RedisTokenSessionService` 实现 + `TokenDigestUtil`，并把 `cacheToken` 由存明文改为存 SHA-256 摘要。
 - 权衡：方案 A 是单会话语义（同 userId 新登录会顶掉旧 token，多设备互踢）；若未来需多设备并存，再演进 `jti + ver`（见「JWT 无状态」章节方案 B）。
+
+### 补充：白名单 vs 黑名单语义（fail-closed / fail-open）——两者的本质差异
+
+上文澄清了"当前实现下两者效果重合"，那它们的**本质差异**在哪？答案藏在一行代码的方向里：
+
+```java
+// 登录态（白名单）：key 存在 且 摘要匹配 → 放行
+return cachedDigest != null && cachedDigest.equals(sha256Hex(token));
+
+// 黑名单：key 存在 → 拒绝
+return Boolean.TRUE.equals(stringRedisTemplate.hasKey(blacklistKey(token)));
+```
+
+|             | key 存在    | key 不存在    | 失效模式         | 术语                        |
+| ----------- | --------- | ---------- | ------------ | ------------------------- |
+| **登录态缓存**   | 比对摘要决定    | **拒绝**     | 查不到就拒绝 → 安全侧 | **fail-closed**（失败即关闭）    |
+| **黑名单**     | 拒绝        | **放行**     | 查不到就放行 → 可用侧 | **fail-open**（失败即开放）      |
+
+**这个方向差异有真实后果**：
+
+- 登录态 key 丢失（Redis 内存淘汰、主从切换丢数据、实例重启）→ **所有正常用户被误踢 401**。这是"白名单式"方案的固有脆弱点——它依赖 key **必须存在**。
+- 黑名单 key 丢失 → 最坏情况是"已登出的 token 短暂复活"，**不会误伤正常用户**。
+
+**那该怎么防？** 关键在于 `maxmemory-policy` 的选择：
+
+| 策略                       | 内存满时的行为                  | 对登录态的影响                       |
+| ------------------------ | ------------------------ | ----------------------------- |
+| `noeviction`（默认）         | **拒绝新写入**，已有 key 不动      | 登录态不会丢，但**新登录会失败**（写不进去）      |
+| `volatile-lru`/`volatile-ttl` | 只在**设了 TTL 的 key** 里淘汰 | 登录态**带了 TTL，仍在淘汰范围内** → 可能误踢  |
+| `allkeys-lru`            | 在**全部 key** 里淘汰          | 同样会淘汰登录态，且范围更大                |
+
+> 结论：**没有哪个策略能真正保护登录态**，因为它天然带 TTL 就属于可淘汰对象。真正的兜底是**容量充足 + 监控告警 + Redis 高可用（哨兵/集群）**，而不是指望淘汰策略。
+
+> **面试怎么答**：安全组件选型时，"缺失即拒绝"和"缺失即放行"是两个截然不同的失效模式。令牌校验属于**安全边界**，理论上更希望 fail-closed；但 fail-closed 把 Redis 变成了**强依赖**（Redis 挂 = 全员掉线）。工程上的权衡是：给 Redis 配高可用 + 接受短暂不可用，或者在 Redis 不可达时降级为"只验签名"（fail-open）并记录告警。
 
 ### 面试可能追问
 
@@ -1322,6 +1587,36 @@ public void logout(String accessToken) {
 - **Q6：登出（加黑名单）和踢人（删登录态）有什么区别？**
   
   - 答：两者粒度不同——登出只废「当前这一个 token」，用黑名单按 token 记（key 含 token 摘要）；踢人/改密要废「该用户全部 token」，用登录态按 userId 记（删一个 key 全失效）。修复前两者还有**生效与否**的差异：黑名单被 `JwtAuthFilter` 读所以登出有效，登录态缓存没人读所以踢人删了也是白删（旧 token 最多活到 2h 过期）。**修复后两条路都通**：`JwtAuthFilter` 验签后也校验 `ie:auth:token:{userId}` 存在且摘要匹配，缓存被删即 401，踢人/改密真正生效。
+  - **加分补充（承认局限）**：但要注意，**在当前的单槽实现下，这个"粒度不同"只是设计意图，不是可观测的效果差异**——两者删的是同一个 key。真正的分工是「黑名单断这张票，**删 refresh 会话 key 断续期能力**」；后者不可替代，因为 refresh token 从没进过黑名单。
+
+- **Q7：Redis 的 TTL 能加在 Hash 的某个 field 上吗？**
+  
+  - 答：**不能。** `EXPIRE`/`PEXPIRE` 的作用对象只能是**整个 key**，Hash / Set / ZSet 的内部元素（field / member）**没有独立过期时间**。所以如果用 Hash 存多设备会话（`field=sessionId`），某台设备 token 过期后那一行不会自动消失，会残留成"僵尸 field"。应对三选一：① 整个 key 设 TTL、登录时刷新（最省事）；② 改用 ZSet，`score` 存过期时间戳，定时 `ZREMRANGEBYSCORE` 清理；③ 校验时惰性 `HDEL`（`HDEL` 幂等，并发无害）。
+
+- **Q8：多设备登录要存多份会话，Redis 用什么结构？为什么不用多个 String key？**
+  
+  - 答：推荐 **Hash**：`ie:auth:sessions:{userId}`，`field=sessionId`、`value=token 摘要`。登出单设备 = `HDEL` 一个 field，踢人全设备 = `DEL` 整个 key，都是 O(1) 且原子。若用多个独立 String key（`{userId}:{sid}`），"全踢"就必须按前缀扫描——`KEYS` 会**阻塞整个 Redis**（生产禁用），`SCAN` 虽不阻塞但仍是 O(N) 且迭代期间的增量可能漏扫。这个对比正好说明：**数据结构选型直接决定操作复杂度**。
+
+- **Q9：登录态缓存（白名单）和黑名单，Redis 出问题时的表现有什么不同？**
+  
+  - 答：两者**失效模式相反**。登录态是"存在且匹配才放行"，key 丢失 → 一律拒绝 → **fail-closed**，Redis 抖动会导致**正常用户被误踢**；黑名单是"存在才拒绝"，key 丢失 → 一律放行 → **fail-open**，最坏是已登出 token 短暂复活，**不误伤正常人**。安全边界理论上更希望 fail-closed，但那会把 Redis 变成强依赖（Redis 挂 = 全员掉线），工程上要配高可用 + 合理 `maxmemory-policy` + 容量监控，而不是靠淘汰策略兜底。
+
+- **Q10：Redis 的过期 key 是怎么被删掉的？为什么不用定时器精确删除？**
+  
+  - 答：两种策略配合——**惰性删除**（访问 key 时才检查过期时间戳，过期就删并返回 nil，省 CPU 但没人访问的过期 key 会一直占内存）+ **定期删除**（默认每秒 10 次，随机抽样一批带 TTL 的 key 删掉已过期的，控制内存）。不用定时器的原因：为每个 key 维护一个定时器，内存和时间开销都不可接受；Redis 用"惰性 + 抽样"在 **CPU 与内存之间取折中**。
+
+- **Q11：Redis 五种数据类型分别适合什么场景？为什么存多设备会话用 Hash？**
+  
+  - 答：**String**（单值，支持 `INCR`/`SETNX`）→ 缓存、计数器、锁；**Hash**（field→value 映射）→ 对象属性、购物车、会话表；**List**（有序可重复，两头 O(1)）→ 队列、最新列表；**Set**（无序去重，`SISMEMBER` O(1)）→ 标签、去重、共同好友；**ZSet**（按 score 有序，**支持按 score 区间批量操作**）→ 排行榜、延迟队列、过期索引。
+  - 选 Hash 存会话的原因：一个用户一个 key、里面多台设备各占一个 field；登出 = `HDEL` 一个 field（O(1)），踢人 = `DEL` 整个 key（O(1)，原子，不需要遍历）。而用多个 String key 则"全踢"必须按前缀扫描，`KEYS` 会阻塞生产环境、`SCAN` 是 O(N)。**数据结构选型直接决定操作复杂度**，这就是最好的例子。
+
+- **Q12（连环追问）：Hash 的 field 不能设 TTL，会话过期了怎么办？**
+  
+  - 答：三条路，按成本递增：
+    1. **整个 hash 设 TTL**（`EXPIRE key 7d`，登录/刷新时续期）——不是让 field 过期，而是让**整个 key** 兜底过期。要点：TTL 必须**远大于**元素有效期（否则正在用的会话被误删），且每次登录都要重新 `EXPIRE`。代价是脏数据最多滞留一个 TTL 周期。
+    2. **ZSet 当过期索引 + 定时清理**——Hash 存内容（`field=sid`），ZSet 存时间（`member=sid, score=过期时间戳`）。清理时**必须先 `ZRANGEBYSCORE` 查出 sid，再 `HDEL` 内容，最后 `ZREMRANGEBYSCORE` 删索引**（顺序反了就找不到该删什么了）。代价是**双写一致性**问题 + 需要定时任务。
+    3. **惰性删除**——校验时发现 token 过期就顺手 `HDEL`。`HDEL` 幂等（删不存在返回 0 不报错），并发无需加锁。但**清不干净**（用户不来就永远留着），只能当辅助。
+  - **我的选择**：MVP 用 **1 + 3**（一个 `EXPIRE` 兜底 + 校验时顺手删），两行代码解决 90% 问题；只有需要"按时间范围查询/清理会话"时才上 2。
 
 ### 踩坑提醒
 
@@ -1340,20 +1635,623 @@ public void logout(String accessToken) {
    - 现象：30 分钟锁到期后，之前剩的计数还在，用户再错 1 次就又被锁。
    - 规避：触发锁定时同时 `DEL` 计数 key，锁定解除后从零重新累计。
 
-4. **坑：登出时忘了删除登录态缓存，只加黑名单**
+4. **坑（比"状态不一致"严重得多）：登出只加黑名单、忘了删 refresh 会话 key**
    
-   - 现象：黑名单让「旧 token」失效了，但登录态缓存里还留着，如果后续有「踢人/改密」逻辑判断登录态，会出现状态不一致。
-   - 规避：登出同时做两件事——加黑名单（废 token）+ 删登录态缓存（清状态）。
+   - 现象：access 确实被黑名单拦了，**但 refresh token 从没进过黑名单**。旧 refresh token 有 7 天有效期，只要 `ie:auth:refresh:{userId}` 还在，持有者调 `/refresh` 就能换一对**全新**的 access + refresh——**登出形同虚设**。
+   - 规避：登出必须三件事都做——加黑名单（废这张 access）+ 删 refresh 会话（断续期）+ 删登录态（清状态）。**其中删 refresh 会话才是不可替代的那一步。**
+
+5. **坑（已知未修，见 PROGRESS §五待办）：`INCR` + `EXPIRE` 非原子，计数 key 可能永不过期**
+   
+   - 现象：`handleLoginFail` 先 `INCR` 再 `EXPIRE` 是**两条独立命令**。若进程在两者之间崩溃或 Redis 抖动，`failKey` 就**永远没有 TTL**——该账号的失败计数永久残留，用户半年后偶尔输错一次密码就可能被直接锁定。
+   - 规避（三选一）：① **Lua 脚本**把 `INCR` + `EXPIRE` 打包成一次原子执行；② 先用 `SET key 1 EX 1800 NX` 抢锁式初始化（初始化时自带 TTL），再 `INCR`；③ 用 Redisson 的 `RAtomicLong` + `expire`。
+   - 同类问题的通用解法：**Redis 的多命令组合一律用 Lua 或 Pipeline 保证原子性**，别在应用代码里拼。
+
+6. **坑：为多设备会话按前缀删 key 时用了 `KEYS` 命令**
+   
+   - 现象：`KEYS ie:auth:token:1001:*` 一次性遍历**整个键空间**并一次性返回全部匹配 key。Redis 单线程执行命令，数据量大时会阻塞数百毫秒甚至数秒，期间所有请求全部排队。
+   - 规避：生产环境**明令禁用 `KEYS`**，用 `SCAN` 增量迭代（游标式，每次取一小批）；**更好的做法是压根别用"多个独立 key"**，改用 Hash 结构，一个 `DEL` 搞定，无需遍历。
+
+### 延伸专题：Redis 数据类型选型（从「单槽」到「多设备」）
+
+> 上面三件事用的全是 **String**（`opsForValue()`）。一旦需求变成"一个用户对应多份会话"，就进入 Redis **数据类型选型**的领域——这是面试高频题。
+
+#### 1. 五种类型分别长什么样（先看图，再看特点）
+
+---
+
+**① String —— 一个 key 对一个值**
+
+```
+key                           value
+"ie:auth:token:1001"       →  "a3f5c8d2...（64 位摘要）"
+"ie:auth:login-fail:admin" →  "3"          ← 数字也能存，可直接 INCR
+```
+
+- **特点**：最简单，二进制安全（字符串 / 数字 / 序列化对象都能塞），单值最大 512MB
+- **核心命令**：`SET` / `GET` / `DEL` / `INCR` / `SETEX`（设值同时设 TTL）/ `SETNX`（不存在才设，分布式锁的地基）
+- **本项目**：**全在用**——失败计数、锁、黑名单、登录态，全是 String
+- **适用**：缓存、计数器、分布式锁
+
+---
+
+**② Hash —— 一个 key 对应一张「字段表」**
+
+```
+key = "ie:auth:sessions:1001"
+  ┌──────────┬─────────────────┐
+  │ field    │ value           │
+  ├──────────┼─────────────────┤
+  │ "7f3a9c" │ "a3f5c8d2..."   │  ← 手机
+  │ "b21e08" │ "9d2e41f7..."   │  ← 电脑
+  │ "d9044f" │ "1c7b903a..."   │  ← 平板
+  └──────────┴─────────────────┘
+```
+
+- **特点**：field 唯一、**field 无序**、**field 不能单独设 TTL**（致命限制，见第 5 节）；单取/单改一个 field 是 O(1)，不用整表读写
+- **核心命令**：`HSET`（设字段）/ `HGET`（取一个）/ `HDEL`（删字段）/ `HLEN` / `HEXISTS` / `HGETALL`（取全部，⚠️ 大 hash 会阻塞）
+- **对比 String 存对象**：把对象 JSON 塞进 String，改一个字段要「读出 → 反序列化 → 改 → 序列化 → 写回」；Hash 直接 `HSET` 一个字段，省掉整块读写
+- **适用**：对象属性、购物车、**会话表**
+
+---
+
+**③ List —— 有序（按插入顺序）、可重复的双向队列**
+
+```
+key = "ie:mq:queue"
+  head ─→ [ "msg1" ⇄ "msg2" ⇄ "msg3" ] ←─ tail
+```
+
+- **特点**：**有序**（插入顺序）、**可重复**；两头进出都是 O(1)，**按下标访问是 O(N)**
+- **核心命令**：`LPUSH`/`RPUSH`（进）/ `LPOP`/`RPOP`（出）/ `LRANGE`（取区间，⚠️ O(N)）/ `BLPOP`（阻塞弹出，做队列用）
+- **别误用**：不要当数组随机访问（`LINDEX` 是 O(N)）；大列表别 `LRANGE 0 -1` 全量拉取
+- **适用**：消息队列、最新动态列表
+
+---
+
+**④ Set —— 无序、不重复的集合**
+
+```
+key = "ie:user:roles:1001"
+  { "admin", "end_user", "kb:read" }     ← 无序，且自动去重
+```
+
+- **特点**：**无序**、**自动去重**；**`SISMEMBER` 判存在是 O(1)** —— 这是它最大的价值
+- **核心命令**：`SADD` / `SREM` / `SISMEMBER`（判存在）/ `SMEMBERS` / `SINTER`（交集）/ `SUNION`（并集）/ `SDIFF`（差集）
+- **适用**：标签、去重、**共同好友（`SINTER`）**、权限集合判断
+- **本项目**：权限缓存处可选（`SISMEMBER perms:1001 "kb:read"`）
+
+---
+
+**⑤ ZSet（有序集合）—— 带 score 排序，member 唯一**
+
+```
+key = "ie:auth:expire:1001"
+  ┌──────────┬──────────────┐
+  │ member   │ score        │   ← 按 score 自动升序排列
+  ├──────────┼──────────────┤
+  │ "7f3a9c" │ 1756876800   │   ← 过期时间戳（越小 = 越早过期）
+  │ "b21e08" │ 1756876900   │
+  │ "d9044f" │ 1756963200   │
+  └──────────┴──────────────┘
+```
+
+- **特点**：**有序（按 score）**、member 唯一、**score 可重复**；既能按 member 取，也能**按 score 区间批量操作**
+- **核心命令**：`ZADD` / `ZREM` / `ZSCORE`（取某 member 的分数，O(1)）/ `ZRANGE`（按排名取）/ `ZRANGEBYSCORE`（按分数区间取）/ `ZREMRANGEBYSCORE`（**按分数区间批量删**）/ `ZCARD`
+- **关键优势**：`ZREMRANGEBYSCORE` 能「一次删掉 score 落在某个区间的所有 member」——**这正是"按过期时间批量清理"需要的能力，Hash 和 Set 都做不到**
+- **适用**：排行榜、延迟队列、**过期时间索引**
+
+---
+
+#### 2. 一张表对比（面试背这张就够）
+
+| 类型         | 有序？            | 去重？      | 怎么定位元素                 | 核心优势                             | 典型场景          |
+| ---------- | -------------- | -------- | ---------------------- | -------------------------------- | ------------- |
+| **String** | —              | —        | 就一个值                   | 最简单，支持 `INCR` / `SETNX`          | 缓存、计数器、锁      |
+| **Hash**   | 否（field 无序）    | field 唯一 | 按 field 名              | 按字段读写 O(1)，省 key 数               | 对象属性、购物车、会话表  |
+| **List**   | 是（插入顺序）        | 否        | 按两端 / 按下标（O(N)）        | 两头进出 O(1)                        | 队列、最新列表       |
+| **Set**    | 否              | **是**    | 按 member 值             | `SISMEMBER` O(1) + 交并差运算          | 标签、去重、共同好友    |
+| **ZSet**   | **是（按 score）** | member 唯一 | 按 member **或按 score 区间** | **范围批量操作**（`ZREMRANGEBYSCORE`）    | 排行榜、延迟队列、过期索引 |
+
+> **选型口诀**：
+>
+> - 就一个值 → **String**
+> - 一个对象的多个字段 → **Hash**
+> - 要排队 / 讲顺序 → **List**
+> - 要判"在不在"、要去重 → **Set**
+> - 要排序，或要**按数值范围批量操作** → **ZSet**
+>
+> **本项目现状**：三件事全用 String；多设备会话应该用 **Hash**；若还要按过期时间清理，再加一个 **ZSet** 当索引。
+
+#### 3. 多设备会话的三种方案对比
+
+| 方案                    | 结构                                        | 登出（单设备）           | 踢人（全设备）    | 主要坑                                  |
+| --------------------- | ----------------------------------------- | ----------------- | ---------- | ------------------------------------ |
+| A. 多个 String key      | `ie:auth:token:{userId}:{sid}` × N        | `DEL` 指定 key      | 按前缀找全删     | **禁止 `KEYS`**；`SCAN` 是 O(N) 且不保证一致   |
+| **B. Hash（推荐）**       | `ie:auth:sessions:{userId}` → `field=sid` | `HDEL` 一个 field   | `DEL` 整个 key | **field 不能单独设 TTL**                  |
+| C. ZSet 单独存           | `member=sid`，`score=过期时间戳`                | `ZREM`            | `DEL`      | 只能存时间，内容还得另开 key（所以通常 Hash + ZSet 配合） |
+
+#### 4. 方案 B（Hash）展开
+
+```
+ie:auth:sessions:1001  (Hash, TTL=7d，登录/刷新时刷新)
+  ├─ "7f3a9c" → sha256(T1)    手机
+  ├─ "b21e08" → sha256(T2)    电脑
+  └─ "d9044f" → sha256(T3)    平板
+```
+
+| 动作            | 命令                                  | 效果           |
+| ------------- | ----------------------------------- | ------------ |
+| 登录新设备         | `HSET` + `EXPIRE`                   | 新增一行，互不影响    |
+| 请求校验          | `HGET sessions:1001 <sid>` 比对摘要      | 只认自己那一行      |
+| **登出（单设备）**   | `HDEL sessions:1001 <sid>`          | **只掉这一台**    |
+| **踢人/改密（全设备）** | `DEL sessions:1001`                 | **一次操作全掉**   |
+
+> **有意思的推论**：改成 Hash 之后，「登出」和「踢人」才**第一次真正分道扬镳**。单槽时代两者删的是同一个 key（这正是最初困惑的根源），Hash 时代登出 = `HDEL` 一个 field、踢人 = `DEL` 整个 key，语义彻底分离。
+>
+> 配套改动：access token 需要带上 `sid` claim，否则过滤器不知道该查哪个 field。
+
+#### 5. 硬限制：TTL 只能加在 key 上 —— 以及三种绕开办法（逐个讲透）
+
+必须刻进脑子里的一条：
+
+- `EXPIRE` / `PEXPIRE` 的作用对象**只能是整个 key**；
+- Hash / Set / ZSet 的**内部元素（field / member）无法单独设置过期时间**；
+- 后果：用 Hash 存多设备会话时，某台设备 token 过期后，它在 hash 里的那一行**不会自动消失**，`HLEN` 只增不减，内存缓慢泄漏。
+
+**问题长这样**（假设现在 13:00）：
+
+```
+ie:auth:sessions:1001  (Hash)
+  ├─ "7f3a9c" → 摘要    10:00 登录，token 12:00 过期   ← 已过期，但还赖在这儿
+  ├─ "b21e08" → 摘要    11:00 登录，token 13:00 过期   ← 正在用
+  └─ "d9044f" → 摘要    12:30 登录，token 14:30 过期   ← 正在用
+```
+
+下面三种应对，逐个拆开。
+
+---
+
+**方案 1：整个 hash 设 TTL（最省事，MVP 首选）**
+
+**做法**：`HSET` 之后给**整个 key** 设 TTL，每次登录/刷新时 `EXPIRE` 续期。
+
+```java
+// 登录新设备
+hashOps.put(sessionKey, sid, sha256Hex(token));        // HSET 写一行
+redisTemplate.expire(sessionKey, Duration.ofDays(7));  // EXPIRE 给整个 key 续命 7 天
+```
+
+**怎么绕过限制的**：不给 field 设 TTL（做不到），而是**给整个 hash 设 TTL**——用户 7 天内只要登录过一次，key 就续命；7 天不登录，整个 key 连同里面所有残留 field **一起消失**。
+
+**三个数字要想清楚**：
+
+| 要点                | 说明                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| TTL 必须 **远大于** 元素有效期 | access token 只有 2h，key TTL 给 7d。若 TTL 小于 2h，元素还没自然过期就被连带删掉 → **用户被无故踢下线**     |
+| 每次登录/刷新都要重新 `EXPIRE` | 否则用户连续用满 7 天后 key 到期，**正在用的会话也被清掉**                                             |
+| 脏数据最长滞留 = key 的 TTL | 本例 7 天                                                                              |
+
+**代价**：脏数据最多躺 7 天。1000 活跃用户 × 平均 3 台设备 = 3000 个 field，其中几百个是僵尸——这点内存完全可以接受。
+
+> **一句话**：**不是让 field 过期，而是让整个 hash 过期——用"整体兜底"绕开"field 无 TTL"。**
+
+---
+
+**方案 2：ZSet 当「过期时间索引」+ 定时清理**
+
+**思路**：Hash 负责**存内容**，ZSet 负责**存"什么时候过期"**。Redis 没有"带 TTL 的 field"，那就**自己造一个过期索引**。
+
+```
+ie:auth:sessions:1001   (Hash)   field=sid  → token 摘要      【存内容】
+ie:auth:expire:1001     (ZSet)   member=sid → 过期时间戳       【存时间索引】
+```
+
+```
+ie:auth:expire:1001  (ZSet，按 score 自动升序，越靠前越早过期)
+  ┌──────────┬────────────┐
+  │ member   │ score      │
+  ├──────────┼────────────┤
+  │ "7f3a9c" │ 1756876800 │  ← 已过期（< now）
+  │ "b21e08" │ 1756876900 │  ← 已过期
+  │ "d9044f" │ 1756963200 │  ← 未过期
+  │ "e13c55" │ 1756963300 │  ← 未过期
+  └──────────┴────────────┘
+                    ↑ now = 1756877000
+```
+
+**写的时候（双写，两笔 + 一个 TTL）**：
+
+```java
+hashOps.put(sessionKey, sid, digest);                   // ① Hash 存内容
+zSetOps.add(expireKey, sid, expireAtEpochSecond);       // ② ZSet 存过期时间
+redisTemplate.expire(expireKey, Duration.ofDays(7));    // ③ 索引 key 自己也要有 TTL
+```
+
+**清理的时候（三步，顺序不能反）**：
+
+```java
+long now = System.currentTimeMillis() / 1000;
+// ① 先按 score 区间查出「已过期」的 sid
+//    ★ 必须先查！否则先删了索引，就再也找不到该删哪些内容了
+Set<String> expired = zSetOps.rangeByScore(expireKey, 0, now);
+if (!expired.isEmpty()) {
+    hashOps.delete(sessionKey, expired.toArray());      // ② 删 Hash 里的内容
+}
+zSetOps.removeRangeByScore(expireKey, 0, now);          // ③ 删 ZSet 里的索引
+```
+
+**校验时怎么判存活**：
+
+```java
+Double expireAt = zSetOps.score(expireKey, sid);   // ZSCORE，O(1)
+if (expireAt == null || expireAt < now) {
+    return false;                                  // 索引里没有，或已过期
+}
+String digest = hashOps.get(sessionKey, sid);      // 再取内容比对
+return digest != null && digest.equals(sha256Hex(token));
+```
+
+**为什么非得 ZSet**：关键在 `ZRANGEBYSCORE` / `ZREMRANGEBYSCORE` —— **按 score 数值区间批量操作**。Hash 只能按 field 名一个个来，没法表达"把所有过期时间小于 now 的都删掉"。
+
+**代价（这就是它"成本最高"的原因）**：
+
+- **双写一致性**：写要 `HSET` + `ZADD`，删要两边都删。任何一步失败就会出现「内容在、索引没了」（永不清理）或「索引在、内容没了」（校验误判为失效）；
+- 需要额外的定时任务（几分钟跑一次）；
+- 两个 key 的 TTL 要协调一致。
+
+**什么时候值得上**：设备数很大、对内存敏感、或需要"按过期时间排序 / 分页查会话列表"。**MVP 阶段不值得**。
+
+---
+
+**方案 3：惰性删除（顺手清理，不能单独用）**
+
+**思路**：不主动扫，谁撞上谁清理。
+
+```java
+public boolean isActive(Long userId, String sid, String token) {
+    String digest = hashOps.get(sessionKey(userId), sid);
+    if (digest == null) return false;                    // 记录不存在
+    if (!digest.equals(sha256Hex(token))) return false;  // 摘要不匹配
+
+    // 记录存在且对得上，再看 token 本身过期没（解析 JWT 的 exp 即可，不用查 Redis）
+    if (jwtUtil.getRemainingSeconds(token) <= 0) {
+        hashOps.delete(sessionKey(userId), sid);         // ← 惰性清理：顺手删掉
+        return false;
+    }
+    return true;
+}
+```
+
+**为什么并发安全**：`HDEL` 是**幂等**的——删存在的 field 返回 1，删不存在的返回 0，**都不会报错**。100 个并发请求同时删同一个 field，最终结果完全一样，**所以不需要加锁**。
+
+**致命短板**：只有"有人拿着过期 token 来请求"才会触发清理。用户登出后再也不来，那条 field **永远留着**——**清不干净**。
+
+**所以它的定位是辅助，不是主力**：
+
+| 组合                 | 效果                              |
+| ------------------- | ------------------------------- |
+| 只用方案 3              | ❌ 僵尸 field 永远清不掉                |
+| **方案 1 + 方案 3（推荐）** | ✅ 惰性删除顺手清大部分，整体 TTL 兜底清剩余       |
+| 方案 2 + 方案 3         | ✅ 定时清理为主，惰性删除减轻定时任务压力           |
+| 方案 1 + 2 + 3        | 过度设计，MVP 不需要                    |
+
+---
+
+**决策一句话**：
+
+> **MVP 用「方案 1 + 方案 3」**——一个 `EXPIRE` 兜底 + 校验时顺手 `HDEL`，两行代码解决 90% 的问题。
+> **只有当你需要"按时间范围查询 / 清理会话"时才上方案 2**——那时 ZSet 的范围操作能力才真正值回它的双写复杂度。
+
+#### 6. `KEYS` 为什么是生产禁命令
+
+`KEYS pattern` 会**一次性遍历整个键空间**并把全部匹配 key 一次性返回。Redis 单线程执行命令，百万级 key 时会阻塞数百毫秒到数秒，**期间所有其它请求全部排队**。
+
+正确替代是 `SCAN`——**游标式增量迭代**，每次只取一小批，不阻塞：
+
+```java
+ScanOptions options = ScanOptions.scanOptions()
+        .match("ie:auth:token:1001:*").count(100).build();
+try (Cursor<byte[]> cursor = redisTemplate.getConnectionFactory()
+        .getConnection().scan(options)) {
+    while (cursor.hasNext()) {
+        keysToDelete.add(new String(cursor.next()));
+    }
+}
+```
+
+但 `SCAN` 仍有两点不足：**迭代期间新增的 key 可能扫不到**（不保证一致）、**总复杂度仍是 O(N)**。这也是推荐 Hash 的深层原因——`DEL` 一个 key 是**原子的一次操作**，压根不需要遍历。
+
+#### 7. 顺带：Redis 的过期 key 是怎么被删掉的
+
+理解了"field 无 TTL"，自然要问"那 key 的 TTL 怎么生效"——Redis 用两种策略配合：
+
+| 策略       | 机制                             | 优点          | 缺点                 |
+| -------- | ------------------------------ | ----------- | ------------------ |
+| **惰性删除** | 访问 key 时才检查过期时间戳，过期就删并返回 nil  | 省 CPU，按需触发  | 没人访问的过期 key 会一直占内存 |
+| **定期删除** | 每秒 10 次随机抽样一批带 TTL 的 key，删掉已过期的 | 主动回收内存，限制时长 | 抽样有漏网，不能保证全清       |
+
+> 面试常问："为什么不用定时器精确删除每个过期 key？"——答：为每个 key 维护一个定时器，内存与 CPU 开销都不可接受；Redis 选择用「惰性 + 抽样」在 **CPU 与内存之间取折中**。
+
+#### 8. 本项目登录态的演进路径
+
+| 阶段       | 结构                                  | 多设备 | 登出/踢人是否分离              |
+| -------- | ----------------------------------- | --- | ---------------------- |
+| **当前**   | `ie:auth:token:{userId}` String 单槽  | ❌ 互踢 | ❌ 效果重合（删同一个 key）       |
+| 演进 1     | Hash `ie:auth:sessions:{userId}`    | ✅   | ✅ `HDEL` vs `DEL`      |
+| 演进 2     | Hash + JWT 带 `sid` claim            | ✅   | ✅ 且支持设备列表、远程下线指定设备    |
+| 另选方案     | `jti` + `ver` 会话版本号                 | ✅   | 一个版本号管全部 token，无需枚举会话 |
+
+> 演进 1/2 改的是**存储结构**，`ver` 方案改的是**校验依据**——后者对 JWT 的无状态性破坏更小，但拿不到"设备列表"这类管理能力。二者也可以组合：Hash 存会话 + `ver` 做全局快速失效。
+
+---
+
+## Spring Boot 启动流程主线 + 缓存预热钩子（降维记忆版）
+
+- 学于：2026-09-03
+- 关联模块：`UmsApplication` + 4 个 starter 的 `AutoConfiguration.imports` + `SecurityAutoConfiguration.jwtUtil`（fail-fast 真实锚点）
+- 来源：TD §3.1、SpringBoot 源码 `SpringApplication.run()`
+
+> 目标：**只记主线骨架，不背冷门扩展点**。本章回答两个问题：① Spring Boot 启动到底干了啥；② 三种缓存预热钩子分别钉在哪一步、为什么时机不一样。
+>
+> **与下一章的关系**：本章是**时间轴（启动流程）**，下一章是这条时间轴上的**一个横切机制（自动装配）**。先有骨架，再挂细节。
+
+### 0. 先背这张表（全章内容都从它展开）
+
+| 顺序 | 阶段                              | 发生了什么              | 钩子                              | 服务开门没？      |
+| --- | ------------------------------- | ------------------ | ------------------------------- | ----------- |
+| —   | `new SpringApplication()`       | 收集扩展类、推断应用类型       | —                               | ❌ 还没开始      |
+| 1   | `prepareEnvironment()`          | 加载 yml / 环境变量 / 命令行参数 | —                               | ❌           |
+| 2   | `createApplicationContext()`    | 容器对象诞生（空的）         | —                               | ❌           |
+| 3   | `refresh(context)`              | **造 Bean、依赖注入**    | **`@PostConstruct`**            | ❌           |
+| 4   | `callRunners()`                 | 执行 Runner          | **`CommandLineRunner`**         | ❌（精确说明见第 5 节） |
+| 5   | `publishApplicationReadyEvent()` | 发布就绪事件             | **`@EventListener(ReadyEvent)`** | ✅ 开了        |
+| 6   | `return context`                | 启动完成               | —                               | ✅           |
+
+> **记忆锚点只有三个字：开门没？** —— 预热必须赶在"开门"之前做完。
+
+### 1. 降维：一行代码拆两步
+
+你写项目日常只有一行：
+
+```java
+SpringApplication.run(UmsApplication.class, args);
+```
+
+拆成两步：
+
+```java
+SpringApplication app = new SpringApplication(UmsApplication.class);  // ① 备料
+app.run(args);                                                        // ② 下锅
+```
+
+### 2. ① new SpringApplication() —— 只买菜，不下锅
+
+**只干三件事，一件"活"都不干**：
+
+1. **推断应用类型**（`deduceWebApplicationType()`）：看 classpath 里有没有 `DispatcherServlet` / `DispatcherHandler`，判定是 **SERVLET**（普通 Web）/ **REACTIVE**（WebFlux）/ **NONE**（非 Web）。**这决定了第 2 步创建哪种容器。**
+2. **收集扩展类**：把 `ApplicationContextInitializer`、`ApplicationListener` 从 `spring.factories` 读出来存进集合，留着 `run()` 时调用。
+3. **记录主类**：记住启动类是哪个——后面 `@ComponentScan` 要以**它的包**为扫描起点。
+
+> **不创建容器、不读 yml、不造 Bean、不连 Redis 数据库。**
+>
+> 👉 记忆：**new = 买菜备菜，还没下锅。**（`ApplicationContextInitializer`、`ApplicationListener` 属于"备好的配菜"，**面试不追问扩展点就直接忽略**）
+
+### 3. ② run() 的 6 步骨架（删掉所有无关代码）
+
+```java
+public ConfigurableApplicationContext run(String... args) {
+    // 1. 准备环境：系统变量、命令行参数、application.yml 全部加载进 Environment
+    ConfigurableEnvironment environment = prepareEnvironment();
+
+    // 2. 创建 IOC 容器（此时是空的，一个 Bean 都没有）
+    ConfigurableApplicationContext context = createApplicationContext();
+    context.setEnvironment(environment);
+
+    // 3. 【核心】容器刷新：读配置类 → 造 Bean → 依赖注入
+    refresh(context);
+    //    ★ 自动装配在这一步的前半段（第 ⑤ 子步，见下一章）
+    //    ★ @PostConstruct 在这一步的后半段（第 ⑪ 子步，每个 Bean 造完就触发）
+
+    // 4. refresh 全部结束，执行 Runner
+    callRunners(context, args);
+    //    ★ CommandLineRunner / ApplicationRunner 在这里
+
+    // 5. 发布就绪事件（同时把 Readiness 状态改为 ACCEPTING_TRAFFIC）
+    publishApplicationReadyEvent(context);
+    //    ★ @EventListener(ApplicationReadyEvent.class) 在这里
+
+    // 6. 返回容器，启动完成
+    return context;
+}
+```
+
+> 就这 6 步。三个预热钩子**全部钉死在上面注释的位置**。
+
+### 4. 三个钩子分别在哪、为什么时机不一样
+
+#### ① `@PostConstruct` —— 第 3 步 refresh 内部
+
+- **触发时机**：**当前这一个 Bean** 实例化 + 依赖注入完成后立刻执行。
+- **坑**：只代表**这一个 Bean 造完了**，别的 Bean 可能还没开始造。
+- **后果**：在这个方法里用 `RedisTemplate` / `Mapper`，而它们还没被创建 → **空指针**。
+- **附带问题**：每个 Bean 都会执行一次，语义上也不适合做"全局一次性"的事。
+- **结论**：❌ **不能做全局缓存预热**。
+
+#### ② `CommandLineRunner` / `ApplicationRunner` —— 第 4 步 callRunners()
+
+- **触发时机**：`refresh()` **全部结束**，`RedisTemplate`、`Mapper`、所有业务 Bean **全部就绪**。
+- **关键**：此时外部流量还没打进来（精确说明见下节）。
+- **结论**：✅ **业务首选的缓存预热时机**——东西全备好了，客人还没进门。
+
+#### ③ `@EventListener(ApplicationReadyEvent.class)` —— 第 5 步
+
+- **触发时机**：Runner 跑完之后，服务**已对外宣告就绪**。
+- **坑**：预热逻辑慢的话，用户请求已经进来、缓存还没做好 → **直接打穿数据库**。
+- **结论**：⚠️ 只适合"发通知、打日志、注册到服务发现"这类动作，**不适合重预热**。
+
+#### 时序一句话（牢牢记住）
+
+```
+@PostConstruct  →  CommandLineRunner  →  ApplicationReadyEvent
+   （早）                                       （晚）
+```
+
+### 5. 面试加分：Tomcat 端口到底哪一步开的（纠偏）
+
+第 4 节说"CommandLineRunner 时服务还没接收请求"，这是**面试标准答法**；严格讲有细节，被追问时要能补上。
+
+`refresh(context)` 内部其实有 12 个子步骤，关键是这三个：
+
+```
+refresh() 内部（简化）:
+  ⑤ invokeBeanFactoryPostProcessors()  ← 【自动装配在这】读 imports、注册 BeanDefinition
+  ⑥ registerBeanPostProcessors()
+  ⑨ onRefresh()                        ← 创建 WebServer 对象（Tomcat 实例，还没监听端口）
+  ⑪ finishBeanFactoryInitialization()  ← 【@PostConstruct 在这】实例化所有单例 Bean
+  ⑫ finishRefresh()
+       ├─ webServer.start()            ← 【端口真正开始监听】
+       └─ 发布 ContextRefreshedEvent
+```
+
+**所以精确版本是**：
+
+| 时点                            | Tomcat 端口状态                    |
+| ----------------------------- | ------------------------------ |
+| `@PostConstruct`（第 ⑪ 步）        | 还没监听（WebServer 对象都还没建）          |
+| `CommandLineRunner`（第 4 步）     | **端口已经监听**（socket 能收连接了）        |
+| `ApplicationReadyEvent`（第 5 步） | 端口监听 **+ 已对外宣告就绪**             |
+
+**那为什么仍然推荐 `CommandLineRunner` 做预热？** 因为**"端口能收连接" ≠ "流量会打进来"**：
+
+- Spring Boot 在发布 `ApplicationReadyEvent` 的**同时**，把 Readiness 状态改成 `ACCEPTING_TRAFFIC`；
+- K8s 的 readinessProbe、服务注册中心 / 负载均衡看的是这个状态，**在此之前不会把流量导过来**；
+- 所以 `callRunners()` 阶段外部流量**实际上进不来**——这正是预热的窗口。
+
+> **面试怎么答**：先给标准版（"CommandLineRunner 时服务还没接收请求，预热首选"）；被追问再补精确版（"严格讲 `finishRefresh` 阶段端口就开始监听了，但 Readiness 要等 `ApplicationReadyEvent` 才变为 `ACCEPTING_TRAFFIC`，K8s 在此之前不导流，所以 `callRunners` 仍是最佳窗口"）。**能说出后半段的，是读过源码的。**
+
+### 6. 与下一章「自动装配」的关系（两章串起来）
+
+| 章节   | 讲的是什么                 | 在时间轴上的位置                     |
+| ---- | ---------------------- | ---------------------------- |
+| 本章   | **启动流程主线**（一条时间轴）      | 全程 6 步                       |
+| 下一章  | **自动装配**（时间轴上的一个横切机制） | 钉在 `refresh()` 的**第 ⑤ 子步** |
+
+**自动装配为什么在第 ⑤ 子步？**
+
+`@EnableAutoConfiguration` → `@Import(AutoConfigurationImportSelector.class)`；而 `AutoConfigurationImportSelector` 是个 `DeferredImportSelector`，由 `ConfigurationClassPostProcessor`（一个 `BeanFactoryPostProcessor`）处理——**`BeanFactoryPostProcessor` 的语义就是"在所有 Bean 实例化之前，先加工 Bean 的定义"**。
+
+由此得到一条**很有用的推论**：
+
+> **自动装配（第 ⑤ 子步）早于 `@PostConstruct`（第 ⑪ 子步）。**
+> 所以 starter 的 `imports` 文件里登记的 Bean，**在你自己业务 Bean 的 `@PostConstruct` 执行时已经全部注册完了**——starter 的 Bean 可以放心注入。
+
+### 7. 大白话故事版：开饭店
+
+| 步骤                              | 饭店在干嘛                                                     | 对应代码                     |
+| ------------------------------- | --------------------------------------------------------- | ------------------------ |
+| `new SpringApplication()`       | 去菜市场采购，食材工具全买回来放厨房。**没做饭、没开门**                            | 收集扩展类 + 推断应用类型           |
+| ① `prepareEnvironment()`        | 看菜谱，yml / 命令行参数全部读完。**还没做菜**                              | 加载配置                     |
+| ② `createApplicationContext()`  | 租好包间（容器诞生），房间是空的                                          | 创建容器                     |
+| ③ `refresh()`                   | **厨师开始炒菜（造 Bean）**                                        | 核心                       |
+| ↳ 第 ⑤ 子步                        | 先按《人才登记表》把外聘师傅（starter 配置类）请进来                            | 自动装配                     |
+| ↳ 第 ⑪ 子步 `@PostConstruct`       | 第一道菜出锅。**只这一道好了，别的还没下锅，不能开席**                             | 单 Bean 就绪                |
+| ↳ 第 ⑫ 子步                        | 包间门打开（Tomcat 端口监听），但**招牌灯还没开**                            | 端口监听                     |
+| ④ `callRunners()`               | ✅ **全部菜齐了，但招牌灯没开、客人不知道能进**。赶紧把预制菜（DB 数据）摆上前台货架（Redis） | **`CommandLineRunner`（预热首选）** |
+| ⑤ `ApplicationReadyEvent`       | **招牌灯亮，正式营业**。这里才摆货 → 客人已进门、货架是空的 → 冲后厨（DB）            | 服务就绪                     |
+
+> 对照表：**菜 = Bean｜货架 = Redis 缓存｜客人 = 用户请求｜招牌灯 = Readiness 就绪状态**
+
+### 8. 我在项目里怎么用的（真实锚点）
+
+**锚点一：项目里目前没有任何缓存预热**
+
+全仓库搜不到 `@PostConstruct` / `CommandLineRunner` / `ApplicationReadyEvent`——**这是待补的能力**。将来做权限缓存、角色缓存预热时，按本章结论优先选 `CommandLineRunner`。
+
+**锚点二：项目里有一个"启动期就失败"的真实例子**
+
+`SecurityAutoConfiguration.jwtUtil()` 在 `@Bean` 方法里做 fail-fast 校验：
+
+```java
+@Bean
+@ConditionalOnMissingBean(JwtUtil.class)
+public JwtUtil jwtUtil(SecurityProperties properties, Environment environment) {
+    String secret = properties.getJwtSecret();
+    if (secret == null || secret.isBlank()) {
+        throw new IllegalStateException("insight.security.jwt-secret 未配置，拒绝启动。...");
+    }
+    if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+        throw new IllegalStateException("insight.security.jwt-secret 长度不足 32 字节，拒绝启动");
+    }
+    ...
+}
+```
+
+**它钉在时间轴的哪里？** —— **第 3 步 `refresh()` 的 Bean 实例化阶段**（`@Bean` 方法被调用时）。
+
+这解释了为什么它效果这么好：
+
+- 它**早于** Tomcat 端口监听（第 ⑫ 子步）→ 配置有问题，服务**根本开不了门**，绝不会带着弱密钥对外提供服务；
+- 它**晚于** `prepareEnvironment()`（第 1 步）→ 所以方法里能读到 `Environment`（代码里正是用 `environment.getActiveProfiles()` 判断 prod 环境）。
+
+> **这就是"选对钩子"的价值**：校验放对位置，既能拿到该拿的东西，又能赶在开门前把问题拦住。
+
+### 9. 面试极简回答模板（脑子里只存这套）
+
+> Spring Boot 入口是 `SpringApplication.run()`，内部拆成几个大阶段：先准备环境，加载 yml 和命令行参数；再创建 IOC 容器；然后执行 `refresh()` 刷新容器、实例化所有 Bean。**`@PostConstruct` 就在 Bean 实例化阶段执行，但它只代表单个 Bean 完成，别的 Bean 可能还没造好，会空指针，不适合全局缓存预热。**
+> `refresh()` 全部完成后执行 `CommandLineRunner`，**此时所有 Bean 已经就绪，但服务还没对外宣告就绪、流量还没进来**，适合做缓存预热，把数据库数据加载进 Redis。
+> Runner 之后触发 `ApplicationReadyEvent`，代表服务完全就绪；此时再预热，耗时长的话会有请求打穿缓存的风险。
+
+### 10. 必背 2 个反问（高频）
+
+**Q1：为什么不用 `@PostConstruct` 做缓存预热？**
+
+答：它只是**当前 Bean** 初始化完成，`RedisTemplate`、`Mapper` 这些依赖可能还没创建 → 空指针。而且每个 Bean 都会触发一次，语义上也不适合做"全局一次性"的事。
+
+**Q2：`CommandLineRunner` 和 `ApplicationReadyEvent` 选哪个？**
+
+答：优先 `CommandLineRunner`。它执行时所有 Bean 就绪，但 Readiness 状态还没变成 `ACCEPTING_TRAFFIC`，K8s / 注册中心不会导流，预热完流量才进来。`ApplicationReadyEvent` 时服务已宣告就绪，预热耗时长会有请求打穿缓存的风险。
+
+### 11. 可以先不记（避免大脑过载）
+
+❌ 暂时屏蔽：
+
+- `ApplicationContextInitializer`
+- `ApplicationStartingEvent` / `ApplicationEnvironmentPreparedEvent` / `ApplicationPreparedEvent` / `ContextRefreshedEvent`
+- `ConfigFileApplicationListener`
+- `SpringApplicationRunListeners` 的七个回调
+
+> 这些是底层扩展组件，**面试不问"Spring Boot 扩展点"完全不用背**。
+
+✅ 必须记住的只有 6 条：
+
+1. `new SpringApplication()`：备料，不干活（顺带推断应用类型）
+2. `run()` 六步骨架
+3. `refresh()` 内：**第 ⑤ 子步 = 自动装配；第 ⑪ 子步 = `@PostConstruct`；第 ⑫ 子步 = 端口监听**
+4. `callRunners()` = `CommandLineRunner`（**预热首选**）
+5. `ApplicationReadyEvent` = 服务就绪、可接客
+6. 顺序：`@PostConstruct` < `CommandLineRunner` < `ApplicationReadyEvent`
 
 ---
 
 ## Spring Boot 自动装配机制（AutoConfiguration.imports）
 
-- 学于：2026-08-26
+- 学于：2026-08-26（2026-09-03 补：标注它在 `run()` 的哪一步）
 - 关联模块：4 个 starter 的 `config` 包（`WebAutoConfiguration` / `SecurityAutoConfiguration` / `MybatisAutoConfiguration` / `RedisAutoConfiguration`）+ 各 starter 的 `META-INF/spring/...AutoConfiguration.imports` 文件
 - 来源：TD §3.1
 
 > 目标：彻底搞懂「starter 引进来为什么 Bean 就自动生效了」。核心就一个词——**自动装配（Auto-Configuration）**。
+
+**📍 本章在时间轴上的位置**（承上启下，先读上一章「启动流程主线」）：
+
+```
+run() 六步骨架
+  └─ 第 3 步 refresh(context)
+        └─ 第 ⑤ 子步 invokeBeanFactoryPostProcessors()   ← ★ 自动装配就钉在这里
+```
+
+**为什么是这里？** `@EnableAutoConfiguration` → `@Import(AutoConfigurationImportSelector.class)`；而 `AutoConfigurationImportSelector` 是个 `DeferredImportSelector`，由 `ConfigurationClassPostProcessor`（一个 `BeanFactoryPostProcessor`）处理。`BeanFactoryPostProcessor` 的语义就是**"在所有 Bean 实例化之前，先加工 Bean 的定义"**——正合适。
+
+**推论**：自动装配（第 ⑤ 子步）**早于** `@PostConstruct`（第 ⑪ 子步）。所以 starter 的 Bean 在你自己业务 Bean 的 `@PostConstruct` 执行时已全部注册完毕，可以放心注入。
 
 ### 直观类比（先建立直觉）
 
@@ -1829,6 +2727,7 @@ if (sessionService != null && !sessionService.isActive(payload.getUserId(), toke
 - **Q3：为什么登出用黑名单，改密/禁用用删登录态？能统一吗？**
   
   - 答：粒度不同。登出只作废「当前这一次」token，用黑名单按 token 记；改密/禁用要作废「这个用户全部」token，用登录态按 userId 记（删一个 key 全失效）。技术上能统一（都删登录态），但黑名单还能覆盖「token 被泄露、主动作废某个 token」的场景，职责更清晰。
+  - **加分补充（承认局限）**：单槽实现下这个"粒度不同"只是**设计意图**——两者删的是同一个 key，对 access 的拦截效果重合。真正不可替代的是**删 refresh 会话 key**（黑名单只管 access，refresh 从不进黑名单，不删 key 就能用旧 refresh 换全新令牌绕过登出）。详见 Redis 章节「登出为什么同时做三件事」。
 
 - **Q4（深入）：只删登录态缓存，但 JWT 本身没过期，真的能拦住吗？**
   
@@ -1846,10 +2745,10 @@ if (sessionService != null && !sessionService.isActive(payload.getUserId(), toke
    - 现象：改密/禁用后，旧 token 依然能访问（因为 JWT 没过期、过滤器只验签）。
    - 规避：**「删缓存」和「校验时查缓存」必须配套**。修复后本项目过滤器验签后即查登录态缓存（`TokenSessionService.isActive`），该坑已闭合。
 
-2. **坑：登出只加黑名单、忘了删登录态，状态不一致**
+2. **坑（比"状态不一致"严重得多）：登出只加黑名单、忘了删 refresh 会话 key**
    
-   - 现象：黑名单让旧 token 失效了，但登录态缓存残留，后续踢人/判断在线状态时出错。
-   - 规避：登出同时做两件事——加黑名单（废 token）+ 删登录态（清状态）。
+   - 现象：access 被黑名单拦住了，**但 refresh token 从没进过黑名单**。旧 refresh 有 7 天有效期，只要 `ie:auth:refresh:{userId}` 还在，持有者调 `/refresh` 就能换一对全新令牌——**登出形同虚设**。
+   - 规避：登出三件事都做——加黑名单（废 access）+ 删 refresh 会话（断续期）+ 删登录态（清状态）。**删 refresh 会话才是必需项。**
 
 3. **坑：改密/禁用删除缓存时用了错误的 key 粒度**
    
@@ -2445,8 +3344,35 @@ Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默
 - 学于：2026-08-27
 - 关联模块：`UserContextFilter` / `JwtAuthFilter` / `UserContext` / `WebAutoConfiguration`
 - 来源：TD ADR-5
+- 2026-09-03 增强：补「架构现实」+ 无网关/有网关**断点级调用栈** + 剥头与 HMAC 签名
 
 > 目标：搞懂「一个系统里为什么不能有两套身份来源」、请求头身份为什么不可信、以及身份传递的正确边界。
+
+### 第 0 步：先看清架构现实（读链路图前必看）
+
+**查证结果（2026-09-03）——理解本问题的前提：**
+
+| 事实 | 证据 |
+| --- | --- |
+| **网关不存在** | `insight-engine-modules/insight-engine-gateway/` 目录下**只有一个 `pom.xml`，零 Java 代码** |
+| **UMS 直连暴露** | `insight-engine-ums/src/main/resources/application.yml:7` → `server.port: 7101`，浏览器直连 `localhost:7101/doc.html` 即可访问 |
+
+```
+设计文档里画的「将来」（TD ADR-5）：
+  浏览器 → 网关(:8080，验 JWT 后加身份头) → UMS(:7101)
+
+现在的真实情况：
+  浏览器/Postman ──────────直连──────────> UMS(:7101)
+                （中间没有任何东西）
+```
+
+**一句话矛盾**：代码是按「将来有网关」写的，但网关现在不存在，所以本该由网关填的身份头，实际上是**客户端自己填的**。
+
+> **由此得出一条重要区分（面试常考）**：
+> - **网关没落地** = 功能没做完（排期问题）
+> - **服务无条件信任客户端可控的输入** = 已经写出来的代码缺陷（安全问题）
+>
+> 这是**两个独立问题**。你可以「保安还没招到」的同时「先把登记册锁进抽屉」——后者不依赖前者，必须现在就修。
 
 ### 直观类比（先建立直觉）
 
@@ -2488,7 +3414,96 @@ Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默
 
 - `register` 接口目前没读 `UserContext`，所以还没被实际利用，但这是「随时会爆的越权面」——将来任何白名单接口/内部接口读 `UserContext.getUserId()` 立刻中招。
 
-#### 3. 修复方案（二选一）
+#### 3. 完整调用栈（断点级，无网关现状）
+
+请求样例：`GET /auth/me`，带真 JWT，同时被伪造 `X-User-Id: 1`
+
+**路径简写约定**（下文 `文件:行号` 均相对 `insight-engine/`）：
+- `starter-web` = `insight-engine-starter/insight-engine-starter-web/src/main/java/com/insightengine/starter/web/`
+- `starter-security` = `insight-engine-starter/insight-engine-starter-security/src/main/java/com/insightengine/starter/security/`
+- `ums` = `insight-engine-modules/insight-engine-ums/src/main/java/com/insightengine/ums/`
+
+```
+Tomcat 从线程池取出线程 T1 处理本请求
+│
+├─ [1] TraceFilter                    order = -2147483648 (HIGHEST_PRECEDENCE)
+│      starter-web/filter/TraceFilter.java:47
+│      读 X-Trace-Id → MDC.put("traceId")
+│      ⚠️ 这里也读客户端头，但只用于日志、不当身份 → 安全
+│      ↓ filterChain.doFilter()
+│
+├─ [2] UserContextFilter              order = -2147483647 (HIGHEST_PRECEDENCE+1)
+│      starter-web/filter/UserContextFilter.java
+│      ◆ 修复前（漏洞现场）：
+│        :54  getHeader("X-User-Id")      ← 读到伪造的 1
+│        :60  UserContext.set( 1号用户 )   ← 脏数据进盒子
+│      ◆ 修复后（漏洞面闭合）：
+│        整个 Bean 未注册 → 本层不存在，直接跳到 [3]
+│        原因：WebAutoConfiguration.java:62 的条件注解未满足
+│      ↓
+│
+├─ [3] FilterChainProxy（Spring Security 总入口）   order = -100
+│      │  内部是 Spring Security 自己的一串 filter：
+│      │
+│      ├─ ...内置 filter（本项目 STATELESS，基本空转）
+│      │
+│      ├─ [3.1] JwtAuthFilter        ★ 身份真正建立的地方
+│      │     starter-security/filter/JwtAuthFilter.java
+│      │     :75   读 Authorization 头；没有 → 直接 return，不建身份
+│      │     :84   查 Redis 黑名单（已登出的 token 在此被拒）
+│      │     :89   jwtUtil.parseAccessToken(token)
+│      │             └→ starter-security/util/JwtUtil.java:176-181
+│      │                verifyWith(secretKey)  ★验签：没密钥伪造不了★
+│      │     :92   查 Redis 登录态 ie:auth:token:{userId}
+│      │     :123  SecurityContextHolder.setAuthentication(...)
+│      │     :126  UserContext.set( JWT里的真实用户 )  ← 覆盖脏数据
+│      │
+│      ├─ UsernamePasswordAuthenticationFilter（表单登录，本项目用不上）
+│      │
+│      └─ [3.2] AuthorizationFilter   ★ 授权判定在最后
+│            starter-security/config/SecurityAutoConfiguration.java:130-133
+│            "/auth/me" 不在白名单 → 要求 authenticated → 通过
+│            ↓
+│
+├─ [4] DispatcherServlet → Controller
+│      ums/controller/AuthController.java:91
+│      UserContext.getUserId()  ← 拿到真实用户
+│      ↓
+│
+└─ [5] 响应返回，栈逆序退出（finally 生效）
+       JwtAuthFilter.java:107   finally → UserContext.clear()  ★修复后新增
+       TraceFilter.java:62      finally → MDC.remove()
+```
+
+**为什么 `/auth/me` 看不出问题**：`JwtAuthFilter` 后执行，会用 JWT 真值覆盖掉脏数据。**真正的暴露点是白名单接口**：
+
+```
+POST /auth/register（permitAll，不需要任何 token）+ 伪造头 X-User-Id: 1
+
+修复前：
+  TraceFilter
+  → UserContextFilter.java:54   读到 X-User-Id: 1
+  → UserContext.java:27         set( 1号超管 )       ★ 无凭证，服务端信了
+  → Security 链：/auth/register 在白名单 → AuthorizationFilter 直接放行
+  → Controller 执行期间 UserContext.getUserId() == 1    ★★ 暴露点
+  → UserContextFilter.java:45   finally → clear
+
+修复后：
+  TraceFilter
+  → （UserContextFilter 未注册，整层跳过）
+  → Security 链：白名单 → 放行
+  → Controller 执行期间 UserContext.getUserId() == null   ← 干净
+  → 无人 clear（因为无人 set，正确）
+```
+
+**目前还没被真正利用的原因**：读 `UserContext` 的三处消费者都在 `anyRequest().authenticated()` 保护下——
+- `ums/controller/AuthController.java:91`（`/auth/me`）
+- `ums/controller/UserController.java:94`（改密码）
+- `starter-mybatis/config/MybatisMetaObjectHandler.java:62`（自动填充 `create_by`/`update_by`）
+
+而 `register` 虽无保护，但它不读 `UserContext`。**所以不是"安全"，是"恰好没撞上"**——任何一个新的白名单/内部接口只要读一次 `UserContext.getUserId()`，当场越权。
+
+#### 4. 修复方案（二选一）
 
 - **方案 A（UMS 走 JWT，默认关闭网关头）**：给 `UserContextFilter` 加条件装配开关，默认关闭：
   
@@ -2501,6 +3516,120 @@ Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默
 
 - **方案 B（走 TD ADR-5 明文头方案）**：给网关下发的头加 HMAC 签名 `X-User-Sign` 验签，或 IP 网段校验兜底。
 
+#### 5. 有网关后的完整链路（下一章要写的）
+
+```
+浏览器
+  │  Authorization: Bearer <JWT>       ← 用户真凭证
+  │  X-User-Id: 1                      ← 攻击者照样能伪造！
+  ↓
+┌──────── 网关 insight-engine-gateway :8080（下一章要建） ────────┐
+│                                                                │
+│  过滤器1：剥头（Strip）    ★★★★ 最易漏、也最致命 ★★★★           │
+│     删掉客户端传来的所有身份头：                                  │
+│       X-User-Id / X-Tenant-Id / X-Workspace-Id / X-Roles        │
+│     漏了这步后面全白做 —— 伪造头会原样穿透到下游                  │
+│                    ↓                                           │
+│  过滤器2：验 JWT（网关持有同一个 secret）                         │
+│     失败 → 直接 401，根本不转发                                  │
+│                    ↓                                           │
+│  过滤器3：下发明文头（用 JWT 里的真值重写）                        │
+│     X-User-Id: 3 / X-Tenant-Id: 1 / X-Roles: admin              │
+│     （方案 B 进阶）X-User-Sign: HMAC(上面几个头 + 时间戳)          │
+│                    ↓                                           │
+│  过滤器4：路由转发 → http://ums:7101                             │
+└────────────────────────────────────────────────────────────────┘
+  ↓
+┌──────── UMS 服务 :7101 ─────────────────────────────────────────┐
+│  TraceFilter        复用 X-Trace-Id                              │
+│  UserContextFilter  ← 此时开关打开                                │
+│     insight.web.trust-gateway-headers=true                       │
+│     读 X-User-Id → UserContext.set                               │
+│     ★ 此刻凭什么信这个头？两个前提：                               │
+│       前提1（必需）：网关已剥掉客户端传来的同名头                    │
+│       前提2（三选一）：                                            │
+│         ① 网络隔离：7101 不对公网暴露，只有网关可达                 │
+│         ② 验签：校验 X-User-Sign 的 HMAC                         │
+│         ③ 网段：校验来源 IP 属于网关网段                           │
+│  Spring Security 链 → JwtAuthFilter → Controller                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+> **一句话点破**：网关方案里，服务信头的安全性**不是靠"这头是网关写的"这句话保证的**，而是靠「**客户端到不了服务** + **头被剥掉/被签名**」两件事保证。从 UMS 眼里看，**网关写的头和客户端写的头长得一模一样**，它无法区分。
+
+##### 剥头 / 签名——用 HTTP 报文说话
+
+"头"就是 HTTP 请求里的几行纯文本，没有神秘的东西：
+
+```
+GET /auth/me HTTP/1.1
+Host: localhost:7101
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+X-User-Id: 1                    ← 就是这一行字
+X-Roles: super_admin            ← 和这一行字
+```
+
+- **"伪造头"** = 攻击者用 curl 自己敲上 `X-User-Id: 1` 这行字
+- **"剥头"** = 把这行字**删掉**
+- **"签名"** = 额外再加一行校验码，让别人改不动前面几行
+
+**剥头**（网关侧，示意代码，非本项目现有代码）：
+
+```java
+ServerHttpRequest mutated = request.mutate()
+    .headers(h -> {
+        h.remove("X-User-Id");                 // 剥：先删掉客户端传来的
+        h.remove("X-Tenant-Id");
+        h.remove("X-Roles");
+        h.set("X-User-Id", realUserIdFromJwt); // 再用真值重写
+    })
+    .build();
+```
+
+为什么「先删再写」而不是直接覆盖：万一网关 JWT 校验有 bug（异常时仍放行），直接覆盖可能没覆盖成；「先删」保证**最坏情况下头是空的**，下游读到 `null` 顶多"没身份"，不会是"假身份"——**失败时倾向安全（fail-safe）**。
+
+**签名**（HMAC）——网关转发时多两行：
+
+```
+X-User-Sign: 9f3a2bc7d1e...       ← 网关盖的"公章"
+X-User-Ts:   1756872000           ← 盖章时间
+```
+
+```java
+// 网关侧（盖章）
+String data = userId + "|" + tenantId + "|" + roles + "|" + ts;
+String sign = HmacSHA256(sharedSecret, data);   // 密钥只有网关和服务知道
+
+// 服务侧 UserContextFilter（验章）
+String expect = HmacSHA256(sharedSecret, 收到的内容按同样规则拼接);
+if (!expect.equals(收到的 X-User-Sign)) throw ...  // 对不上 = 被篡改
+if (now - 收到的ts > 60_000) throw ...             // 防"录播重放"
+```
+
+为什么攻击者没辙：
+
+| 攻击者想干什么 | 结果 |
+| --- | --- |
+| 把 `X-User-Id` 改成 `1` | 服务重算的校验码 ≠ 原 `X-User-Sign` → **拒绝** |
+| 自己造一个 `X-User-Sign` | 没有 `sharedSecret`，算的对不上 → **拒绝** |
+| 把整个请求录下来以后重发 | 时间戳超 60 秒 → **拒绝**（防重放） |
+
+**两者对照**：
+
+| | 剥头 | 签名 |
+| --- | --- | --- |
+| 大白话 | 撕掉假单子 | 盖上公章 |
+| 防的是 | 假头从客户端**穿透**网关 | 有人**绕过**网关直连服务造假头 |
+| 不做的后果 | 攻击者带 `X-User-Id: 1` 一路穿到服务 | 只要能访问到服务端口，就能随便填身份 |
+| 成本 | 网关几行代码，零运维 | 要管理共享密钥、处理时钟偏差 |
+| **单独够吗** | **不够**（能直连就白搭） | **够**（数学上保证） |
+
+| 配置组合 | 相当于 | 效果 |
+| --- | --- | --- |
+| 只剥头，服务端口仍暴露 | 门口贴"请走前门"，**后门没锁** | 等于没做 |
+| 剥头 + 网络隔离 | 前门有人查，**后门锁死** | 够用，但依赖部署不出错 |
+| 剥头 + HMAC 签名 | 后门锁死，**进来还得对暗号** | 最稳，端口暴露也不怕 |
+
 ### 面试可能追问
 
 - **Q1：为什么不能让业务服务信任请求头里的 X-User-Id？**
@@ -2511,11 +3640,219 @@ Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默
   
   - 答：因为安全依赖「后执行的过滤器一定覆盖先执行的」这个脆弱前提。一旦某个接口不经过后执行的过滤器（如白名单接口），先执行过滤器塞的「不可信身份」就会暴露。
 
+- **Q3：网关还没落地，是"功能没做完"，为什么现在就要修？**
+  
+  - 答：这是两个独立问题。网关没落地是**排期问题**；而"服务无条件信任客户端可控的请求头"是**已经写出来的代码缺陷**。后者不依赖前者——即便网关永远不建，把明文头过滤器默认关闭也是对的。
+  - **加分句**：「功能没做完」和「存在安全缺陷」是两件事，不能互相开脱。
+
+- **Q4：只是关掉一个 Filter，为什么还要改另一个文件？**
+  
+  - 答：因为**清理职责没跟着走**。`UserContext` 是 ThreadLocal，原分工是 `JwtAuthFilter` 只 set、`UserContextFilter` 的 finally 负责 clear。关掉后者 =「贴便签的人还在、撕便签的人没了」→ Tomcat 线程池复用线程时，下一个请求读到上一个用户的身份（串号）。
+  - **铁律**：谁写谁清，且 `clear()` 必须在 `finally`（98-103 行 token 过期/非法会抛异常，写在 try 末尾会被跳过）。
+
+- **Q5：将来"网关解析 JWT 后下发明文身份头"，怎么保证安全？**
+  
+  - 答：两个动作必须做全——① **剥头**：网关先删掉客户端传来的同名身份头，再用 JWT 真值重写（先删再写，保证失败时头是空的而非假的）；② **验证来源**（三选一）：网络隔离（服务端口只有网关可达）/ HMAC 签名头 `X-User-Sign` / 来源 IP 网段校验。
+  - **易漏点**：只剥头但服务端口仍对公网暴露 = 门上贴"请走前门"而后门没锁，等于没做。
+
 ### 踩坑提醒
 
 1. **坑：白名单接口是越权重灾区**
    - 现象：permitAll 接口不校验 token，但全路径过滤器照常解析请求头，伪造头直接生效。
    - 规避：身份只能有一个可信来源；走 JWT 就关闭明文头过滤器（条件装配开关），走网关头就加签名/IP 校验。
+
+2. **坑：只关 Filter 不补清理 → 线程池随机串号**（本次修复真正的隐藏项）
+   - 现象：`UserContextFilter` 默认关闭后，`UserContext`（ThreadLocal）没人清理，下一个复用同一线程的请求读到上一个用户的身份。**比越权更隐蔽——它不看攻击者脸色，随机发作**。
+   - 规避：任何"关掉/替换过滤器"的改动，都要追问一句**它原来顺手干的活谁接**；固定过一遍「谁写、谁清、谁读」。
+
+3. **坑：开关被误开 / 配置漂移 → 漏洞原地复活**
+   - 现象：某天有人为了解决"`UserContext` 是 null"随手在配置中心加了 `insight.web.trust-gateway-headers=true`，越权面悄悄回来且无人记得。
+   - 规避：① 把这个开关纳入生产配置审计清单（正常环境它不该出现）；② `havingValue="true"` 是**精确字符串匹配**，写 `TRUE`、`1`、带空格都**不生效**，调试时别被误导去改代码；③ 只有在"网关已剥头 + 已上验签/网段校验"的前提下才能开。
+
+4. **坑：以为关了 Filter 就"身份统一了"，其实还有两套上下文**
+   - 现象：`JwtAuthFilter` 同时写 `SecurityContextHolder`（:123）和 `UserContext`（:126），有的代码读前者、有的读后者；且 `@Async`/自定义线程池里**两个都读不到**。
+   - 规避：业务层统一从 `UserContext` 取身份；异步任务需要身份就显式传参，不要用 `InheritableThreadLocal` 去"救"（线程池复用场景它无效）。
+
+### 本次落地复盘：为什么选方案 A（2026-09-02，UMS-1）
+
+两个方案不是"谁对谁错"，而是**把「身份可信锚点」放在哪**：
+
+| 方案 | 可信锚点 | 前置条件 | 改动量 | 与现状契合度 |
+| --- | --- | --- | --- | --- |
+| **A（已采用）**：默认关明文头，服务自验 JWT | 每个服务持有的 secret + JWT 签名 | 各服务需持 secret | 1 个装配开关 + 清理职责移交 | ✅ UMS 现状就是自验 JWT |
+| B：信任网关 HMAC 签名头 / IP 网段 | 网关（唯一出口） | gateway 先落地 + 共享 secret/可信网段 | HMAC 校验 + 网段配置，较大 | ⚠️ gateway 未落地，无从验证 |
+
+**具体改动**：
+- `WebAutoConfiguration.userContextFilterRegistration` 加 `@ConditionalOnProperty(name = "insight.web.trust-gateway-headers", havingValue = "true")`——默认不注册 `UserContextFilter`；
+- `JwtAuthFilter` 在 finally 中 `UserContext.clear()`——原来 `UserContext` 的清理靠 `UserContextFilter` 兜底，现在它默认不在，写入方必须自己负责清理（否则线程池串号）；
+- 白名单接口（login/register/refresh）从此**不再有任何过滤器会把伪造明文头塞进 `UserContext`**，越权面闭合。
+
+**留的"后门"**：将来 gateway 落地、真要切 ADR-5 明文头方案时，把开关置 true 即可——方案 A 不是把 B 的路堵死，而是把"默认安全"和"按需演进"都留好了。
+
+### 断点自查清单（自己跑一遍，比读代码印象深十倍）
+
+在 IDE 里给这些位置打断点，启动 UMS，用 Postman 打一次**带伪造头 `X-User-Id: 1`** 的请求：
+
+| # | 断点位置 | 修复后预期 |
+| --- | --- | --- |
+| 1 | `starter-web/config/WebAutoConfiguration.java:63` | **启动时不进** ← "Filter 没注册"的直接证据 |
+| 2 | `starter-web/filter/UserContextFilter.java:54` | **永远不进** ← "漏洞面闭合"的直接证据 |
+| 3 | `starter-web/filter/TraceFilter.java:47` | 会进，读 `X-Trace-Id`（只写日志，不当身份 → 安全） |
+| 4 | `starter-security/filter/JwtAuthFilter.java:75` | 无 `Authorization` 头 → 直接 return，不建身份 |
+| 5 | `starter-security/filter/JwtAuthFilter.java:89` | 有 token 时进来 → 走 `JwtUtil.java:176` 验签 |
+| 6 | `starter-security/filter/JwtAuthFilter.java:126` | 用 JWT 里的身份写 `UserContext` |
+| 7 | `starter-security/filter/JwtAuthFilter.java:107` | **每次请求必进**，finally 清理 |
+| 8 | `starter-security/config/SecurityAutoConfiguration.java:130` | 白名单判定处 |
+| 9 | `ums/controller/AuthController.java:91` | `UserContext.getUserId()` 取值处 |
+
+想看修复前对比：`git stash` → 重启 → 再打一次，会看到**断点 2 被命中、`UserContext` 里坐着 `1`**；看完 `git stash pop` 恢复。
+
+### 状态总览：三种形态对照
+
+| | 修复前（现在） | 修复后（现在） | 将来有网关 |
+| --- | --- | --- | --- |
+| 谁能访问 UMS 7101 | 任何人直连 | 任何人直连 | **只有网关可达** |
+| 身份来源 | 请求头（可伪造）+ JWT **两个** | **只有 JWT 一个** | 请求头（网关写的 + 有保护） |
+| `UserContextFilter` | 注册，无条件信头 | **不注册** | 注册，且配套剥头/验签/网段 |
+| `UserContext` 谁写 | 两个 Filter 都写 | 只有 `JwtAuthFilter` | `UserContextFilter` |
+| `UserContext` 谁清 | `UserContextFilter` | **`JwtAuthFilter` finally** | `UserContextFilter` |
+
+### 下一章（写网关）的前置决策
+
+写 `insight-engine-gateway` 时要先定：**用纯网络隔离，还是 HMAC 签名头？**
+- **网络隔离**：零代码，但依赖部署（UMS 不映射宿主端口，只有 gateway 映射 8080）；
+- **HMAC 签名**：要引入共享 secret + 处理时钟偏差，但摆脱对部署的依赖。
+
+**这决定了 `insight.web.trust-gateway-headers=true` 那天能不能真的打开。**
+
+---
+
+## Refresh Token 安全：为什么必须轮换 + 一次性 jti 机制
+
+- 学于：2026-09-02
+- 关联模块：`JwtUtil`（`createRefreshToken`/`parseRefreshToken`）/ `AuthServiceImpl.refresh`/`logout` / `UserServiceImpl.updateStatus`/`updatePassword` / `AuthConstants.KEY_AUTH_REFRESH`
+- 来源：TD ADR-10、UMS review（UMS-2）
+
+> 目标：搞懂「为什么 access 撤销做得再好、refresh 不处理就白搭」「什么是 refresh 一次性轮换」「jti 重放为什么是泄露信号」「吊销粒度怎么选」。
+
+### 直观类比（先建立直觉）
+
+**access token = 短期门禁卡，refresh token = 办卡授权书**
+
+- 门禁卡（access）2 小时过期、每次进门刷，丢了损失可控——这是我们在前面章节用黑名单/登录态管好的"卡"。
+- 但**授权书（refresh）7 天有效、凭它能无限补办新门禁卡**。如果授权书被偷了，攻击者每天补一张新卡，你之前把旧卡作废得再彻底也没用——**他根本不进门，只补卡**。
+
+> 一句话记忆：**access 撤销管的是"卡"，refresh 撤销管的是"发卡权"。不处理 refresh，登出/改密后攻击者仍能靠泄露的 refresh 无限续期，会话注销形同虚设。**
+
+### 核心原理
+
+#### 1. 为什么 refresh 是薄弱面（修复前的问题）
+
+修复前 `AuthServiceImpl.refresh()` 只做三件事：验签名 → 验类型 → 验过期。只要 refresh token 没过期（7 天内）、签名对，就**无条件签发新 token 对**：
+
+```
+攻击者拿到用户泄露的 refresh token（登出/改密前签发的）
+        ↓
+7 天内随时调 /auth/refresh → 服务端验签通过 → 发新 access + 新 refresh
+        ↓
+登出（只黑名单了旧 access）？改密（只删了 access 登录态）？→ 都拦不住这个 refresh
+        ↓
+攻击者永远有"最新一套 token"，会话注销 = 失效
+```
+
+**本质**：access 侧的撤销机制（黑名单/登录态）都在"校验 access 时"生效，而 refresh 换新完全不经过这些校验——**两条撤销链在 refresh 这里是断开的**。
+
+#### 2. 一次性轮换（rotation）：让 refresh "用一次就作废"
+
+核心思路：**每次 refresh 成功，旧 refresh token 立即作废，只发一个全新的 refresh token**。这样：
+
+- 正常用户：手头永远只有"最新那一个 refresh"，用完旧的换新的，链条不断；
+- 攻击者：如果偷的是**旧** refresh，用它去刷新时服务端一查——"这不是当前有效的那个"，**拒绝 + 报警**。
+
+**为什么能识破旧 token？—— 靠 `jti`（JWT ID）做会话指纹**：
+
+- 签发 refresh 时生成唯一 `jti`，并把它（的摘要）存到 Redis：`ie:auth:refresh:{userId} = sha256(jti)`，TTL=7d；
+- refresh 请求进来：解析出 token 里的 `jti` → 和 Redis 里存的当前 jti 比对：
+  - **一致** → 是当前有效 refresh → 轮换：签发新对（新 jti 覆盖旧的存进 Redis）；
+  - **Redis 里没有 / 不一致** → 这不是当前有效的 refresh → 重放信号。
+
+#### 3. 同 jti 重放 → 吊销全部会话（泄露处置）
+
+**如果发现"旧 jti 再次出现"，说明这个 jti 已经被轮换掉了——它的再次出现只有一种解释：token 泄露了**（正常用户不会用已经换掉的旧 refresh）。此时不是简单拒绝，而是**按泄露处置**：
+
+```java
+if (activeDigest == null || !activeDigest.equals(sha256Hex(jti))) {
+    // 吊销该用户全部会话：删 access 登录态 + refresh 会话 → 全部 token 即刻失效
+    stringRedisTemplate.delete(KEY_AUTH_TOKEN + userId);
+    stringRedisTemplate.delete(KEY_AUTH_REFRESH + userId);
+    throw new BizException(ErrorCode.UNAUTHORIZED, "刷新令牌已失效或检测到重放，已注销全部会话");
+}
+```
+
+> 逻辑：**"旧 token 被重用" = 有人拿到了本不该再有的 token = 假设泄露 = 宁可错杀、全部重登。**
+
+#### 4. 吊销粒度：谁该被连带作废？
+
+| 操作 | 要作废什么 | 粒度 | 实现 |
+| --- | --- | --- | --- |
+| `logout()` | 当前登录这次会话 | 单会话（当前 userId 下最新一轮） | access 加黑名单 + 删 `KEY_AUTH_TOKEN` + 删 `KEY_AUTH_REFRESH` |
+| 改密 `updatePassword()` | 该用户全部会话 | 用户级 | 删 `KEY_AUTH_TOKEN` + `KEY_AUTH_REFRESH` |
+| 禁用 `updateStatus()` | 该用户全部会话 | 用户级 | 删 `KEY_AUTH_TOKEN` + `KEY_AUTH_REFRESH` |
+
+- 三个操作现在都**连 refresh 会话 key 一起删**——改密/禁用/登出后，该用户手头所有 refresh token（含已泄露的）去刷新时，Redis 查无此 key → 直接拒绝，**7 天续期通道关闭**。
+- 兜底注意：**不能**用 access 登录态 key 存在性做 refresh 前置校验——access 登录态 TTL=2h（随 access 过期），而 refresh 有效 7 天；用户超过 2 小时没活动后正常刷新时 access 登录态 key 已自然过期，误用它当"吊销信号"会把正常刷新也拦掉。吊销信号应当是 **refresh 会话 key 本身**（它是 7 天 TTL，只有被主动删才缺失）。
+
+### 我在项目里怎么用的
+
+**改动 1：JwtUtil** —— refresh token 携带 jti，并暴露 refresh TTL：
+
+```java
+public String createRefreshToken(Long userId, String jti) {
+    return Jwts.builder()
+            .id(jti)                                   // jti 写入标准 claim
+            .subject(String.valueOf(userId))
+            .claim(CLAIM_TYPE, TYPE_REFRESH)
+            .expiration(...)                           // refreshTtlMillis（7d）
+            .signWith(secretKey).compact();
+}
+// 解析返回 JwtRefreshPayload(userId, jti)
+```
+
+**改动 2：AuthServiceImpl** —— 登录/刷新成功签发时，生成 jti 并登记会话：
+
+```java
+String refreshJti = UUID.randomUUID().toString().replace("-", "");
+String refreshToken = jwtUtil.createRefreshToken(user.getId(), refreshJti);
+cacheRefreshToken(user.getId(), refreshJti);  // SET ie:auth:refresh:{userId}=sha256(jti), TTL=7d
+```
+
+**改动 3：refresh()** —— 校验 + 轮换 + 重放处置（核心逻辑见上文第 3 节）。
+
+### 面试可能追问
+
+- **Q1：access 和 refresh 的撤销粒度为什么不同？**
+  
+  - 答：access 短命、按次校验，用黑名单按 token 或登录态按用户都行；refresh 是"发卡权"，必须按用户级吊销（删一个 userId 的 refresh 会话 key，该用户全部 refresh 立即失效），不能只按单条 token 记——攻击者可能持有任意一条旧 refresh。
+  
+- **Q2：为什么 refresh 要"一次性轮换"而不是复用同一个 refresh？**
+  
+  - 答：复用同一个 refresh = 泄露后无法区分"合法持有者刷新"和"攻击者刷新"，且一个 token 多处使用本身就是泄露信号。轮换后"旧 token 再出现"就有了明确的语义——重放，可据此吊销全部会话。
+
+- **Q3：怎么识别 refresh token 被重放？**
+  
+  - 答：服务端按 userId 记录"当前有效 jti"。refresh 时比对 token 里的 jti 与 Redis 当前 jti：一致说明是当前有效；不一致（或查无）说明是已被轮换/吊销的旧 token——正常用户不会用旧 token，出现即视为泄露。
+
+### 踩坑提醒
+
+1. **坑：只修 access 撤销，不处理 refresh——登出/改密形同虚设**
+   - 现象：改密/禁用后 access 被拦了，但攻击者拿旧 refresh 调 `/auth/refresh` 又拿到全新 token 对。
+   - 规避：登出/改密/禁用必须**连 refresh 会话 key 一起删**，堵死续期通道。
+2. **坑：refresh 前置校验误用 access 登录态 key**
+   - 现象：access 登录态 TTL=2h（随 access 过期），用户 3 小时没活动后正常刷新被误判"已登出"。
+   - 规避：吊销信号用 refresh 会话 key（TTL=7d，只被主动删）；access 登录态 key 只用于 access 校验。
+3. **坑：存 refresh 会话明文 jti / token**
+   - 现象：Redis 存了完整 refresh token 或可逆标识，拖库即泄露可用凭据。
+   - 规避：只存 jti 的 SHA-256 摘要（`TokenDigestUtil.sha256Hex`），比对用摘要、拖库拿不到明文。
 
 ---
 
@@ -2758,7 +4095,7 @@ try {
 
 | 场景               | 类                                 | ThreadLocal 载体                           | 谁负责 set                                  | 谁负责 remove                                                   |
 | ---------------- | --------------------------------- | ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
-| ① 业务上下文（当前用户）    | `UserContext`                     | `ThreadLocal<LoginUser> HOLDER`          | `UserContextFilter` / `JwtAuthFilter`    | `UserContextFilter` 的 `finally`（`clear()`→`HOLDER.remove()`） |
+| ① 业务上下文（当前用户）    | `UserContext`                     | `ThreadLocal<LoginUser> HOLDER`          | `JwtAuthFilter`（默认）/ `UserContextFilter`（走网关头方案） | 写入方自己 `finally` 清：默认 `JwtAuthFilter`，走网关头方案则 `UserContextFilter` |
 | ② 日志上下文（traceId） | `TraceFilter` + logback           | SLF4J `MDC`（内部即 ThreadLocal）             | `TraceFilter` `MDC.put("traceId", ...)`  | `TraceFilter` 的 `finally`（`MDC.remove("traceId")`）           |
 | ③ 安全上下文（认证身份）    | `JwtAuthFilter` + Spring Security | `SecurityContextHolder`（内部即 ThreadLocal） | `JwtAuthFilter` `setAuthentication(...)` | Spring Security 框架自身在请求链结束时清理                                |
 
@@ -2777,13 +4114,13 @@ public final class UserContext {
 }
 ```
 
-**② `UserContextFilter`（谁负责写 + 谁负责清）：**
+**② 写入/清理方（谁负责写 + 谁负责清）：**
 
 ```java
 @Override
 protected void doFilterInternal(...) {
     try {
-        LoginUser loginUser = parse(request);          // 从网关头解析身份
+        LoginUser loginUser = parse(request);          // 从网关头/JWT 解析身份
         if (loginUser != null) {
             UserContext.set(loginUser);               // ① 写进当前线程的 ThreadLocal
         }
@@ -2794,6 +4131,8 @@ protected void doFilterInternal(...) {
     }
 }
 ```
+
+> **注意（2026-09-02 起）**：这套「写入方在 finally 自清」的模板正是 `JwtAuthFilter` 的写法（它默认是 `UserContext` 的唯一写入方，负责 finally 清理）；`UserContextFilter`（解析明文头那个）默认已不装配，仅「走网关明文头方案」的服务开启——但无论谁写，**铁律不变：写入方自己 finally 清**。
 
 **③ `TraceFilter`（MDC 同源同理）：**
 

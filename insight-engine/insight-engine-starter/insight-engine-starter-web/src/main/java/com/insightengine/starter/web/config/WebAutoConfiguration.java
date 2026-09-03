@@ -4,6 +4,7 @@ import com.insightengine.starter.web.filter.TraceFilter;
 import com.insightengine.starter.web.filter.UserContextFilter;
 import com.insightengine.starter.web.handler.GlobalExceptionHandler;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -50,9 +51,15 @@ public class WebAutoConfiguration {
 
     /**
      * 用户上下文过滤器，紧随 traceId 过滤器之后执行。
+     *
+     * <p>默认**不注册**：身份必须来自「服务自验 JWT」（方案 A，推荐）。只有走
+     * 「网关下发明文头」架构（TD ADR-5）的服务才显式开启
+     * {@code insight.web.trust-gateway-headers=true} 信任网关头，
+     * 避免业务服务无条件信任客户端可伪造的明文身份头造成越权。</p>
      */
     @Bean
     @ConditionalOnMissingBean(UserContextFilter.class)
+    @ConditionalOnProperty(name = "insight.web.trust-gateway-headers", havingValue = "true")
     public FilterRegistrationBean<UserContextFilter> userContextFilterRegistration() {
         FilterRegistrationBean<UserContextFilter> registration = new FilterRegistrationBean<>(new UserContextFilter());
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);

@@ -17,7 +17,7 @@ import java.util.List;
  * <p>基于 JJWT 0.12（TD §2.1）实现 HS256 对称签名。职责：</p>
  * <ul>
  *   <li>{@link #createAccessToken}：签发访问令牌，载荷含用户身份 + 角色 + 权限（TD §7.2）；</li>
- *   <li>{@link #createRefreshToken}：签发刷新令牌，仅含用户 ID 与令牌类型，最小化载荷；</li>
+ *   <li>{@link #createRefreshToken}：签发刷新令牌，含用户 ID + jti + 令牌类型（jti 用于轮换/重放检测）；</li>
  *   <li>{@link #parseAccessToken} / {@link #parseRefreshToken}：解析并校验签名与过期，
  *       类型不符或篡改直接抛 {@link JwtException}，由认证过滤器统一拦截。</li>
  * </ul>
@@ -93,11 +93,16 @@ public class JwtUtil {
     }
 
     /**
-     * 签发刷新令牌（仅含用户 ID + 类型，载荷最小化）。
+     * 签发刷新令牌（仅含用户 ID + jti + 类型，载荷最小化）。
+     *
+     * <p>{@code jti}（JWT ID）用于 refresh 一次性轮换与重放检测：服务端记录当前有效
+     * jti，refresh 时旧 jti 作废并签发新对；旧 jti 再被使用即视为泄露。签发方需生成
+     * 唯一 jti 并负责服务端会话记录（见 {@link JwtRefreshPayload}）。</p>
      */
-    public String createRefreshToken(Long userId) {
+    public String createRefreshToken(Long userId, String jti) {
         Date now = new Date();
         return Jwts.builder()
+                .id(jti)
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_TYPE, TYPE_REFRESH)
                 .issuedAt(now)
@@ -125,16 +130,16 @@ public class JwtUtil {
     }
 
     /**
-     * 解析并校验刷新令牌，返回用户 ID。
+     * 解析并校验刷新令牌，返回用户 ID 与 jti。
      *
      * @throws JwtException 签名非法、令牌过期、或类型不是 refresh 时抛出
      */
-    public Long parseRefreshToken(String token) {
+    public JwtRefreshPayload parseRefreshToken(String token) {
         Claims claims = parse(token);
         if (!TYPE_REFRESH.equals(claims.get(CLAIM_TYPE, String.class))) {
             throw new JwtException("非法的刷新令牌类型");
         }
-        return Long.valueOf(claims.getSubject());
+        return new JwtRefreshPayload(Long.valueOf(claims.getSubject()), claims.getId());
     }
 
     /**
@@ -142,6 +147,13 @@ public class JwtUtil {
      */
     public long getAccessTtlSeconds() {
         return accessTtlMillis / 1000L;
+    }
+
+    /**
+     * 刷新令牌有效期（秒），供 refresh 会话缓存设置 TTL（与 refresh token 同寿）。
+     */
+    public long getRefreshTtlSeconds() {
+        return refreshTtlMillis / 1000L;
     }
 
     /**

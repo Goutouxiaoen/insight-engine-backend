@@ -134,9 +134,10 @@ public class UserServiceImpl implements UserService {
         update.setStatus(request.getStatus());
         userMapper.updateById(update);
 
-        // 禁用时踢下线：删除登录态缓存（TD §6.1 主动失效）
+        // 禁用时踢下线：删除登录态 + refresh 会话（TD §6.1 主动失效，access/refresh 一并作废）
         if (request.getStatus() == AuthConstants.ACCOUNT_DISABLED) {
             stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + id);
+            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_REFRESH + id);
         }
     }
 
@@ -157,8 +158,9 @@ public class UserServiceImpl implements UserService {
         update.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userMapper.updateById(update);
 
-        // 改密后旧登录态全部失效，强制重新登录
+        // 改密后旧登录态全部失效（access 登录态 + refresh 会话一并作废），强制重新登录
         stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + userId);
+        stringRedisTemplate.delete(AuthConstants.KEY_AUTH_REFRESH + userId);
     }
 
     /* ==================== 私有方法 ==================== */
