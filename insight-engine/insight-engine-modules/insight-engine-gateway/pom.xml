@@ -14,9 +14,12 @@
       insight-engine-gateway：API 网关（WebFlux 栈）
       职责（TD §8.3 / PRD §9.2，宿主端口 7000）：
         统一入口、路由转发、JWT/API Key 鉴权、限流、跨域、traceId 透传。
-      说明：网关基于 Spring Cloud Gateway（WebFlux），不能引入 Servlet 栈的 starter-web，
-            其 traceId/鉴权等过滤器将在阶段 4 以 GatewayFilter/GlobalFilter 实现。
-      当前状态：阶段 1 仅建骨架。
+      说明：网关基于 Spring Cloud Gateway（WebFlux），不能引入 Servlet 栈的 starter-web/security，
+            其 traceId/鉴权等以 GatewayFilter/GlobalFilter 形式在本模块实现。
+      认证模型（2026-09-03 定案，见 PROGRESS §三）：网关校验 JWT 后下发明文头
+            （X-User-Id/X-Tenant-Id/X-Workspace-Id/X-Roles），业务服务默认自校验 JWT，
+            需信任网关头时通过 insight.web.trust-gateway-headers=true 开启。
+      路由目标当前直连 localhost:7101（UMS），Nacos 注册中心接入后改 lb://insight-engine-ums。
     -->
     <artifactId>insight-engine-gateway</artifactId>
     <packaging>jar</packaging>
@@ -25,14 +28,49 @@
     <description>智擎 AI API 网关</description>
 
     <dependencies>
+        <!-- 公共基础（错误码/常量；网关不引 starter-web，避免 Servlet 栈） -->
         <dependency>
             <groupId>com.insightengine</groupId>
             <artifactId>insight-engine-common</artifactId>
         </dependency>
-        <!-- Spring Cloud Gateway（响应式网关） -->
+        <!-- Spring Cloud Gateway（响应式网关，含 WebFlux） -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway</artifactId>
         </dependency>
+        <!-- JJWT：网关校验 JWT 签名（仅用 api/impl/jackson，版本由 BOM 统一锁定） -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Lombok（编译期注解处理） -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 打成可执行 jar（spring-boot-maven-plugin） -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.insightengine.gateway.GatewayApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

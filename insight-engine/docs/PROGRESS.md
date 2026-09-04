@@ -14,10 +14,10 @@
 
 | 项     | 值                                  |
 | ----- | ---------------------------------- |
-| 当前阶段  | 阶段 3：UMS 认证服务 —— 功能完成，安全收尾已修复待回归合入 |
-| 当前里程碑 | M3：UMS 认证服务                      |
-| 当前任务  | 回归验证 UMS 安全收尾（UMS-1/UMS-2）并合入 master → 之后启动 gateway 网关 |
-| 整体完成度 | 约 27%（阶段 1+2 完成，UMS 功能完成，安全收尾修复待验证合入，其余模块未开始） |
+| 当前阶段  | 阶段 4：gateway 网关 —— 启动（UMS 阶段已正式收口合入） |
+| 当前里程碑 | M4：gateway 网关                       |
+| 当前任务  | gateway 网关：认证模型定案（ADR-5 裁决）+ 路由 + AuthGlobalFilter + Cors，之后接入 Nacos（TD §8.3 / §六 6.4） |
+| 整体完成度 | 约 30%（阶段 1-3 完成并已全部合入 master；UMS 遗留收尾项已转 §6.1 待办池不阻塞；gateway 阶段启动） |
 
 ---
 
@@ -33,8 +33,8 @@
 | Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                                     | master 主干 + GitHub Flow；PR #1 已合入，远程无远程额外分支                |
 | 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位          | `mvn clean install -DskipTests` 全量编译通过 |
 | 基础设施（docker-compose/init.sql）             | ✅ 完成  | 100% | docker-compose.yml / init.sql / prometheus.yml | 7 中间件实机启动全部 healthy；PG 建表 35 表全注释验证通过  |
-| UMS 认证服务                                  | 🔵 收尾中 | 95%   | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能已实机验证（登录/me/角色/权限树/文档页 200）；红级修复① token 失效、② JWT 密钥 fail-fast 已合入 master；**遗留 2 项安全收尾阻塞见 §五** |
-| gateway 网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
+| UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能实机验证通过；UMS-1（双身份源收敛）+ UMS-2（refresh 轮换撤销）回归验证通过，PR #2 已合入 master，阶段正式收口；遗留 UMS 收尾优化项转 §6.1 待办池（不阻塞） |
+| gateway 网关                                | 🔵 进行中 | 0%   |                                                | 阶段 4 启动：先认证模型定案（ADR-5 裁决），再路由 + AuthGlobalFilter + Cors + Nacos |
 | workspace 工作空间                            | ⚪ 未开始 | 0%   |                                                |                                        |
 | model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | kb 知识库                                    | ⚪ 未开始 | 0%   |                                                |                                        |
@@ -79,6 +79,8 @@
 - [2026-09-02] ✅ 已决策并实施（JWT 密钥加固，红级修复②）：`SecurityProperties.jwtSecret` 删除代码内默认值；`SecurityAutoConfiguration.jwtUtil` Bean 初始化 fail-fast（为空/不足 32 字节拒绝启动；prod profile 下含 `change-me` 拒绝启动）；`application.yml` 密钥改 `${INSIGHT_SECURITY_JWT_SECRET:本地开发默认值}` 环境变量注入。**部署纪律：非本地环境必须注入独立随机密钥并启用 prod profile**
 - [2026-09-02] ✅ 已决策并实施（UMS 收尾 UMS-1 双身份源，方案 A）：`UserContextFilter` 改为条件装配，默认**关闭**（`insight.web.trust-gateway-headers=true` 才注册）；身份只信 `JwtAuthFilter` 解析的 JWT；`UserContext` 的 finally 清理职责移交 `JwtAuthFilter`（原依赖 `UserContextFilter` 兜底）。与 TD ADR-5（网关明文头）的最终裁决保留到 gateway 阶段（见 §六 6.4），届时服务走网关方案则把开关打开即可
 - [2026-09-02] ✅ 已决策并实施（UMS 收尾 UMS-2 refresh 无撤销/无轮换）：refresh token 增加 `jti`；UMS 新增 refresh 会话缓存 `ie:auth:refresh:{userId}`（存 jti 摘要，TTL=7d）；`refresh()` 校验 jti 匹配后**一次性轮换**（旧 jti 作废、签发新对），旧 jti 重放视为泄露 → 吊销该用户全部会话；`logout`/改密/禁用删除 refresh 会话 key（refresh 不再无限续期）。**注意：不能用 access 登录态 key 存在性做 refresh 兜底（其 TTL=2h 会误伤超 2h 未活动的正常刷新）**
+- [2026-09-03] ✅ 已办结（UMS 阶段正式收口）：UMS-1/UMS-2 安全收尾在分支 `feature/ums-security-fix` 实机回归验证通过（UMS-1：关闭 `UserContextFilter` 明文头后登录/me/角色/权限全链路正常；UMS-2：登录→刷新轮换→旧 refresh 重放被拒→登出/改密/禁用后 refresh 均失效），PR #2 已合入 master 且本地与远程同步。UMS 模块看板置 ✅ 100%，遗留收尾优化项（phone 唯一索引/roleId 校验/授权去重等）留在 §6.1 待办池随后续阶段择机处理
+- [2026-09-03] ✅ 已决策：gateway 网关对前端提供的总入口仍走 **ADR-5 网关校验 JWT + 下发明文头** 路径（TD §8.3 既定），但**不强制业务服务信任明文头**——通过开关 `insight.web.trust-gateway-headers` 保持「服务自校验 JWT」与「网关下发头」双轨共存：新服务默认自校验（安全优先），需要降本时开网关头信任。裁决依据见 §六 6.4 首条，联动 UMS-1 方案 A（见 §三 2026-09-02 记录）
 
 ---
 
@@ -101,7 +103,7 @@
 
 > 本节只保留**尚未解决**的必须修项；已办结项已移入 §三（决策/修复留档）/ §四（踩坑）/ §八（对话摘要），不再滞留于此。
 
-> 当前无未解决的必须修项。UMS 收尾 UMS-1/UMS-2 代码已修复（见 §三 决策留档与 §八 摘要），待回归验证并合入 master 后正式关闭（见 §七）。
+> 当前无未解决的必须修项。UMS 收尾 UMS-1/UMS-2 已实机回归验证通过并合入 master（PR #2，见 §三 2026-09-03 留档），正式关闭。UMS 遗留优化项（含高价值收尾 5 项）在 §6.1/§6.2 待办池，不阻塞 gateway 阶段。
 
 ---
 
@@ -109,7 +111,9 @@
 
 > 本节任务**不阻塞当前交付**，按处理阶段归类；完成一条勾一条。
 
-### 6.1 UMS 服务收尾（🟡，随 UMS 阶段完成）
+### 6.1 UMS 服务收尾（🟡，UMS 主线已收口，随后续阶段择机）
+
+> **高价值优先组**（原 §七 Top2，已核对代码均未落地，保持待办）：phone 唯一索引、roleId 前置校验、授权集合去重校验、`DuplicateKey`/`HttpMessageNotReadableException`(1002) 友好映射、`Result` 成功响应 traceId 回填（末项在 §6.2）。建议 gateway 阶段收尾后作为独立任务优先处理。
 
 - [ ] `ie_user.phone` 加部分唯一索引（`init.sql` 补 `uk_user_phone`，`DB.md` 同步）——手机号也是登录账号（IF §3.1），当前无唯一约束存在串号登录歧义
 - [ ] 邮箱大小写归一：注册/创建/登录/唯一性查询统一 `lower(trim)`，防 `A@x.com` 与 `a@x.com` 注册成双账号
@@ -142,8 +146,9 @@
 
 ### 6.4 gateway / Nacos / 部署阶段（🟡）
 
-- [ ] **认证模型定案**：ADR-5（网关校验 JWT 下发明文头）vs 当前「服务自校验 JWT」双轨矛盾，gateway 落地前裁决并与 §五 UMS-1 联动
-- [ ] gateway 网关：路由 + AuthGlobalFilter + Cors（TD §8.3）
+- [x] **认证模型定案**：ADR-5（网关校验 JWT 下发明文头）vs 当前「服务自校验 JWT」双轨矛盾 → 已裁决（2026-09-03）：网关校验 JWT + 下发头，但服务端通过 `insight.web.trust-gateway-headers` 开关决定是否信任，双轨共存、默认自校验，见 §三 2026-09-03 留档
+- [x] gateway 模块骨架 + 路由 + 全局 Cors（2026-09-03 完成，`feature/gateway` 分支）：POM 补 jjwt/可执行插件、`GatewayApplication`、`application.yml`（端口 7000、UMS 路由 `/auth/**`+`/api/v1/**`+文档路径、globalcors），`mvn install` 编译通过
+- [ ] gateway AuthGlobalFilter：JWT 校验 + 明文头注入（防客户端伪造头）+ `sk-` API Key 分流 + 错误转 Result（TD §8.3）
 - [ ] 服务接入 Nacos 注册/配置中心
 - [ ] 中间件与应用密码差异化：`insight123` / `application.yml` 明文密码改 `.env`/secrets + 环境变量占位注入
 - [ ] 引入 Flyway schema 迁移（替代一次性 init.sql）
@@ -172,14 +177,18 @@
 
 ## 七、下一步计划（Top 3）
 
-1. **回归验证并合入 UMS 安全收尾**（分支 `feature/ums-security-fix`）：UMS-1（关闭明文头后 UMS 全链路仍正常）+ UMS-2（登录→刷新轮换→旧 refresh 重放被拒→登出/改密/禁用后 refresh 失效）实机验证后合入 master
-2. 完成 §6.1 高价值收尾项：`phone` 唯一索引、`roleId` 校验、授权集合去重校验、`DuplicateKey`/`1002` 友好映射、`Result` traceId 回填
-3. 实现 gateway 网关（路由 + AuthGlobalFilter + 认证模型定案，联动 UMS-1 开关），并接入 Nacos 注册/配置中心
+1. **实现 gateway 网关**（阶段 4，认证模型已定案见 §三）：gateway 模块骨架 + 路由配置（`/auth/**`、`/api/v1/**` → `lb://insight-engine-ums` 等）→ AuthGlobalFilter（JWT 校验 + `sk-` API Key 分流，写 X-User-Id 等头）→ CorsWebFilter → 冒烟：经网关 7000 登录并访问 UMS 接口
+2. **服务接入 Nacos 注册/配置中心**（gateway 阶段收尾，路由走 `lb://` 需先有注册中心）
+3. 完成 §6.1 高价值 UMS 收尾项（phone 唯一索引、roleId 校验、授权去重、DuplicateKey/1002、Result traceId 回填）——作为独立收尾任务择机处理，不阻塞 gateway
 
 ---
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-03
+- 内容：启动 gateway 阶段（阶段 4，分支 `feature/gateway`）——① 勘察确认 starter-security 为 Servlet 栈（HttpSecurity），gateway（WebFlux）不可引入，网关侧 JWT 校验自建（jjwt + `insight.gateway.jwt-secret`，密钥与 UMS 同源同 env 注入）；② 完成模块骨架：POM 补 jjwt + spring-boot 插件、`GatewayApplication`、`application.yml`（端口 7000、UMS 路由直连 localhost:7101、globalcors 放行）、`mvn install` 编译通过；③ 待办：AuthGlobalFilter（JWT 校验/头注入/API Key 分流）→ Nacos 接入改 `lb://` → 全链路冒烟需先起 PG/Redis/UMS（7101 当前未运行）。
+- 日期：2026-09-03
+- 内容：UMS 阶段正式收口 + 启动 gateway 阶段——① 确认 UMS-1/UMS-2 安全收尾已实机回归验证并合入 master（PR #2，工作区干净与远程同步）；② 核对 §6.1 高价值收尾 5 项代码现状（`uk_user_phone` 唯一索引、`UserServiceImpl.create` 前置 roleId 校验、`RoleServiceImpl` 授权去重/校验、`GlobalExceptionHandler` 补 `DuplicateKeyException`/`HttpMessageNotReadableException`、`Result` 成功响应 traceId 回填）均未落地，继续保留待办池并标注「高价值优先组」；③ PROGRESS 更新：UMS 看板 ✅ 100%、gateway 看板 🔵 启动、§五 阻塞清空、§三 追加 2026-09-03 办结留档与「认证模型定案」决策（ADR-5 网关校验+下发头、服务端开关双轨共存、默认自校验）；④ §七 Top3 重排：1 gateway 网关（骨架/路由/AuthGlobalFilter/Cors）→ 2 Nacos 注册接入 → 3 §6.1 高价值收尾独立任务。
 - 日期：2026-09-02
 - 内容：UMS 安全收尾修复（分支 `feature/ums-security-fix`，UMS-1/UMS-2）——UMS-1 双身份源（方案 A）：`UserContextFilter` 改条件装配默认关闭（`insight.web.trust-gateway-headers=true` 才注册），身份只信 JWT，`UserContext` 清理职责移交 `JwtAuthFilter` finally；UMS-2 refresh 撤销/轮换：refresh token 增 `jti`，新增 refresh 会话 key `ie:auth:refresh:{userId}`（jti 摘要 TTL=7d），`refresh()` 校验匹配后一次性轮换、旧 jti 重放视为泄露吊销全会话，`logout`/改密/禁用连删 refresh 会话 key；新建 `JwtRefreshPayload`、`JwtUtil` 增 `createRefreshToken(userId,jti)`/`getRefreshTtlSeconds()`；编译通过。待回归验证合入 master。
 - 日期：2026-09-02

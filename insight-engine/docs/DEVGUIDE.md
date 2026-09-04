@@ -23,7 +23,7 @@
 - 第九部分：迭代节奏与验收
 - 第十部分：常见坑与排查清单
 - 附录 A：真相源文件清单
-- 附录 B：Prompt 模板库（P1~P16 唯一权威，所有可复制 prompt 集中在这）
+- 附录 B：Prompt 模板库（P1~P17 唯一权威，所有可复制 prompt 集中在这）
 - 附录 C：阶段验收 Checklist
 - 附录 D：实操手册（新开对话 / 提示词 / 具体操作步骤）
 
@@ -33,7 +33,7 @@
 
 > 如果你只想快速知道"下一步具体怎么做"，看这一节就够。详细原理见后面各章节与附录 D。
 >
-> **所有可复制的 prompt 模板集中在「附录 B」（编号 P1~P16）**，正文与附录 D 只引用编号、不再重复粘贴。要复制模板，直接跳到附录 B。
+> **所有可复制的 prompt 模板集中在「附录 B」（编号 P1~P17）**，正文与附录 D 只引用编号、不再重复粘贴。要复制模板，直接跳到附录 B。
 
 ## 现在就能做的 5 件事（按顺序）
 
@@ -738,6 +738,7 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 | P14 | 场景约束：文档更新 | 更新文档护栏 |
 | P15 | 防发散话术（3 句） | AI 开始跑偏时 |
 | P16 | 质量自查清单 | 收尾自查 |
+| P17 | 场景约束：部署/容器命令（对齐 compose） | 生成 docker/compose/服务器命令时 |
 
 ---
 
@@ -961,6 +962,25 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 6. 有无 TODO/占位符/伪代码/空实现？
 ```
 
+## P17 场景约束：部署 / 容器命令（必须对齐 docker-compose.yml）
+
+```
+【约束】本次涉及生成 docker / docker-compose / 服务器部署命令时：
+1. 动手前必须先读项目 docker-compose.yml（d:/CodexProject/insight-engine/docker-compose.yml）
+   与 docs/TD.md §18，以它为唯一基准；禁止凭记忆、禁止自行发明参数。
+2. 无论用 compose 还是裸 docker run，容器的「镜像 tag、容器名、端口映射、命名卷、
+   环境变量、持久化参数」必须与 docker-compose.yml 对应服务逐项一致，不得简化省略。
+3. 重点核对项（最容易漏、漏了必出问题）：
+   - PostgreSQL：必须挂命名卷 pg_data:/var/lib/postgresql/data；init.sql 以 :ro 挂载；
+     端口 5433:5432；账号 insight / 密码 insight123 / 库 insight_engine。
+   - Redis：必须带 --appendonly yes（AOF 持久化）+ 命名卷 redis_data:/data；
+     端口 6380:6379；密码 insight123。
+   - 其他中间件同理：每个都必须挂对应命名卷，禁止无卷裸跑。
+4. 给命令前，先说明一句：「已核对 docker-compose.yml，命令参数与 XX 服务一致」。
+5. 若环境无法用 compose（如远程服务器单独拉起中间件），也必须按 compose 对应服务
+   逐项翻译成 docker run，并保留全部命名卷与持久化参数；如确需偏差，先报告差异点并等我确认，不得擅自降级。
+```
+
 ---
 
 # 附录 C：阶段验收 Checklist
@@ -1109,4 +1129,4 @@ CodeBuddy 里开新对话的方式（二选一）：
 >
 > 总结一句话：**把文件当长期记忆，把对话当短期工作区；一个对话干一件事，干完就落盘、提交、关闭。**
 >
-> 所有可复制 prompt 模板集中在「附录 B」（P1~P16）；当前项目进度见 `PROGRESS.md`。
+> 所有可复制 prompt 模板集中在「附录 B」（P1~P17）；当前项目进度见 `PROGRESS.md`。
