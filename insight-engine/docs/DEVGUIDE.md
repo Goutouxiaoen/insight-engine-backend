@@ -23,7 +23,7 @@
 - 第九部分：迭代节奏与验收
 - 第十部分：常见坑与排查清单
 - 附录 A：真相源文件清单
-- 附录 B：Prompt 模板库（P1~P16 唯一权威，所有可复制 prompt 集中在这）
+- 附录 B：Prompt 模板库（P1~P17 唯一权威，所有可复制 prompt 集中在这）
 - 附录 C：阶段验收 Checklist
 - 附录 D：实操手册（新开对话 / 提示词 / 具体操作步骤）
 
@@ -33,7 +33,9 @@
 
 > 如果你只想快速知道"下一步具体怎么做"，看这一节就够。详细原理见后面各章节与附录 D。
 >
-> **所有可复制的 prompt 模板集中在「附录 B」（编号 P1~P16）**，正文与附录 D 只引用编号、不再重复粘贴。要复制模板，直接跳到附录 B。
+> **所有可复制的 prompt 模板集中在「附录 B」（编号 P1~P17）**，正文与附录 D 只引用编号、不再重复粘贴。要复制模板，直接跳到附录 B。
+>
+> **对后端工程还不熟 / 链路看晕了？先读 `docs/ARCHITECTURE.md`**——它按「总览→局部」逐层画清每个服务职责与"请求从哪到哪"；开发前先看它，能少绕很多弯。
 
 ## 现在就能做的 5 件事（按顺序）
 
@@ -72,7 +74,7 @@
 
 ## 铁律 3：先定"真相源"，再写代码
 
-在动手前，先确定 5 份**真相源文件（Source of Truth）**，它们是你和 AI 之间的"共享大脑"。后面每阶段、每个对话都围绕它们展开。
+在动手前，先确定 7 份**真相源文件（Source of Truth）**，它们是你和 AI 之间的"共享大脑"。后面每阶段、每个对话都围绕它们展开。
 
 真相源文件清单（详见附录 A）：
 
@@ -83,6 +85,8 @@
 | `docs/IF.md` | 接口契约（已产出） | 你 + 工具 |
 | `docs/DEVGUIDE.md` | 本文档（协作方法） | 你 + 工具 |
 | `docs/PROGRESS.md` | **进度与状态追踪（核心！）** | 你 + 工具 |
+| `docs/DB.md` | 数据库怎么建（已产出，与 init.sql 对应） | 你 + 工具 |
+| `docs/FEATURES.md` | 实现了什么/怎么实现（每模块增量沉淀） | 你 + 工具 |
 
 > 其中 `PROGRESS.md` 是最关键的动态文件，后面会详细讲它的结构。
 
@@ -522,15 +526,108 @@ docs/LEARNING.md 结构：
 | L2 逻辑正确性 | 业务逻辑对不对、边界情况 | 每个里程碑 |
 | L3 架构质量 | 是否符合 TD 设计、有无坏味道 | 每个阶段 |
 
+> 三个层次统一受 §7.4 证据纪律约束：L1 也要给出 `[已核实]`；
+> L2 至少完成 §7.4.3 反例推演六问；L3 必须覆盖 starter 装配 / Filter 链 / AOP / 配置 /
+> 表结构与索引等"运行时/数据层"对象，不得只看业务类。
+
 ## 7.2 Review 对话的标准 Prompt
 
 用「P5 Review 对话」（见附录 B），让 AI 以架构师身份按 🔴🟡🟢 分级输出审查结论。
+P5 已内嵌「7.4 Review 通用方法论」：证据纪律（§7.4.2）+ 反例推演六问（§7.4.3）+
+完整性自证（§7.4.4）+ 冒烟联动（§7.4.5）+ 陷阱库扫描（§7.4.6），必须逐条执行。
 
-## 7.3 Review 结果的处理
+## 7.3 Review 结果的处理（含冒烟闭环）
 
-1. 让 AI 把 Review 结论写入 PROGRESS「待解决问题」或「踩坑记录」
-2. 你筛选后，开新的开发对话逐条修复
-3. 修复完再 Review 一次，形成闭环
+1. AI 输出分级结论 + 每条证据等级（`[已核实]/[静态推断]/[待实测]`）+ 「待实测清单」
+2. 你筛选后，先执行「待实测清单」/冒烟基线——**实测未通过项回补为 🔴/🟡**（这就是
+   2026-09-08"静态走查通过、冒烟暴露 500"要防的断点）
+3. 开新的开发对话逐条修复
+4. 修复完再 Review + 冒烟一次，形成闭环
+
+## 7.4 Review 通用方法论（每次 Review 对话必执行）
+
+> 背景：Review 漏检的本质不是"某一类问题没查"，而是**结论缺乏证据纪律**——凭注释打勾、
+> 只走 happy path、把静态推断当成已确认，于是冒烟一跑就现形（2026-09-08 实例：
+> `@PreAuthorize` 的 `AccessDeniedException` 被全局兜底吞成 500，见 7.4.6 实例 1）。
+> 本节把防漏检从"按缺陷打补丁"改为**一套适用于所有维度的证据协议**。
+
+### 7.4.1 三条偷懒症状（Review 全程自我警觉）
+
+1. **凭注释/配置存在就判"已覆盖"**——注释是作者的意图，不是运行时事实。
+2. **只走 happy path**——代码在正例下成立，不等于在非法入参/边界/越权/并发下成立。
+3. **把"静态推断"当成"已确认"**——框架语义（事务、AOP、Filter 顺序、异步、缓存）在运行时
+   才见分晓，静态只能给出"推断"，不能给出"结论"。
+
+### 7.4.2 证据纪律：每条结论必须带证据等级
+
+Review 中**每个判定**都必须标注一种证据等级，无等级 = 未完成审查：
+
+| 等级 | 含义 | 何时使用 |
+|------|------|---------|
+| `[已核实]` | 从源码/配置读通了完整链路（注明文件:行） | 纯静态可闭环的事实（如：Mapper SQL 用 `#{}` 参数化） |
+| `[静态推断]` | 依据框架语义推断，未经运行验证 | 事务边界、Filter 顺序、Advice 优先级、缓存一致性等运行时行为 → **必须落入待实测清单** |
+| `[待实测]` | 静态无法确认，需 curl/单测验证 | 安全语义、并发、异常实际路由等 |
+
+**硬规定**：凡运行时行为，静态只能给 `[静态推断]`，禁止直接判"无问题"；
+拿不出 `[已核实]` 或 `[静态推断]` 的"覆盖断言"，一律输出为 `[待实测]` 项并附验证方法。
+
+### 7.4.3 反例推演六问（对每个接口/核心方法强制推演）
+
+每审查一个行为点（接口、Service 方法、事务块、状态变更），至少走一遍六问，
+"没找到问题"必须由推演结果或实测支撑，不能口头带过：
+
+1. **正常路径**：happy path 是否与 IF/TD 契约一致（code/字段/状态码）？
+2. **非法入参与空值**：`@Valid` 之外是否还有业务层可空/越界漏洞？
+3. **边界值**：分页上限、超长输入、金额/状态枚举越界、时间边界？
+4. **越权与鉴权**：能否访问非本人/非本租户/非本空间数据？低权限能否调用高权限接口？
+   权限校验发生在哪一层（Controller 注解 / Service / 数据过滤）？是否真能生效？
+5. **并发与重复**：check-then-act 竞态？幂等键？先删后插中间态？乐观锁缺失？
+6. **异常与降级路径**：谁捕获这个异常、返回什么码（画路由）？事务是否回滚？
+   远程调用/缓存/MQ 失败时如何降级？
+
+> 六问不限于"异常处理"——它是业务逻辑、安全、性能、并发共用的通用穷尽框架。
+
+### 7.4.4 完整性自证：先声明审查范围，再逐层走查
+
+Review 开始先输出**审查范围声明**，防"漏文件当没看见"：
+
+- 已覆盖：哪些 Controller / Service / Mapper / 配置 / Filter / 依赖被完整读通；
+- 未覆盖：哪些文件/入口本次未审查（显式列出，不得沉默跳过）；
+- 走查方式：**入口（Controller）→ 业务（Service）→ 数据访问（Mapper）→ 事务/异常边界**逐层跟，
+  禁止只看 Controller 或只看单文件就下结论；Controller 之外，starter 装配、Filter 链、
+  AOP 注解、`application.yml`、`init.sql` 索引/约束均属审查对象。
+
+### 7.4.5 冒烟联动：Review 必须产出「待实测清单」并闭环
+
+- Review 结束时把全部 `[静态推断]` 项转成**可执行待实测清单**：每条给「复现动作 + 预期结果」
+  （如：`curl` 低权限 token 调 `PUT /api/v1/user/1/status` → 预期 code=2006 而非 9999）。
+- 安全语义基线（每次模块收尾必测）：无 token → 2001/401；低权限调 `@PreAuthorize` 高权限接口
+  → 2006/403 且**不是 500/9999**；URL 级 403（如有）；错误响应携带 `traceId`。
+- **Review 与冒烟闭环才算数**：实测未通过项 → 回补为 🔴/🟡；Review 对话无法实机时，
+  待实测清单交给下一个「冒烟/修复对话」执行，**禁止把未实测项默认为通过**。
+
+### 7.4.6 陷阱库（实例持续沉淀，Review 前先扫一遍）
+
+> 每踩一个"静态漏检→运行时暴露"的坑，都追加为一条实例。实例 = 「现象 + 根因 + 今后必查动作」，
+> 让 Review 带着历史记忆开工，而不是每次从零猜。
+
+- **实例 1（2026-09-08，UMS）异常双路径：全局兜底截胡 Filter 上的 Handler**
+  - 现象：`@PreAuthorize` 拒绝返回 500/9999 而非 403/2006；`RestAccessDeniedHandler` 从未生效。
+  - 根因：方法级权限异常在 DispatcherServlet 内抛出，被 `@ExceptionHandler(Exception.class)`
+    全局兜底优先捕获；异常冒泡不到 FilterChain 的 `ExceptionTranslationFilter`，挂在 Filter 上的
+    Handler（EntryPoint / AccessDeniedHandler）到不了。
+  - 分界表（先核对再下结论）：
+
+    | 场景 | 抛出位置 | 实际处理者 | 返回 |
+    |------|---------|-----------|------|
+    | 无 token 访问受保护接口 | FilterChain 内（AuthorizationFilter） | ExceptionTranslationFilter → `RestAuthenticationEntryPoint` | 2001 / 401 |
+    | 有 token 但方法级 `@PreAuthorize` 无权限 | DispatcherServlet 内（AOP 方法拦截） | **@ControllerAdvice（最高优先级 + `@ExceptionHandler(AccessDeniedException.class)`，即 `SecurityExceptionHandlerAdvice`）** | 2006 / 403 |
+    | 有 token 但 URL 级授权无权限 | FilterChain 内 | ExceptionTranslationFilter → `RestAccessDeniedHandler` | 2006 / 403 |
+
+  - 今后必查：存在全局兜底时，逐个排查它截胡了哪些"本应归 Filter/其他 Advice"的异常；
+    涉及异常/权限的组件必须完成"唯一捕获者"推演，不满足即 `[待实测]`。
+
+- 实例 2（占位）：_待补充——后续每个"静态漏检→冒烟暴露"的坑在此追加。_
 
 ---
 
@@ -542,7 +639,7 @@ docs/LEARNING.md 结构：
 
 - **前端不写业务逻辑**，只做"界面 + 调用后端接口"
 - 后端接口已由 IF.md 定义清楚，前端严格照接口实现
-- 前端先行？不，**后端先行**，前端在阶段 12 才做
+- 推进策略（2026-09-06 定案）：**契约驱动 + Mock 先行**——前端以 IF.md 为契约、MSW mock 先行开发，后端每就绪一个模块即切真联调（P1/P2 已可直接真联调 UMS）；阶段 12 做全量真联调与部署收尾
 
 ## 8.2 前端开发时你只需把握三件事
 
@@ -556,10 +653,11 @@ docs/LEARNING.md 结构：
 
 ## 8.4 前端工程约定
 
-- 前端代码放 `insight-engine-web/` 下
-- admin 和 chat 两个独立工程
-- API 封装统一放 `src/api/`，按模块分文件，对应 IF.md 章节
-- 类型定义放 `src/types/`，对应后端 DTO
+- 前端为**独立仓库** `D:\JavaProject\insight-engine-web\`（与后端仓库分离，2026-09-06 定案）
+- 定位二分：**控制台**（`insight-engine-admin/`，管理+开发一体，按角色收缩菜单）+ **对话门户**（独立 SPA，后置）
+- 前端侧真相源在该仓库 `docs/`：`FEGUIDE.md`（前端开发指导手册）+ `FE-PROGRESS.md`（前端进度）；**接口契约仍以本仓库 `docs/IF.md` 为唯一事实源**
+- 技术栈：Vue 3.5 + Vite 7 + TS 5.9 + Arco Design + Pinia + Tailwind CSS 4 + Axios + @microsoft/fetch-event-source + MSW 2（详见 FEGUIDE §3.1；TD §2.2 已同步基线）
+- API 封装统一放 `src/api/`，一文件对应 IF.md 一章节；类型定义放 `src/types/`，与后端 DTO 逐字段对齐
 
 ## 8.5 接口联调标准（前后端分离的核心约定）
 
@@ -702,11 +800,16 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 | 文件 | 内容 | 更新时机 |
 |------|------|----------|
 | `docs/PRD.md` | 产品需求 | 需求变更时 |
+| `docs/ARCHITECTURE.md` | **架构总览（从总览到局部，含各服务速查与关键链路图）** | 架构/链路/模块变化时 |
 | `docs/TD.md` | 技术方案 | 技术决策变更时 |
 | `docs/IF.md` | 接口契约 | 接口变更时 |
+| `docs/DB.md` | 数据库设计（与 init.sql 一一对应） | 表结构变更时 |
 | `docs/DEVGUIDE.md` | 本文档（协作方法） | 协作方式调整时 |
 | `docs/PROGRESS.md` | **进度追踪** | **每次对话结束必更新** |
+| `docs/FEATURES.md` | 功能模块实现清单（每模块沉淀实现说明） | 每完成一个功能模块 |
 | `docs/LEARNING.md` | 学习笔记 | 学完一个技术点时 |
+
+> 前端仓库（`D:\JavaProject\insight-engine-web\docs\`）另有前端侧真相源：`FEGUIDE.md`（前端开发指导）与 `FE-PROGRESS.md`（前端进度）；接口契约仍以本仓库 `IF.md` 为准。
 
 ---
 
@@ -738,6 +841,8 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 | P14 | 场景约束：文档更新 | 更新文档护栏 |
 | P15 | 防发散话术（3 句） | AI 开始跑偏时 |
 | P16 | 质量自查清单 | 收尾自查 |
+| P17 | 场景约束：部署/容器命令（对齐 compose） | 生成 docker/compose/服务器命令时 |
+| P18 | 场景约束：网关路由 / 新服务接入（对齐 TD §8.3） | 改 gateway 路由或新服务接入网关时 |
 
 ---
 
@@ -806,20 +911,31 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 
 代码路径：d:/CodexProject/insight-engine/insight-engine-modules/insight-engine-xxx/
 
+【第 0 步（必须）】先阅读 d:/CodexProject/insight-engine/docs/DEVGUIDE.md 的
+「7.4 Review 通用方法论」，作为本次 Review 的强制协议逐条执行：
+① 先输出「审查范围声明」（已读/未读哪些文件，逐层走查：Controller→Service→Mapper→
+事务/异常边界→starter 装配/Filter/AOP/配置/表结构索引）；
+② 扫描 7.4.6 陷阱库，命中即核对；
+③ 每个判定标注证据等级：[已核实]/[静态推断]/[待实测]。
+
 请对照以下文档审查：
 - 技术方案：d:/CodexProject/insight-engine/docs/TD.md
 - 接口设计：d:/CodexProject/insight-engine/docs/IF.md
 
-请重点检查：
+请重点检查（每个接口/核心方法走"反例推演六问"，不限于以下清单）：
 1. 业务逻辑是否正确、完整（对照 PRD/IF）
-2. 异常处理是否遗漏（空值、边界、并发）
+2. 异常处理是否遗漏（空值、边界、并发、异常路由唯一捕获者）
 3. 是否遵循 TD 的设计约定（分层、统一响应、TraceID）
-4. 安全漏洞（SQL注入、越权、敏感信息）
-5. 性能隐患（N+1查询、未分页、事务过长）
+4. 安全漏洞（SQL注入、越权、鉴权实际生效层、敏感信息）
+5. 性能隐患（N+1查询、未分页、事务过长、锁粒度）
+6. 运行时行为推断：事务边界、Filter/Advice 优先级、缓存一致性、异步、并发竞态等
+   凡静态无法闭环的判定只给 [静态推断]，禁止判"无问题"
 
 输出格式：
 - 按严重程度分级：🔴 必须修 / 🟡 建议修 / 🟢 可选优化
-- 每条给出：文件:行号、问题描述、修复建议
+- 每条给出：文件:行号、问题描述、修复建议、证据等级（[已核实]/[静态推断]/[待实测]）
+- 结尾必须输出「待实测清单」：把全部 [静态推断]/[待实测] 项转成可执行验证动作
+  （复现方式 + 预期结果，如 curl 低权限调高权限接口 → 预期 code=2006 而非 9999）
 ```
 
 ## P6 学习对话（一对话只学一个点）
@@ -858,11 +974,13 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 ## P7 前端开发对话
 
 ```
-【前端开发】请为"智擎 AI"开发管理端 XX 页面。
+【前端开发】请为"智擎 AI"控制台开发 XX 页面。
 
-- 技术栈：Vue 3 + Vite + TypeScript + Arco Design + Pinia + Axios
+- 前端工程：D:/JavaProject/insight-engine-web/insight-engine-admin（独立仓库）
+- 技术栈：Vue 3.5 + Vite 7 + TS 5.9 + Arco Design + Pinia + Tailwind CSS + Axios + MSW
+  （以前端仓库 docs/FEGUIDE.md §3.1 为准；页面范式与设计 Token 见 FEGUIDE 第二部分）
 - 接口契约：请读 d:/CodexProject/insight-engine/docs/IF.md 中的 XX 章节
-- 页面要求：请读 d:/CodexProject/insight-engine/docs/PRD.md 第 11 章信息架构
+- 页面与菜单：请读前端仓库 docs/FEGUIDE.md §1.3 菜单树（最终版）
 
 请实现：
 1. XX 页面的完整组件
@@ -925,9 +1043,10 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 
 ```
 【约束】本次只开发前端 XX 页面。
-- 技术栈固定：Vue 3 + Vite + TS + Arco Design + Pinia + Axios。
-- 只动 insight-engine-web/ 下的前端文件，禁止改任何后端 .java 文件。
-- 接口严格按 docs/IF.md 的契约调用，不要臆造接口字段。
+- 技术栈固定：Vue 3.5 + Vite 7 + TS 5.9 + Arco Design + Pinia + Tailwind CSS + Axios + MSW（详见 FEGUIDE §3.1）。
+- 只动前端仓库 D:/JavaProject/insight-engine-web/ 下的文件，禁止改后端仓库任何 .java / 配置 / docs 文件。
+- 接口严格按后端仓库 docs/IF.md 的契约调用，不要臆造接口字段。
+- 页面结构从 FEGUIDE §2.4 四类页面范式选型，禁止自创结构；颜色/间距用 styles/tokens.css 设计 Token。
 - 不要引入我未指定的第三方 UI/动画库。
 - 不要重构已有的页面布局和样式，除非我要求。
 ```
@@ -959,6 +1078,41 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 4. 有无魔法数字/字符串？
 5. 关键逻辑有无"为什么"注释？
 6. 有无 TODO/占位符/伪代码/空实现？
+```
+
+## P17 场景约束：部署 / 容器命令（必须对齐 docker-compose.yml）
+
+```
+【约束】本次涉及生成 docker / docker-compose / 服务器部署命令时：
+1. 动手前必须先读项目 docker-compose.yml（d:/CodexProject/insight-engine/docker-compose.yml）
+   与 docs/TD.md §18，以它为唯一基准；禁止凭记忆、禁止自行发明参数。
+2. 无论用 compose 还是裸 docker run，容器的「镜像 tag、容器名、端口映射、命名卷、
+   环境变量、持久化参数」必须与 docker-compose.yml 对应服务逐项一致，不得简化省略。
+3. 重点核对项（最容易漏、漏了必出问题）：
+   - PostgreSQL：必须挂命名卷 pg_data:/var/lib/postgresql/data；init.sql 以 :ro 挂载；
+     端口 5433:5432；账号 insight / 密码 insight123 / 库 insight_engine。
+   - Redis：必须带 --appendonly yes（AOF 持久化）+ 命名卷 redis_data:/data；
+     端口 6380:6379；密码 insight123。
+   - 其他中间件同理：每个都必须挂对应命名卷，禁止无卷裸跑。
+4. 给命令前，先说明一句：「已核对 docker-compose.yml，命令参数与 XX 服务一致」。
+5. 若环境无法用 compose（如远程服务器单独拉起中间件），也必须按 compose 对应服务
+   逐项翻译成 docker run，并保留全部命名卷与持久化参数；如确需偏差，先报告差异点并等我确认，不得擅自降级。
+```
+
+## P18 场景约束：网关路由 / 新服务接入（防路由抢占）
+
+```
+【约束】本次涉及 gateway 路由表变更或新服务接入网关时：
+1. 动手前必须先读 docs/TD.md §8.3 路由表，以它为唯一基准；
+   禁止凭记忆直接改 gateway 的 application.yml routes。
+2. 每个服务必须使用「服务专属前缀」（如 /api/v1/kb/** → kb 服务），
+   前缀划分与 IF.md 章节一一对应，禁止两个服务的前缀存在交集。
+3. 冒烟期的 /api/v1/** 全量通配仅限单服务阶段；新服务上线前必须先把
+   既有通配路由收窄为服务细分前缀，收窄与新增在同一次提交完成。
+4. 路由变更必须同步核对三处并保持一致：routes 谓词、AuthGlobalFilter
+   白名单、globalcors；同时更新 TD §8.3 路由表，保持文档与实现对齐。
+5. 给出改动前，先声明一句：「已核对 TD §8.3，新路由前缀为 XX，
+   与既有路由无交集」，再展示 diff。
 ```
 
 ---
@@ -1016,17 +1170,21 @@ d:\CodexProject\
     ├── insight-engine-common/
     ├── insight-engine-starter/
     ├── insight-engine-modules/
-    ├── insight-engine-web/      # 前端（阶段 12 开发）
     └── docs\                    # 全部文档
         ├── PRD.md               # 产品需求
+        ├── ARCHITECTURE.md      # 架构总览（从总览到局部，不熟架构先读它）
         ├── TD.md                # 技术方案
         ├── IF.md                # 接口设计
+        ├── DB.md                # 数据库设计（与 init.sql 一一对应）
         ├── DEVGUIDE.md          # 本文档（协作方法）
         ├── PROGRESS.md          # 进度真相源（动态维护）
+        ├── FEATURES.md          # 功能模块实现清单
         └── LEARNING.md          # 学习笔记真相源
 ```
 
 > 注意：文档统一用短文件名 `PRD.md` / `TD.md` / `IF.md`，路径前缀为 `d:/CodexProject/insight-engine/docs/`。
+>
+> 前端不在本仓库：独立仓库 `D:\JavaProject\insight-engine-web\`（控制台工程 `insight-engine-admin/` + 前端文档 `docs/FEGUIDE.md`、`FE-PROGRESS.md`），详见第八部分 8.4。
 
 ## D2. 如何"新开一个对话"（具体步骤）
 
@@ -1109,4 +1267,4 @@ CodeBuddy 里开新对话的方式（二选一）：
 >
 > 总结一句话：**把文件当长期记忆，把对话当短期工作区；一个对话干一件事，干完就落盘、提交、关闭。**
 >
-> 所有可复制 prompt 模板集中在「附录 B」（P1~P16）；当前项目进度见 `PROGRESS.md`。
+> 所有可复制 prompt 模板集中在「附录 B」（P1~P17）；当前项目进度见 `PROGRESS.md`。

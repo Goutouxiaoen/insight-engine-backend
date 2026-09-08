@@ -1,0 +1,35 @@
+# =============================================================================
+# Gateway 网关配置
+# 端口 7000（PRD §9.2）。响应式网关（Spring Cloud Gateway），统一入口。
+# 认证模型（2026-09-03 定案）：网关校验 JWT/API Key 后下发明文头，业务服务默认自校验。
+# 路由目标当前为 UMS 直连（localhost:7101），Nacos 接入后改 lb://insight-engine-ums。
+# =============================================================================
+server:
+  port: 7000
+
+spring:
+  application:
+    name: insight-engine-gateway
+  cloud:
+    gateway:
+      # 路由表（TD §8.3）：UMS 认证/文档路径统一转发
+      routes:
+        - id: insight-engine-ums
+          uri: http://localhost:7101
+          predicates:
+            - Path=/auth/**,/api/v1/**,/doc.html,/webjars/**,/v3/api-docs/**,/swagger-resources/**,/favicon.ico
+      # 全局跨域（TD §8.3：MVP 放开，生产收敛为白名单）
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            allow-credentials: true
+
+# 网关自身 JWT 校验配置（insight.gateway.*），密钥与 UMS 同源（同一 HS256 密钥），
+# 生产通过环境变量 INSIGHT_SECURITY_JWT_SECRET 注入；本地默认值与 UMS 保持一致。
+insight:
+  gateway:
+    jwt-secret: ${INSIGHT_SECURITY_JWT_SECRET:insight-engine-local-dev-secret-change-me-in-prod-2026-09}

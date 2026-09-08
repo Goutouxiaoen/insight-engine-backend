@@ -71,6 +71,13 @@
                 <configuration>
                     <mainClass>com.insightengine.ums.UmsApplication</mainClass>
                 </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

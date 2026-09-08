@@ -10,6 +10,12 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * starter-web 自动配置类。
@@ -74,5 +80,27 @@ public class WebAutoConfiguration {
     @ConditionalOnMissingBean(GlobalExceptionHandler.class)
     public GlobalExceptionHandler globalExceptionHandler() {
         return new GlobalExceptionHandler();
+    }
+
+    /**
+     * JSON 响应统一带 {@code charset=UTF-8}。
+     *
+     * <p>背景（2026-09-08 冒烟发现）：PowerShell 5.1 等老 HTTP 客户端对不带 charset 的
+     * {@code application/json} 响应按 ISO-8859-1 解码，导致 UTF-8 中文乱码；服务端字节本身
+     * 正确（实测为合法 UTF-8）。给 Jackson 转换器显式设置 UTF-8 默认编码后，响应头携带
+     * {@code charset=UTF-8}，老客户端即可正确解码；对遵循 RFC 8259 的现代客户端无副作用。</p>
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "jsonUtf8CharsetConfigurer")
+    public WebMvcConfigurer jsonUtf8CharsetConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+                converters.stream()
+                        .filter(MappingJackson2HttpMessageConverter.class::isInstance)
+                        .map(MappingJackson2HttpMessageConverter.class::cast)
+                        .forEach(converter -> converter.setDefaultCharset(StandardCharsets.UTF_8));
+            }
+        };
     }
 }
