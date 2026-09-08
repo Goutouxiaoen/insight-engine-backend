@@ -372,10 +372,10 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant FE as 前端页面（浏览器）
-    participant GW as Gateway :7000<br/>AuthGlobalFilter
-    participant UM as UMS :7101<br/>AuthController → AuthServiceImpl
-    participant RD as Redis :6380
-    participant PG as PostgreSQL :5433
+    participant GW as "Gateway 7000 · AuthGlobalFilter"
+    participant UM as "UMS 7101 · AuthController → AuthServiceImpl"
+    participant RD as "Redis 6380"
+    participant PG as "PostgreSQL 5433"
 
     FE->>GW: POST /auth/login {account, password}
     GW->>GW: ① 命中白名单 → 清身份头 → 放行（不查 JWT）
@@ -386,7 +386,7 @@ sequenceDiagram
     UM->>RD: ④ 密码错误≥5 次 → 写锁定标记（30min）
     UM->>UM: ⑤ 生成 access JWT（2h）+ refresh JWT（7d）
     UM->>RD: ⑥ 会话记录写入 Redis（session）
-    UM-->>GW: Result<LoginResponse>{token, refreshToken, user}
+    UM-->>GW: Result(LoginResponse) {token, refreshToken, user}
     GW-->>FE: HTTP 200 + JSON
 ```
 
@@ -400,19 +400,19 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant FE as 前端页面（已登录）
-    participant GW as Gateway :7000
-    participant UM as UMS :7101
-    participant RD as Redis :6380
+    participant GW as "Gateway 7000"
+    participant UM as "UMS 7101"
+    participant RD as "Redis 6380"
 
-    FE->>GW: GET /auth/me<br/>Authorization: Bearer &lt;JWT&gt;
+    FE->>GW: GET /auth/me （Authorization: Bearer <JWT>）
     GW->>GW: ① 非白名单 → 取 token → 解析 JWT（签名/过期）
     GW->>GW: ② 清除客户端伪造的 X-User-Id 等头（防伪造）
-    GW->>GW: ③ 按 JWT 载荷重建身份头<br/>X-User-Id / X-Tenant-Id / X-Workspace-Id / X-Roles
+    GW->>GW: ③ 按 JWT 载荷重建身份头 X-User-Id/X-Tenant-Id/X-Workspace-Id/X-Roles
     GW->>UM: 转发（带原 Authorization + 新身份头）
     UM->>UM: ④ starter-security JwtAuthFilter 自校验 JWT → 填充 UserContext
     UM->>UM: ⑤ AuthController.me() 从 UserContext.getUserId() 取 ID（不信任客户端）
     UM->>PG: ⑥ 查用户信息 + 角色
-    UM-->>GW: Result<UserInfoVO>
+    UM-->>GW: Result(UserInfoVO)
     GW-->>FE: HTTP 200 + JSON
 ```
 
