@@ -1,6 +1,6 @@
 # =============================================================================
 # UMS 服务配置
-# 端口 7101（PRD §9.2）；数据源/Redis 走本机 docker-compose 中间件的宿主映射端口
+# 端口 7101（PRD §9.2）；数据源/Redis 走云服务器中间件（39.106.110.214）的宿主映射端口
 # （PG 5433 / Redis 6380，见 TD §18.2.3）。JWT 密钥仅开发默认，生产务必覆盖。
 # =============================================================================
 server:
@@ -10,7 +10,7 @@ spring:
   application:
     name: insight-engine-ums
   datasource:
-    url: jdbc:postgresql://localhost:5433/insight_engine
+    url: jdbc:postgresql://39.106.110.214:5433/insight_engine
     username: insight
     password: insight123
     driver-class-name: org.postgresql.Driver
@@ -20,7 +20,7 @@ spring:
       connection-timeout: 30000
   data:
     redis:
-      host: localhost
+      host: 39.106.110.214
       port: 6380
       password: insight123
       database: 0

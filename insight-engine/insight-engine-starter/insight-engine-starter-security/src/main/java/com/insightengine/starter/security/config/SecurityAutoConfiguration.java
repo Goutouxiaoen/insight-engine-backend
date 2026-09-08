@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insightengine.starter.security.blacklist.TokenBlacklistService;
 import com.insightengine.starter.security.filter.JwtAuthFilter;
 import com.insightengine.starter.security.handler.RestAccessDeniedHandler;
+import com.insightengine.starter.security.handler.SecurityExceptionHandlerAdvice;
 import com.insightengine.starter.security.handler.RestAuthenticationEntryPoint;
 import com.insightengine.starter.security.session.TokenSessionService;
 import com.insightengine.starter.security.util.JwtUtil;
@@ -105,6 +106,16 @@ public class SecurityAutoConfiguration {
     @ConditionalOnMissingBean(RestAccessDeniedHandler.class)
     public RestAccessDeniedHandler restAccessDeniedHandler(ObjectMapper objectMapper) {
         return new RestAccessDeniedHandler(objectMapper);
+    }
+
+    /**
+     * 方法级权限异常（@PreAuthorize → AccessDeniedException）的 ControllerAdvice 层处理，
+     * 补齐 RestAccessDeniedHandler 覆盖不到的场景，统一返回 403 / code=2006。
+     */
+    @Bean
+    @ConditionalOnMissingBean(SecurityExceptionHandlerAdvice.class)
+    public SecurityExceptionHandlerAdvice securityExceptionHandlerAdvice() {
+        return new SecurityExceptionHandlerAdvice();
     }
 
     /**
