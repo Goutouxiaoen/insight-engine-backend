@@ -34,6 +34,8 @@
 > 如果你只想快速知道"下一步具体怎么做"，看这一节就够。详细原理见后面各章节与附录 D。
 >
 > **所有可复制的 prompt 模板集中在「附录 B」（编号 P1~P17）**，正文与附录 D 只引用编号、不再重复粘贴。要复制模板，直接跳到附录 B。
+>
+> **对后端工程还不熟 / 链路看晕了？先读 `docs/ARCHITECTURE.md`**——它按「总览→局部」逐层画清每个服务职责与"请求从哪到哪"；开发前先看它，能少绕很多弯。
 
 ## 现在就能做的 5 件事（按顺序）
 
@@ -72,7 +74,7 @@
 
 ## 铁律 3：先定"真相源"，再写代码
 
-在动手前，先确定 5 份**真相源文件（Source of Truth）**，它们是你和 AI 之间的"共享大脑"。后面每阶段、每个对话都围绕它们展开。
+在动手前，先确定 7 份**真相源文件（Source of Truth）**，它们是你和 AI 之间的"共享大脑"。后面每阶段、每个对话都围绕它们展开。
 
 真相源文件清单（详见附录 A）：
 
@@ -83,6 +85,8 @@
 | `docs/IF.md` | 接口契约（已产出） | 你 + 工具 |
 | `docs/DEVGUIDE.md` | 本文档（协作方法） | 你 + 工具 |
 | `docs/PROGRESS.md` | **进度与状态追踪（核心！）** | 你 + 工具 |
+| `docs/DB.md` | 数据库怎么建（已产出，与 init.sql 对应） | 你 + 工具 |
+| `docs/FEATURES.md` | 实现了什么/怎么实现（每模块增量沉淀） | 你 + 工具 |
 
 > 其中 `PROGRESS.md` 是最关键的动态文件，后面会详细讲它的结构。
 
@@ -542,7 +546,7 @@ docs/LEARNING.md 结构：
 
 - **前端不写业务逻辑**，只做"界面 + 调用后端接口"
 - 后端接口已由 IF.md 定义清楚，前端严格照接口实现
-- 前端先行？不，**后端先行**，前端在阶段 12 才做
+- 推进策略（2026-09-06 定案）：**契约驱动 + Mock 先行**——前端以 IF.md 为契约、MSW mock 先行开发，后端每就绪一个模块即切真联调（P1/P2 已可直接真联调 UMS）；阶段 12 做全量真联调与部署收尾
 
 ## 8.2 前端开发时你只需把握三件事
 
@@ -556,10 +560,11 @@ docs/LEARNING.md 结构：
 
 ## 8.4 前端工程约定
 
-- 前端代码放 `insight-engine-web/` 下
-- admin 和 chat 两个独立工程
-- API 封装统一放 `src/api/`，按模块分文件，对应 IF.md 章节
-- 类型定义放 `src/types/`，对应后端 DTO
+- 前端为**独立仓库** `D:\JavaProject\insight-engine-web\`（与后端仓库分离，2026-09-06 定案）
+- 定位二分：**控制台**（`insight-engine-admin/`，管理+开发一体，按角色收缩菜单）+ **对话门户**（独立 SPA，后置）
+- 前端侧真相源在该仓库 `docs/`：`FEGUIDE.md`（前端开发指导手册）+ `FE-PROGRESS.md`（前端进度）；**接口契约仍以本仓库 `docs/IF.md` 为唯一事实源**
+- 技术栈：Vue 3.5 + Vite 7 + TS 5.9 + Arco Design + Pinia + Tailwind CSS 4 + Axios + @microsoft/fetch-event-source + MSW 2（详见 FEGUIDE §3.1；TD §2.2 已同步基线）
+- API 封装统一放 `src/api/`，一文件对应 IF.md 一章节；类型定义放 `src/types/`，与后端 DTO 逐字段对齐
 
 ## 8.5 接口联调标准（前后端分离的核心约定）
 
@@ -702,11 +707,16 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 | 文件 | 内容 | 更新时机 |
 |------|------|----------|
 | `docs/PRD.md` | 产品需求 | 需求变更时 |
+| `docs/ARCHITECTURE.md` | **架构总览（从总览到局部，含各服务速查与关键链路图）** | 架构/链路/模块变化时 |
 | `docs/TD.md` | 技术方案 | 技术决策变更时 |
 | `docs/IF.md` | 接口契约 | 接口变更时 |
+| `docs/DB.md` | 数据库设计（与 init.sql 一一对应） | 表结构变更时 |
 | `docs/DEVGUIDE.md` | 本文档（协作方法） | 协作方式调整时 |
 | `docs/PROGRESS.md` | **进度追踪** | **每次对话结束必更新** |
+| `docs/FEATURES.md` | 功能模块实现清单（每模块沉淀实现说明） | 每完成一个功能模块 |
 | `docs/LEARNING.md` | 学习笔记 | 学完一个技术点时 |
+
+> 前端仓库（`D:\JavaProject\insight-engine-web\docs\`）另有前端侧真相源：`FEGUIDE.md`（前端开发指导）与 `FE-PROGRESS.md`（前端进度）；接口契约仍以本仓库 `IF.md` 为准。
 
 ---
 
@@ -739,6 +749,7 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 | P15 | 防发散话术（3 句） | AI 开始跑偏时 |
 | P16 | 质量自查清单 | 收尾自查 |
 | P17 | 场景约束：部署/容器命令（对齐 compose） | 生成 docker/compose/服务器命令时 |
+| P18 | 场景约束：网关路由 / 新服务接入（对齐 TD §8.3） | 改 gateway 路由或新服务接入网关时 |
 
 ---
 
@@ -859,11 +870,13 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 ## P7 前端开发对话
 
 ```
-【前端开发】请为"智擎 AI"开发管理端 XX 页面。
+【前端开发】请为"智擎 AI"控制台开发 XX 页面。
 
-- 技术栈：Vue 3 + Vite + TypeScript + Arco Design + Pinia + Axios
+- 前端工程：D:/JavaProject/insight-engine-web/insight-engine-admin（独立仓库）
+- 技术栈：Vue 3.5 + Vite 7 + TS 5.9 + Arco Design + Pinia + Tailwind CSS + Axios + MSW
+  （以前端仓库 docs/FEGUIDE.md §3.1 为准；页面范式与设计 Token 见 FEGUIDE 第二部分）
 - 接口契约：请读 d:/CodexProject/insight-engine/docs/IF.md 中的 XX 章节
-- 页面要求：请读 d:/CodexProject/insight-engine/docs/PRD.md 第 11 章信息架构
+- 页面与菜单：请读前端仓库 docs/FEGUIDE.md §1.3 菜单树（最终版）
 
 请实现：
 1. XX 页面的完整组件
@@ -926,9 +939,10 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 
 ```
 【约束】本次只开发前端 XX 页面。
-- 技术栈固定：Vue 3 + Vite + TS + Arco Design + Pinia + Axios。
-- 只动 insight-engine-web/ 下的前端文件，禁止改任何后端 .java 文件。
-- 接口严格按 docs/IF.md 的契约调用，不要臆造接口字段。
+- 技术栈固定：Vue 3.5 + Vite 7 + TS 5.9 + Arco Design + Pinia + Tailwind CSS + Axios + MSW（详见 FEGUIDE §3.1）。
+- 只动前端仓库 D:/JavaProject/insight-engine-web/ 下的文件，禁止改后端仓库任何 .java / 配置 / docs 文件。
+- 接口严格按后端仓库 docs/IF.md 的契约调用，不要臆造接口字段。
+- 页面结构从 FEGUIDE §2.4 四类页面范式选型，禁止自创结构；颜色/间距用 styles/tokens.css 设计 Token。
 - 不要引入我未指定的第三方 UI/动画库。
 - 不要重构已有的页面布局和样式，除非我要求。
 ```
@@ -979,6 +993,22 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 4. 给命令前，先说明一句：「已核对 docker-compose.yml，命令参数与 XX 服务一致」。
 5. 若环境无法用 compose（如远程服务器单独拉起中间件），也必须按 compose 对应服务
    逐项翻译成 docker run，并保留全部命名卷与持久化参数；如确需偏差，先报告差异点并等我确认，不得擅自降级。
+```
+
+## P18 场景约束：网关路由 / 新服务接入（防路由抢占）
+
+```
+【约束】本次涉及 gateway 路由表变更或新服务接入网关时：
+1. 动手前必须先读 docs/TD.md §8.3 路由表，以它为唯一基准；
+   禁止凭记忆直接改 gateway 的 application.yml routes。
+2. 每个服务必须使用「服务专属前缀」（如 /api/v1/kb/** → kb 服务），
+   前缀划分与 IF.md 章节一一对应，禁止两个服务的前缀存在交集。
+3. 冒烟期的 /api/v1/** 全量通配仅限单服务阶段；新服务上线前必须先把
+   既有通配路由收窄为服务细分前缀，收窄与新增在同一次提交完成。
+4. 路由变更必须同步核对三处并保持一致：routes 谓词、AuthGlobalFilter
+   白名单、globalcors；同时更新 TD §8.3 路由表，保持文档与实现对齐。
+5. 给出改动前，先声明一句：「已核对 TD §8.3，新路由前缀为 XX，
+   与既有路由无交集」，再展示 diff。
 ```
 
 ---
@@ -1036,17 +1066,21 @@ d:\CodexProject\
     ├── insight-engine-common/
     ├── insight-engine-starter/
     ├── insight-engine-modules/
-    ├── insight-engine-web/      # 前端（阶段 12 开发）
     └── docs\                    # 全部文档
         ├── PRD.md               # 产品需求
+        ├── ARCHITECTURE.md      # 架构总览（从总览到局部，不熟架构先读它）
         ├── TD.md                # 技术方案
         ├── IF.md                # 接口设计
+        ├── DB.md                # 数据库设计（与 init.sql 一一对应）
         ├── DEVGUIDE.md          # 本文档（协作方法）
         ├── PROGRESS.md          # 进度真相源（动态维护）
+        ├── FEATURES.md          # 功能模块实现清单
         └── LEARNING.md          # 学习笔记真相源
 ```
 
 > 注意：文档统一用短文件名 `PRD.md` / `TD.md` / `IF.md`，路径前缀为 `d:/CodexProject/insight-engine/docs/`。
+>
+> 前端不在本仓库：独立仓库 `D:\JavaProject\insight-engine-web\`（控制台工程 `insight-engine-admin/` + 前端文档 `docs/FEGUIDE.md`、`FE-PROGRESS.md`），详见第八部分 8.4。
 
 ## D2. 如何"新开一个对话"（具体步骤）
 
