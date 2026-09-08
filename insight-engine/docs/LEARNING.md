@@ -33,6 +33,7 @@
 - [x] MDC 日志上下文 + TraceFilter：%X{traceId} 全链路日志串联（2026-09-02）
 - [x] ThreadLocal 线程隔离与 remove 防串号（UserContext / MDC / SecurityContextHolder 共同底层）（2026-09-02）
 - [x] Git 实操全流程：本地仓库推到 GitHub（首次对接：remote/push/代理443/PR/main默认分支/同步清理）（2026-09-02）
+- [x] Git 常用命令速查：日常高频命令按场景查（状态/提交/分支/同步/stash/撤销与修正/代理/标准流水）（2026-09-08）
 - [x] Docker 运维命令地图：容器生命周期命令（pull/run/ps/logs/exec/stop/start/rm）+ Linux 配套语法（重定向/管道/heredoc/systemctl）+ compose 命令对照 + `run` 参数↔compose 字段映射（2026-09-08，含实战复盘：`docker run` 漏挂数据卷导致数据零持久化）
 
 **待学习**：
@@ -1395,6 +1396,119 @@ git push origin --delete feature/ums-auth   # 远程删
 - **Q3：ping 通 github.com 但 push 报 443 超时，说明什么？**
   
   - 答：DNS 解析正常（ping 通），但 HTTPS（443 端口）的 TCP 连接被网络阻断——典型于大陆网络访问 GitHub。解决：让 git 走本机代理（`git config http.proxy`），或改用 SSH 协议（22 端口）推送。
+
+---
+
+## Git 常用命令速查（按场景，实战向）
+
+- 学于：2026-09-08（承接《Git 三世界模型与分支策略》《Git 实操全流程复盘》的命令级补充）
+- 关联模块：版本管理日常操作
+- 来源：2026-09-02 首次对接复盘 + 2026-09-08 批量提交/master 合入复盘
+
+> 目标：不背手册，**按"我此刻想干嘛"查一行**。前两篇讲模型和流程，这篇补全"每个动作具体敲什么"。
+
+### 五条铁律（前两篇的浓缩，先背这五条）
+
+1. **`git commit` 只改本地**——提交一百次也不影响远程；
+2. **push 永远是「本地同名分支 → 远程同名分支」**：`git push origin feature/xxx` 只是给远程新增同名分支，跟 master 没有从属关系，更不是"推到主干"；
+3. **master 只接受 PR，不直接 push**（GitHub Flow 铁律，2026-09-08 实操违规教训）；
+4. **push 前先 pull**：`git pull origin master` 把最新主干合进功能分支，冲突在本地提前解；
+5. **凡改历史的命令先停一下**：`reset --hard` / `commit --amend` / force push 没想清楚别敲。
+
+### ① 看状态 / 查历史
+
+| 命令 | 作用 | 备注 |
+|---|---|---|
+| `git status --short` | 一屏看工作区 | `M` 改了未暂存、`A` 新文件已暂存、`??` 未跟踪 |
+| `git log --oneline -5` | 最近 5 条提交（一行一条） | 加 `--graph` 看分叉；`--all` 看全部分支 |
+| `git show <commit>` | 某次提交改了什么 | PR 合并前核对内容 |
+| `git diff` | 未暂存改动 | 已暂存看 `git diff --staged` |
+| `git blame <file>` | 逐行是谁改的 | 追溯问题来源 |
+
+### ② 提交（小步、频繁、一句 message）
+
+```bash
+git add <file>          # 精确暂存（推荐）；确认无误也可 git add .
+git status --short      # 提交前瞄一眼，别把 target/ 等带进去（靠 .gitignore 挡）
+git commit -m "fix(ums): 一句话描述"
+```
+
+> 坑（2026-09-02 实录）：**message 只写一句话，别粘贴外部预览文字**，否则 commit 备注变成一长串废字（内容无害、纯粹难看）。
+
+### ③ 分支（GitHub Flow 下 feature 短命）
+
+| 命令 | 作用 |
+|---|---|
+| `git branch -a` | 全部分支（本地 + 远程） |
+| `git checkout <b>` | 切分支 |
+| `git checkout -b <b>` | 新建并切过去 |
+| `git merge <b>` | 把 b 合入**当前**分支（例：把主干合进功能分支提前解冲突） |
+| `git branch -d <b>` | 删本地分支（`-d` 带"已合并"保护；强删 `-D`，慎用） |
+| `git push origin --delete <b>` | 删远程分支 |
+
+### ④ 远程同步（pull / push / fetch）
+
+```bash
+git pull origin master          # ① 更新本地主干（= fetch + merge）
+git checkout feature/xxx        # ② 回功能分支
+git merge master                # ③ 把主干合进功能分支（提前解冲突）
+git push origin feature/xxx     # ④ 推远程（首次加 -u 设跟踪；之后裸 git push 即可）
+```
+
+- **push = 只推当前分支**，不会顺带推别的分支；
+- **pull = fetch（刷新远程快照 origin/xxx）+ merge（合进当前分支）**；
+- **fetch = 只刷新"便签"`origin/xxx`**，不动工作区与当前分支。
+
+### ⑤ 暂存未提交改动（stash）——切分支被挡时的解药
+
+场景：改到一半要切分支，报 `Your local changes would be overwritten`。
+
+```bash
+git stash push -m "本次说明"    # 暂存走
+git stash list                  # 查看
+git checkout <目标分支>         # 切走
+# ……办完事回来
+git checkout <原分支>
+git stash pop                   # 恢复并删记录；想留记录用 apply，弃用 drop
+```
+
+### ⑥ 撤销与修正（三个工具别用混）
+
+| 场景 | 命令 | 安全度 |
+|---|---|---|
+| 改坏了、还没 `add` | `git restore <file>` | 安全 |
+| `add` 错了想退暂存 | `git restore --staged <file>` | 安全 |
+| 上一条 commit 写错了（仅限本地未 push） | `git commit --amend` | 中 |
+| 本地想整体回退 | `git reset --hard <commit>` | **低：丢改动** |
+| 已 push 的提交要撤销 | `git revert <commit>` | 高：生成反向新提交 |
+| 把别的分支的单个提交拿过来 | `git cherry-pick <commit>` | 中：常用于补交 |
+
+> 判定口诀：**没出本地**随便改；**已 push 到远程**就只用 `revert`，别用 reset / amend 改写已公开历史（2026-09-08 教训：改历史类命令用前先想清楚）。
+
+### ⑦ 网络被墙（本项目实录，2026-09-02/08）
+
+```bash
+git config --global http.proxy http://127.0.0.1:7890   # 让 git 走代理
+git config --global --get http.proxy                    # 查当前配置
+git config --global --unset http.proxy                  # 取消（如代理已关、走直连）
+```
+
+诊断顺序：`ping github.com`（DNS 通不通）→ `Test-NetConnection github.com -Port 443`（端口通不通）→ `netstat -ano | findstr "7890 1080"`（本机代理有没有在监听）。**ping 通但 443 超时 = 被墙**，配代理或改用 SSH（22 端口）。
+
+### ⑧ 本项目一天的标准流水（模板）
+
+```bash
+# —— 开工：先对齐主干 ——
+git checkout master && git pull origin master
+git checkout feature/xxx && git merge master
+
+# —— 收工：提交 → 推送 → PR → 拉回（四步）——
+git add . && git commit -m "feat(ums): 本次工作一句话"
+git pull origin master              # 先拉后推，减少冲突
+git push origin feature/xxx         # 推到远程功能分支
+# 浏览器：仓库页 Compare & pull request → base=master ← compare=feature/xxx → Merge
+git checkout master && git pull origin master   # 本地主干同步
+```
 
 ---
 
