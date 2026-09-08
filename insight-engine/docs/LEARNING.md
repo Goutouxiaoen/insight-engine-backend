@@ -33,6 +33,7 @@
 - [x] MDC 日志上下文 + TraceFilter：%X{traceId} 全链路日志串联（2026-09-02）
 - [x] ThreadLocal 线程隔离与 remove 防串号（UserContext / MDC / SecurityContextHolder 共同底层）（2026-09-02）
 - [x] Git 实操全流程：本地仓库推到 GitHub（首次对接：remote/push/代理443/PR/main默认分支/同步清理）（2026-09-02）
+- [x] Docker 运维命令地图：容器生命周期命令（pull/run/ps/logs/exec/stop/start/rm）+ Linux 配套语法（重定向/管道/heredoc/systemctl）+ compose 命令对照 + `run` 参数↔compose 字段映射（2026-09-08，含实战复盘：`docker run` 漏挂数据卷导致数据零持久化）
 
 **待学习**：
 
@@ -51,7 +52,9 @@
 - [ ] Redis 底层编码（SDS / listpack / hashtable / skiplist）
 - [ ] Sentinel 限流熔断
 - [ ] Micrometer + Prometheus 可观测
-- [ ] Docker / Docker Compose 部署
+- [ ] Dockerfile 编写与镜像分层 / 构建优化（命令与编排已学，见「Docker 网络模型与端口映射」「Docker 运维命令地图」）
+- [ ] 镜像加速器（registry mirror）原理 vs 私有仓库的区别
+- [ ] 默认 bridge vs 自定义 bridge 网络（为什么默认不支持容器名 DNS）
 - [ ] Vue 3 + Vite + TypeScript（初步了解）
 
 ---
@@ -4479,6 +4482,182 @@ try {
    
    - 现象：长运行应用内存缓慢增长，heap dump 发现大量 ThreadLocalMap value 悬空（key 弱引用已被回收，value 还被线程强引用）。
    - 规避：线程池/长生命周期线程里用 ThreadLocal 必须配对 remove；配合「请求级 finally 清理」从根上消除。
+
+---
+
+## Docker 运维命令地图：容器生命周期命令 + Linux 配套 + compose 对照
+
+- 学于：2026-09-08
+- 关联模块：基础设施运维（云服务器上拉起 PostgreSQL / Redis 等中间件）
+- 来源：实际运维脚本（配置镜像加速器 + `docker run` 拉起 PG/Redis）+ 项目 `docker-compose.yml`
+
+> 目标：把零散的 Docker / Linux 命令，按「一条容器从生到死」串成一张地图，并打通三个对应关系：**`docker run` 参数 ↔ compose 字段**、**单容器命令 ↔ compose 命令**、**命令 ↔ 配套 Linux 语法**。
+
+### 直观类比（一条容器的生命周期）
+
+| 阶段 | 命令 | 类比 |
+| --- | --- | --- |
+| `pull` | 拉镜像 | 采购模具 |
+| `run` | 新建并启动 | 用模具造出活的 |
+| `ps` | 查看 | 点名（有几个活的） |
+| `logs` | 看输出 | 听它说话 |
+| `exec` | 进容器执行 | 进屋检查 |
+| `stop` / `start` | 停 / 启 | 让它睡 / 叫醒 |
+| `rm` | 删除 | 销毁（可写层随之消失） |
+
+> 一句话记忆：**pull 搬模具 → run 造活的 → ps 点名 → logs 听话 → exec 进屋 → stop/start 睡醒 → rm 销毁。**
+
+### 核心原理
+
+**① 生命周期命令总表**
+
+| 阶段 | 命令 | 说明 |
+| --- | --- | --- |
+| 拉镜像 | `docker pull 镜像:tag` | 只下载，不创建容器 |
+| 启动 | `docker run [参数] 镜像 [命令]` | **新建**容器并启动（最核心） |
+| 查看 | `docker ps` / `docker ps -a` | `-a` = all，含已停止的 |
+| 日志 | `docker logs [-f] [--tail N] 容器` | 看主进程 stdout/stderr |
+| 进入 | `docker exec [-it] 容器 命令` | 在**运行中**容器里执行 |
+| 停止/启动 | `docker stop` / `docker start` | stop 发 SIGTERM 优雅停（10s 后 SIGKILL） |
+| 重启 | `docker restart 容器` | = stop + start |
+| 删除 | `docker rm [-f] 容器` | `-f` 强制删运行中的 |
+| 镜像 | `docker images` / `docker rmi` | 看 / 删模具 |
+
+**② `docker run` 参数 ↔ compose 字段对照（重点）**
+
+| `run` 参数 | 作用 | compose 字段 |
+| --- | --- | --- |
+| `-d` | 后台运行（detach） | compose 默认后台，无需写 |
+| `--name 名字` | 指定容器名 | `container_name:` |
+| `-p 宿主:容器` | 端口映射 | `ports:` |
+| `-e K=V` | 环境变量（可多个） | `environment:` |
+| `-v 源:目标[:ro]` | 挂载卷/目录 | `volumes:` |
+| `--restart 策略` | 重启策略 | `restart:` |
+| `--network 网络` | 指定网络 | `networks:` |
+| `-it` | 交互式终端（配 `exec`） | — |
+| `--rm` | 停止后自动删除（临时容器用） | — |
+
+> ⚠️ **参数顺序铁律**：`docker run [选项] 镜像 [命令]` —— **选项必须在镜像名之前；镜像名之后的内容是要执行的命令，会覆盖镜像默认 CMD**。顺序写错报 `unknown flag`。
+
+**③ CMD 覆盖**：镜像名后面跟命令 = 覆盖默认 CMD。例：`redis:7-alpine redis-server --requirepass insight123` 把"无密码启动"改成"带密码启动"；等价于 compose 里的 `command: [...]`。
+
+### 我在项目里怎么用的（逐条拆运维脚本）
+
+**`mkdir -p /etc/docker`** —— `-p` 两个作用：父目录不存在一起建；**已存在也不报错**（不加则报 `File exists` 中断脚本）。脚本里一律加，保证幂等。
+
+**`cat > /etc/docker/daemon.json <<'EOF' ... EOF`** —— heredoc 写法。`cat > 文件` 覆盖写；`<<'EOF'` 把直到 `EOF` 的内容作为输入。**单引号 `'EOF'` 必须加**：加了内容原样写入（`$`、反引号不展开），不加会做变量替换。写 JSON 常用 `$`，故必须加引号。换写法：`vim` 手写 / `echo` 单行 / `tee`。
+
+**`systemctl daemon-reload && systemctl restart docker`** —— `systemctl` 管 systemd 服务；`&&` 前成功才执行后一个。⚠️ **重启 Docker 会让所有容器停止**，靠 `restart` 策略恢复。
+
+**`docker rm -f insight-pg insight-redis 2>/dev/null; true`** —— 四段：
+
+| 片段 | 含义 |
+| --- | --- |
+| `docker rm` | 删容器（可跟多个名） |
+| `-f` | force，强制删**运行中**的（不加会报 `cannot remove a running container`） |
+| `2>/dev/null` | stderr 丢黑洞，容器不存在时的报错被吞 |
+| `; true` | 分号 = 不管成败都继续；`true` 永远返回 0 |
+
+> 为什么写 `; true`：脚本常有 `set -e`（遇错即停），这行若因"容器不存在"返回非 0 会中断脚本。换写法：`\|\| true` 同理。
+> ⚠️ **`rm -f` 不删数据卷**——命名卷要 `docker volume rm`，匿名卷用 `rm -v`。
+
+**`docker run` 那两条** —— `\` 是续行符（**反斜杠后不能有任何字符包括空格**）；`-v 源:目标:ro` 的 `:ro` = 只读；镜像名放最后。
+
+**验收四条**：
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"   # 只显示运行中的；-a 含已停止
+docker logs insight-pg 2>&1 | grep -m1 "database system is ready" # 2>&1 合并 stderr，否则可能漏；-m1 找到第一条就停
+docker exec insight-pg psql -U insight -d insight_engine -c "select ..."  # 非交互，无需 -it
+docker exec -it insight-redis sh                                 # 交互式进容器需 -it（alpine 无 bash，用 sh）
+```
+
+**兜底 `docker pull 前缀... && docker tag 源 目标`** —— `docker tag` = **起别名**，**不复制数据**，只给同一镜像 ID 多加一个引用（类似硬链接，瞬间完成不占空间）。目的：让本地存在标准名，后续 `docker run` 一行不用改。
+
+**`curl -I --connect-timeout 5 https://www.baidu.com`** —— `-I` 只取响应头（HEAD），`--connect-timeout 5` 连接超时 5 秒；用来测服务器外网连通性。
+
+**配套 Linux 语法**
+
+| 写法 | 含义 |
+| --- | --- |
+| `>` / `>>` | 覆盖 / 追加重定向 |
+| `2>/dev/null` | stderr 丢黑洞 |
+| `2>&1` | stderr 合并进 stdout |
+| `\|` | 管道：前一个 stdout → 后一个 stdin |
+| `;` / `&&` / `\|\|` | 顺序执行（不管成败）/ 前成功才执行 / 前失败才执行 |
+| `; true` | 强制本行成功，防 `set -e` 中断 |
+| `$?` | 上条命令返回码，**0 = 成功** |
+| `grep -m1` / `-i` | 最多取 1 条 / 忽略大小写 |
+| `systemctl start\|stop\|restart\|status\|enable` | 服务管理（enable = 开机自启） |
+
+**compose 命令对照（日常用 compose 时的等价写法）**
+
+| 目的 | 单容器 | compose |
+| --- | --- | --- |
+| 启动 | `docker run ...` | `docker compose up -d` |
+| 查看 | `docker ps` | `docker compose ps` |
+| 日志 | `docker logs 容器 -f` | `docker compose logs -f [服务名]` |
+| 进入 | `docker exec -it 容器 sh` | `docker compose exec 服务名 sh` |
+| 停止/启动/重启 | `docker stop\|start\|restart` | `docker compose stop\|start\|restart` |
+| 删除 | `docker rm -f 容器` | `docker compose down`（`-v` 连卷删 ⚠️） |
+| 重建 | 手动 rm + run | `docker compose up -d`（只重建变化的） |
+
+> 三个差异：① `docker` 用**容器名**，`compose` 用**服务名**；② **`up -d` 幂等**，改了配置一律用 `up -d` 而非 `restart`；③ `down` ≠ `down -v`（后者连卷删除）。
+
+### ⚠️ 实战复盘：那套 `docker run` 脚本缺了数据卷
+
+审查运维脚本时发现，两条 `docker run` **都没挂数据卷**，与项目 `docker-compose.yml` 不一致：
+
+| 项 | 项目 compose 做法 | 该脚本 | 后果 |
+| --- | --- | --- | --- |
+| PG 数据 | `pg_data:/var/lib/postgresql/data` | ❌ 没挂 | **删容器 = 数据库全没** |
+| Redis 持久化 | `--appendonly yes` + `redis_data:/data` | ❌ 都没有 | 重启即丢数据 |
+
+**问题被验收掩盖**：`init.sql` 有种子数据 `INSERT INTO ie_user`，每次删容器重建 → 卷是空的 → init.sql 重跑 → 又插回 1 条 → 验收 `count(*)=1` 照样通过。**验收通过 ≠ 没问题**：任何业务数据，一次 `docker rm -f` 就全没了且无法找回。
+
+正确写法应补：`-v pg_data:/var/lib/postgresql/data`（PG）、`-v redis_data:/data` + `--appendonly yes`（Redis）。
+
+> 另有一处不一致：脚本用 `--restart always`，项目 compose 用 `unless-stopped`。区别：`always` 在你手动 stop 后、重启 Docker 守护进程会**强行拉起**；`unless-stopped` 尊重手动停止。应与 compose 保持一致。
+
+### 面试可能追问
+
+- **Q1：`docker run`、`docker start`、`docker exec` 有什么区别？**
+  
+  - 答：**完全不同层级**。`run` = **新建**容器并启动（每次都产生新容器）；`start` = 启动**已存在**的停止容器（不新建）；`exec` = 在**运行中**的容器里执行一条命令（不启动、不新建容器）。
+
+- **Q2：`docker rm -f` 会删掉数据卷吗？**
+  
+  - 答：不会。容器删了，**命名数据卷仍在**（`docker volume ls` 还看得到）。删命名卷要 `docker volume rm`，匿名卷用 `docker rm -v`。所谓"删容器丢数据"，指的是**没挂卷、写在容器可写层里的数据**。
+
+- **Q3：容器起不来（`docker ps` 里看不到），怎么排查？**
+  
+  - 答：三步——① `docker ps -a` 看状态（如 `Exited (1)`）；② `docker logs 容器` 看报错原文；③ 常见原因：端口被占（`port is already allocated`）、环境变量缺失、挂载路径错、依赖服务没起来。
+
+- **Q4：`docker logs` 和 `docker exec` 都能"看东西"，区别是什么？**
+  
+  - 答：`logs` 看**主进程 stdout/stderr 的历史输出**（被动记录，不进容器）；`exec` 是**在容器里新起一个进程**（主动操作）。**容器已崩溃退出时 `exec` 用不了（容器没在跑），但 `logs` 仍能看到死前输出——排查崩溃首选 `logs`**。
+
+- **Q5：容器已 exited 但想进去看现场，怎么办？**
+  
+  - 答：`exec` 要求容器在运行。可 ① `docker commit 容器 快照镜像` 再从快照 `run -it` 进去；② 或 `docker cp 容器:路径 本地路径` 把文件拷出来看。
+
+### 踩坑提醒
+
+1. **坑：忘加 `-d`，终端被前台占死**
+   
+   - 现象：命令不返回，日志刷屏；Ctrl+C 后容器也跟着停了。
+   - 规避：起服务一律 `docker run -d`；已前台跑了就另开终端操作。
+
+2. **坑：`docker exec` 忘加 `-it`，进不去交互 shell**
+   
+   - 现象：`docker exec 容器 bash` 一执行就退出或卡住无响应。
+   - 原因：`-i` 保持 stdin 打开、`-t` 分配伪终端，**交互式两个都要**。
+   - 规避：进容器一律 `docker exec -it 容器 sh`（alpine 镜像没有 `bash`，用 `sh`）。
+
+3. **坑：`docker rm -f` 误删没挂卷的有数据容器**
+   
+   - 现象：容器删了，数据库/业务数据全没，**任何命令都找不回**。
+   - 规避：删前先确认数据是否落卷——`docker inspect 容器 --format '{{json .Mounts}}'`；没挂卷又想保留，先 `docker cp` 出来或 `docker commit` 成镜像。
 
 ---
 

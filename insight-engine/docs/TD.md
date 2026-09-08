@@ -84,17 +84,24 @@
 
 ### 2.2 前端
 
+> **基线升级（2026-09-06 定案、2026-09-08 同步入 TD）**：前端为独立仓库 `D:\JavaProject\insight-engine-web\`，技术栈唯一事实源为该仓库 `docs/FEGUIDE.md §3.1`，本表仅同步其基线快照；脚手架以包管理器实际最新稳定版为准，**大版本不得降级**。
+
 | 组件 | 版本 | 说明 |
 |------|------|------|
-| Vue | 3.4.x | |
-| Vite | 5.x | |
-| TypeScript | 5.4.x | |
-| Arco Design Vue | 2.x | UI 组件库 |
-| Pinia | 2.x | 状态 |
-| Vue Router | 4.x | 路由 |
-| Axios | 1.x | 请求 |
-| Markdown-it | 14.x | 消息渲染 |
-| ECharts | 5.x | 监控图表 |
+| Vue | 3.5.x | |
+| Vite | 7.x | |
+| TypeScript | 5.9.x（strict） | |
+| Arco Design Vue | 2.x | UI 组件库（苹果风靠 Token 层落地） |
+| Tailwind CSS | 4.x（关闭 preflight） | utility 层 + `@theme` 桥接设计 Token |
+| Pinia | 3.x | 状态 |
+| Vue Router | 4.x（history 模式） | 路由 |
+| Axios | 1.x | 请求层（唯一契约落地点） |
+| @microsoft/fetch-event-source | 2.x | SSE 流式（POST + 自定义头，EventSource 不满足） |
+| @vueuse/core | 13.x | 组合式工具（状态轮询/暗色预留等） |
+| markdown-it + DOMPurify | 14.x / 3.x | 消息渲染 + XSS 消毒（§16.3） |
+| ECharts | 5.x（按需引入） | 监控图表 |
+| MSW | 2.x（dev-only） | Mock 先行，联调切换零改码 |
+| 工程链 | pnpm / ESLint 9(flat) / Prettier / vue-tsc / Vitest | typecheck 不过 = 不合入 |
 
 ### 2.3 大模型
 
@@ -398,6 +405,8 @@ CREATE UNIQUE INDEX uk_ws_code_org ON ie_workspace(org_id, code) WHERE deleted =
 |-----|------|-----|------|
 | `ie:auth:token:{userId}` | string | 2h | 登录态（值为 token 摘要） |
 | `ie:auth:blacklist:{tokenHash}` | string | token 剩余有效期 | 登出黑名单 |
+| `ie:auth:lock:{account}` | string | 30min | 登录失败锁定（5 次/30 分钟，PRD §12.1.5）；已上线（UMS）。注：计数维度当前为输入账号字符串，收敛到用户维度见 PROGRESS §6.1 |
+| `ie:auth:refresh:{userId}` | string | 7d | refresh 会话（值为 jti 摘要）；已上线（UMS-2）：一次性轮换，旧 jti 重放视为泄露 → 吊销该用户全部会话 |
 | `ie:user:info:{userId}` | hash | 30min | 用户缓存 |
 | `ie:role:permissions:{roleId}` | set | 10min | 角色权限 |
 | `ie:ws:member:{workspaceId}` | set | 10min | 空间成员 userId |
@@ -561,6 +570,8 @@ spring:
           predicates: [Path=/api/v1/model/**]
         ...
 ```
+
+> **实现现状与路由收窄纪律（2026-09-08 决策，见 PROGRESS §三）**：冒烟期实际实现为单条路由 `/auth/**,/api/v1/**`（含文档路径）全量直连 UMS（`http://localhost:7101`，Nacos 接入后改 `lb://insight-engine-ums`）。该全量通配**仅限单服务冒烟期**：后续服务（workspace/kb/model…）接入时，必须先把 `/api/v1/**` 收窄为按服务细分前缀（与本表一致，且与 IF.md 章节划分一一对应），收窄与新增路由在**同一次提交**完成，禁止新服务寄生在全量通配下造成路由抢占。路由变更受 DEVGUIDE 附录 B P18 约束。
 
 全局过滤器链顺序：
 
