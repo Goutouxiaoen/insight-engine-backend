@@ -43,3 +43,9 @@ out/
 
 # IDE 本地数据
 .codebuddy/
+
+# 临时远程脚本（含明文凭据，勿提交）
+.ssh_run.py
+.remote_cmd.sh
+.remote_*.py
+.remote_*.sh

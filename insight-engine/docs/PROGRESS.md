@@ -20,10 +20,10 @@
 
 | 项     | 值                                  |
 | ----- | ---------------------------------- |
-| 当前阶段  | 阶段 4：gateway 网关 —— 2026-09-09 复跑全链路冒烟 9/9 通过（含 `X-Trace-Id` 单值修复与 2007 过期 token），工作区待提交；待云凭据收敛（§五 红级）后 PR 合入 master 收口 |
+| 当前阶段  | 阶段 4：gateway 网关 —— **PR #5（`f84ffd2`）已合入 master**（路由按 §8.3 收窄 + TraceGlobalFilter + charset + JWT 常量下沉，复跑冒烟 9/9）；遗留 🔴 云凭据明文已进 master 历史（§五，闸门已失守，待口令轮换止血） |
 | 当前里程碑 | M4：gateway 网关                       |
-| 当前任务  | gateway 收口推进（2026-09-09）：路由按 TD §8.3 收窄 + TraceGlobalFilter(-200，响应头 `beforeCommit` 覆盖修重复) + 错误响应 charset + JWT Claim 常量下沉 common 已落地并复跑冒烟通过（工作区待提交）→ 待云凭据收敛（§五 红级）→ PR 合入 master → 接入 Nacos 改 `lb://`（§六 6.4 / §七 Top1/2） |
-| 整体完成度 | 约 40%（阶段 1-3 完成并已全部合入 master；gateway 复跑冒烟 9/9，路由收窄 + TraceFilter/charset/JWT 常量已落地（工作区待提交）；init.sql 角色 seed 授权补齐；环境/基础设施仍卡云上 Nacos 与凭据收敛（§五 红级）；UMS 收尾项在 §6.1 待办池） |
+| 当前任务  | gateway 阶段收口完成（PR #5 已合 master）→ 下一步：云上补 Nacos 容器 + 路由改 `lb://insight-engine-ums`（§六 6.4 / §七 Top2）；并行推进 §五 口令轮换（学习开发期暂缓） |
+| 整体完成度 | 约 40%（阶段 1-4 已完成并全部合入 master；gateway 路由收窄 + TraceFilter/charset/JWT 常量已合入，冒烟 9/9；init.sql 角色 seed 授权补齐；⬜ 待办：云上 Nacos/RabbitMQ/MinIO 迁云 + §五 口令轮换；UMS 收尾项在 §6.1 待办池） |
 
 ---
 
@@ -40,7 +40,7 @@
 | 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位          | `mvn clean install -DskipTests` 全量编译通过 |
 | 基础设施（docker-compose/init.sql）             | 🔵 进行中 | 90%  | docker-compose.yml / init.sql / prometheus.yml | compose/init.sql 定义完成；✅ 云服务器（39.106.110.214）PG/Redis 已按 compose 逐项对齐重建完成（卷 + appendonly + unless-stopped），并经 UMS 冒烟实机验证（2026-09-08 8/8 通过）；2026-09-09 补齐 init.sql 角色 seed 授权（org_admin/ws_admin/end_user，带 `ON CONFLICT` 可增量重跑）；⬜ 待办：Nacos / RabbitMQ / MinIO / Prom / Grafana 容器迁云（Nacos 为 gateway `lb://` 前置）+ 已初始化库执行增量 seed + §五 凭据收敛 |
 | UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能实机验证通过；UMS-1（双身份源收敛）+ UMS-2（refresh 轮换撤销）回归验证通过，PR #2 已合入 master，阶段正式收口；遗留 UMS 收尾优化项转 §6.1 待办池（不阻塞） |
-| gateway 网关                                | 🔵 进行中 | 90%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ TraceGlobalFilter + 常量下沉 | 全链路冒烟 8/8（2026-09-08，云 PG/Redis，UMS 7101 + gateway 7000）；3 修复 + 文档已提交 feature/gateway（fe912aa）；2026-09-09 路由按 §8.3 收窄（`/auth/**`+`/api/v1/user|role|permission/**`）+ TraceGlobalFilter(-200) + 错误响应 charset + JWT Claim 常量下沉 common，**复跑冒烟 9/9 通过**（含 `X-Trace-Id` 单值修复、2007 过期 token、`/doc.html` 白名单、`sk-` 分流；工作区待提交）；⬜ 待办：PR 合入 master → 接入 Nacos `lb://` |
+| gateway 网关                                | 🔵 进行中 | 90%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ TraceGlobalFilter + 常量下沉 | 全链路冒烟 8/8（2026-09-08，云 PG/Redis，UMS 7101 + gateway 7000）；3 修复 + 文档已提交 feature/gateway（fe912aa）；2026-09-09 路由按 §8.3 收窄（`/auth/**`+`/api/v1/user|role|permission/**`）+ TraceGlobalFilter(-200) + 错误响应 charset + JWT Claim 常量下沉 common，**复跑冒烟 9/9 通过**（含 `X-Trace-Id` 单值修复、2007 过期 token、`/doc.html` 白名单、`sk-` 分流）；**PR #5（`f84ffd2`）已合入 master**；⬜ 待办：接入 Nacos `lb://` |
 | workspace 工作空间                            | ⚪ 未开始 | 0%   |                                                |                                        |
 | model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | kb 知识库                                    | ⚪ 未开始 | 0%   |                                                |                                        |
@@ -101,6 +101,7 @@
 - [2026-09-09] ✅ 已答复（前端契约两项）：① `GET /api/v1/role/{id}` 的 `permissionIds` 为扁平 `Long` 数组、不含父级/分组、列表接口不返回（写入 IF §6.5，答复 BE-20260909-05）；② SSE 新增 `heartbeat` 事件（15s、`data={"ts":<epochMillis>}`、不可关闭，写入 IF §10，答复 BE-20260909-04）
 - [2026-09-09] ✅ 已修复并实测（`X-Trace-Id` 响应头重复）：冒烟复跑抓到经网关转发到 UMS 的响应出现**两个** `X-Trace-Id`（网关 set 的值 + 上游 starter-web `TraceFilter` 回传值，被 `NettyRoutingFilter` 合并追加）→ `TraceGlobalFilter` 改为在 `exchange.getResponse().beforeCommit(...)` 回调内 `headers().set(...)`（提交前覆盖为单值）。实测转发 200 / 无 token 401 / 坏 token 401 / 过期 401 / `sk-` 401 / end_user 403 六类路径 `X-Trace-Id` 计数均为 1
 - [2026-09-09] 🟡 新发现（未匹配路由不经过 GlobalFilter）：`/api/v1/nonexistent` 由网关路由层直接 404，**不进入 GlobalFilter 链**（GlobalFilter 仅在路由命中后执行）→ 该响应无 `X-Trace-Id` 且为 Spring 默认错误体（含 `requestId`，非 IF §2 统一 `Result`）。路由收窄语义正确（未误转 UMS），但统一错误格式/traceId 覆盖存在缺口，记入 §6.4 待办
+- [2026-09-09] ✅ 已决策并实施（SSE 心跳升为通用约定，答复 BE-20260909-07）：新增 **IF §2.6「SSE 流式通用约定」**作为心跳**单一事实源**——所有 `stream=true` 接口均含 `heartbeat`（15s / 不可关闭 / `data={"ts":<epochMillis>}`），端点事件表只列业务事件、不再重复声明；修正 **§12.4 括号枚举遗漏（补 `heartbeat`）**，§7.5 / §8.3 / §10.3 / §13.6 统一引用 §2.6。前端 `sse.ts` 读超时保护按「任意事件即重置」统一实现，消除按端点漂移。**上述流式端点尚未实现，本次仅收敛契约，不构成可联调**
 
 ---
 
@@ -139,15 +140,17 @@
 
 ### gateway PR 合入 master 前置（部署安全，2026-09-08 review 新增 / 2026-09-09 核实扩面）
 
-- [ ] **云服务器凭据明文已提交进 git（含远程仓库），合入 master 前必须收敛**
-  - 定位 [已核实 2026-09-09]：`ums/application.yml:13,15,23,25` 数据源/Redis 地址 `39.106.110.214` + 弱口令 `insight123` 明文；改动随 `feature/gateway` `d437202` 提交，**已推送 `origin/feature/gateway`**（远程分支历史已含「公网 IP + 口令」组合），且 `d437202` **尚未进 master**（`git merge-base --is-ancestor d437202 master` 为 false）→ master 是最后一道闸门，收敛应在合 PR 前完成。
-  - 暴露面比原记录更大 [已核实]：弱口令 `insight123` **早已存在于 master 历史**——`docker-compose.yml`（`ed8bfec` 引入，PG/Redis/RabbitMQ/MinIO 共 5 处）、master 版 `ums/application.yml`（localhost + 同一口令）；文档同样明文：`DEVGUIDE.md:1107,1109`、`DB.md:44`、`TD.md:1106,1123`、`LEARNING.md:4660`。**仅把 yml 改占位无法消除泄露**（口令本体已在库），必须配合口令轮换。
+- [ ] 🔴 **云服务器凭据明文已进入 master 历史（闸门已失守），止血只能靠口令轮换**
+  - **闸门结论修正 [已核实 2026-09-09]**：原判「`d437202` 尚未进 master → master 是最后一道闸门」**已失效**——PR #5（`f84ffd2`）已把 `feature/gateway` 合入 master，`git merge-base --is-ancestor d437202 master` 现返回 0，即 `d437202`（`ums/application.yml` 的公网 IP `39.106.110.214` + 弱口令 `insight123`）**已是 master 祖先**。→ 明文已进主干历史，改文件/改文档都无法回收。
+  - 暴露面 [已核实]：弱口令 `insight123` 同时存在于 master 历史的 `docker-compose.yml`（`ed8bfec` 引入，PG/Redis/RabbitMQ/MinIO 共 5 处）与 `ums/application.yml`；文档明文：`DEVGUIDE.md:1120,1122`、`DB.md:48`、`TD.md:1110,1127`、`LEARNING.md:4706`。
+  - **本次已做（2026-09-09）**：文档明文改占位/引用 `.env`（`TD.md`/`DEVGUIDE.md`/`DB.md`/`LEARNING.md`，减少新增暴露面）；`.ssh_run.py`、`.remote_cmd.sh` 加 `.gitignore`（防误提交）。**注意：这不等于消除泄露**——历史版本仍在，且口令本体未变；`docker-compose.yml` 与 `ums/application.yml` 的占位化属「配置外置」（见 b），本次未做。
+  - **未做（唯一止血手段）**：口令轮换。当前处于学习/开发期，为本地联调方便**暂缓**；进入正式联调或对外部署前必须完成（届时旧口令按已泄露处理，轮换后历史残留即作废）。
   - 影响 [静态推断]：若云安全组对 5433/6380 放开公网（本机直连云库的前提），任何互联网来源可用已知口令连 PG（拖库）/ Redis（读写 key，视配置可能 RDB 落盘）。安全组来源是否已限制**需人工确认**（云控制台规则 / 云上 `ss -lntp`）。
-  - 修复建议（分层，未完成前不合 PR）：
-    - a) **口令轮换（治本）**：云 PG/Redis 改强随机口令；旧口令按已泄露处理，轮换后即便历史仍在也已作废。
-    - b) **配置外置**：`ums/application.yml` 地址/口令改 `${PG_URL}`/`${DB_PASSWORD}`/`${REDIS_PASSWORD}` 占位，本地默认回 `localhost`，云上以 profile/env 注入（`.gitignore` 已有 `.env`、`.env.*`、`application-local.yml` 规则可直接用）。
-    - c) **安全组收敛**：5433/6380 仅放行固定来源 IP，不对 `0.0.0.0/0` 开放。
-    - d) **存量清理**：`docker-compose.yml` 及 DB/DEVGUIDE 等文档改占位或引用 `.env`；历史改写（filter-repo）破坏性大，口令轮换后可不做。
+  - 修复清单（分层）：
+    - a) 🔴 **口令轮换（治本）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令；**未完成前本项不闭环**。
+    - b) **配置外置**：`ums/application.yml` 地址/口令改 `${INSIGHT_PG_*}`/`${INSIGHT_REDIS_*}` 占位，用 `.env` / IDEA 环境变量注入（`.gitignore` 已有 `.env`、`.env.*`、`application-local.yml` 规则可直接用）。
+    - c) **安全组收敛**：5433/6380 等仅放行固定来源 IP，不对 `0.0.0.0/0` 开放。
+    - d) **存量清理**：文档已改占位（**本次已完成**）；`docker-compose.yml` 待随 b) 一并占位化；历史改写（filter-repo）破坏性大，口令轮换后可不做。
 
 ---
 
@@ -199,7 +202,7 @@
 - [ ] 🟡 未匹配路由（`/api/v1/xxx` 无路由）不进入 GlobalFilter 链 → 404 响应无 `X-Trace-Id`、body 为 Spring 默认错误格式（非 IF §2 `Result`）；如需前端统一处理，需改用 WebFilter 或补 WebFlux 错误处理器（2026-09-09 复跑冒烟发现，不阻塞联调）
 - [x] **gateway 路由按 TD §8.3 细分**（2026-09-09 完成）：`/api/v1/**` 全量 fallback 已收窄为 `/auth/**` + `/api/v1/user|role|permission/**` → ums（含 `/doc.html`/`/webjars/**`/`/v3/api-docs/**` 文档路径），其余 `/api/v1/xxx` 网关层直接 404 不误转 UMS；后续服务接入按 P18 同批新增专属前缀
 - [ ] 服务接入 Nacos 注册/配置中心（冒烟期 UMS 路由为直连 localhost:7101，Nacos 接入后改 `lb://insight-engine-ums`）
-- [ ] 中间件与应用密码差异化：`insight123` / `application.yml` 明文密码改 `.env`/secrets + 环境变量占位注入（云凭据收敛为 §五 gateway PR 合入前置；注意 master 历史 + compose/文档已含同口令，须先轮换，详见 §五 2026-09-09 核实）
+- [ ] 中间件与应用密码差异化：`insight123` / `application.yml` 明文密码改 `.env`/secrets + 环境变量占位注入（**注意：PR #5 已合入 master，闸门失效，明文已进主干历史；须先轮换口令，详见 §五 2026-09-09 修正**）
 - [ ] 引入 Flyway schema 迁移（替代一次性 init.sql）
 - [ ] 部分容器 healthcheck 补 `start_period`（🟢）
 - [x] gateway 增 TraceGlobalFilter（order=-200，TD §8.3 过滤器链首项）——**2026-09-09 完成**：读取/校验上游 `X-Trace-Id`（非法/缺失则生成 UUID）→ 重建请求头透传 → 回写响应头；`AuthGlobalFilter` 错误响应必带 traceId
@@ -232,14 +235,18 @@
 
 ## 七、下一步计划（Top 3）
 
-1. **§五 部署安全红级收敛（PR 合入前置）**：云 PG/Redis 口令轮换 + `ums/application.yml`/`docker-compose.yml` 改环境变量占位 + 安全组收敛 + DB/DEVGUIDE/TD/LEARNING 文档存量清理（需云凭据/控制台，见 §五）——**未完成不合 PR**
-2. **gateway 收口**：本轮工作区改动（路由收窄 + TraceGlobalFilter + charset + JWT 常量 + seed 授权）**复跑冒烟 9/9 已通过**（含 `/doc.html` 白名单、`sk-` 分流、2007 过期 token、`X-Trace-Id` 单值）→ commit → PR（base=master，**待 §五 红级收敛后合入**）→ 云上补 Nacos 容器后路由改 `lb://insight-engine-ums`
+1. **§五 口令轮换（唯一止血手段）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档/compose 明文清理本次已完成——**注意：闸门已失守（PR #5 已合 master），未轮换前该项不闭环**
+2. **gateway 收口已完成**：PR #5（`f84ffd2`）已合入 master（路由收窄 + TraceGlobalFilter + charset + JWT 常量 + seed 授权，冒烟 9/9）→ 下一步：云上补 Nacos 容器后路由改 `lb://insight-engine-ums`
 3. **workspace 模块启动**：环境/基础设施收口后进入阶段 5（兑现 BE-20260908-02 交付跟踪）；§6.1 高价值 UMS 收尾项择机独立处理
 
 ---
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-09
+- 内容：云凭据安全收口（局部）+ PROGRESS §五 闸门结论修正 —— ① 停掉本机残留 gateway(7000)/UMS(7101) 进程，解除 IDEA 端口占用（保留 IDEA 本体与 mysqld）；② 文档清明文：`TD.md:1110,1127`、`DEVGUIDE.md:1120,1122`、`DB.md:48`、`LEARNING.md:4706` 一律改 `.env` 占位引用（文档不再出现口令本体）；③ **§五 闸门结论修正**：PR #5（`f84ffd2`）已合入 master，`d437202` 已是 master 祖先（`git merge-base --is-ancestor` 返回 0）→ 原判「master 是最后一道闸门」**失效**，明文已进主干历史、改文件无法回收，**止血只能靠口令轮换**（当前学习开发期暂缓，进入联调/部署前必须完成）；④ `.ssh_run.py`/`.remote_cmd.sh` 加 `.gitignore` 防误提交；⑤ 同步修正 §一 当前阶段/任务/完成度、§二 gateway 看板（PR 已合）、§6.4 密码差异化项、§七 Top1/2 中所有「待 PR 合入」过期表述。
+- 日期：2026-09-09
+- 内容：处理前端工单 BE-20260909-07（SSE 心跳契约不完整 + §12.4 枚举误导）——① **开工四必读**后受理：前端反查 `heartbeat` 全文仅 §10.3 一处，§12.4 括号枚举逐一列举业务事件却漏 `heartbeat`（声称完整最易误导），§7.5/§8.3/§13.6 均未覆盖；② **采纳并收口**：新增 **IF §2.6「SSE 流式通用约定」**（心跳单一事实源：所有 `stream=true` 均含 `heartbeat`，15s/不可关闭/`data={"ts":<epochMillis>}`；端点表只列业务事件；引用 §10.3 同样含 heartbeat），同步修正 §12.4 枚举 + §7.5/§8.3/§10.3/§13.6 引用 §2.6；③ **双写**：前端 `BE-ISSUES.md` 该条回填答复并置 ✅（待前端核对）、`FE-SYNC.md §2 契约变更 + §3 答复`登记；④ **边界声明**：conv/agent/model 流式端点尚未实现（FE-SYNC §1 仍 ⚪），本次仅收敛契约，不构成"可联调"；⑤ 待办：commit 走 PR（受 §五 红级阻塞）
 - 日期：2026-09-09
 - 内容：gateway 收尾复跑冒烟（`X-Trace-Id` 重复修复验证）——① 复跑前先复现：经网关转发 UMS 的响应出现**两个** `X-Trace-Id`（网关 + 上游 starter-web `TraceFilter` 各回一份，被 `NettyRoutingFilter` 合并追加）→ `TraceGlobalFilter` 改为 `beforeCommit` 内 `headers().set()` 覆盖；② 停网关进程释放 jar 锁 → `mvn -pl gateway -am install` 重编译 → 重启，复跑冒烟 **9/9 通过**（登录 200 / 转发 200 / 无 token 401-2001 / 坏 token 401-2001 / 过期 token 401-2007 / `/doc.html` 200 / `sk-` 401-2001 / end_user 403-2006 / 未匹配路由 404），六类路径 `X-Trace-Id` 计数均为 1；③ 新发现 🟡：未匹配路由不进入 GlobalFilter 链 → 404 无 traceId 且为 Spring 默认错误体（记 §6.4，不阻塞联调）；④ 踩坑：PS 5.1 内联 JSON 传 `curl.exe` 双引号被吞致 500，改临时文件 `-d "@file"`；⑤ 待办：commit + push `feature/gateway`；**PR 合入受 §五 云凭据明文红级阻塞**（需云凭据/控制台做口令轮换 + 安全组收敛）
 - 日期：2026-09-09

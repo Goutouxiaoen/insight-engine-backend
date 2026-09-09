@@ -1117,9 +1117,9 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
    环境变量、持久化参数」必须与 docker-compose.yml 对应服务逐项一致，不得简化省略。
 3. 重点核对项（最容易漏、漏了必出问题）：
    - PostgreSQL：必须挂命名卷 pg_data:/var/lib/postgresql/data；init.sql 以 :ro 挂载；
-     端口 5433:5432；账号 insight / 密码 insight123 / 库 insight_engine。
+     端口 5433:5432；账号 insight / 密码取 .env 的 POSTGRES_PASSWORD（不入库）/ 库 insight_engine。
    - Redis：必须带 --appendonly yes（AOF 持久化）+ 命名卷 redis_data:/data；
-     端口 6380:6379；密码 insight123。
+     端口 6380:6379；密码取 .env 的 REDIS_PASSWORD（不入库）。
    - 其他中间件同理：每个都必须挂对应命名卷，禁止无卷裸跑。
 4. 给命令前，先说明一句：「已核对 docker-compose.yml，命令参数与 XX 服务一致」。
 5. 若环境无法用 compose（如远程服务器单独拉起中间件），也必须按 compose 对应服务

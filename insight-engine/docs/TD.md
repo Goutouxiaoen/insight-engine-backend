@@ -1107,7 +1107,7 @@ services:
       - "15673:15672"    # 宿主 15673 → 容器 15672（管理界面）
     environment:
       RABBITMQ_DEFAULT_USER: insight
-      RABBITMQ_DEFAULT_PASS: insight123
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}   # 真实值放 .env（不入库）
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -1124,7 +1124,7 @@ spring:
     host: rabbitmq          # compose 服务名
     port: 5672              # 容器内端口（不是 5673！）
     username: insight
-    password: insight123
+    password: ${RABBITMQ_PASSWORD}   # 真实值放 .env（不入库）
 ```
 
 本机 IDE 直连调试时（不打容器、直接跑本地 jar）：
