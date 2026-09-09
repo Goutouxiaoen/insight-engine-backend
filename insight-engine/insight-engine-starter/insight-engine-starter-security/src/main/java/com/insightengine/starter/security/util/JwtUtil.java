@@ -11,6 +11,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_PERMISSIONS;
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_ROLES;
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_TENANT_ID;
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_TYPE;
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_WS_ID;
+import static com.insightengine.common.constant.JwtClaimConstants.TYPE_ACCESS;
+import static com.insightengine.common.constant.JwtClaimConstants.TYPE_REFRESH;
+
 /**
  * JWT 签发与解析工具。
  *
@@ -33,20 +41,7 @@ import java.util.List;
  */
 public class JwtUtil {
 
-    /** 令牌类型 Claim 名 */
-    private static final String CLAIM_TYPE = "type";
-    /** 令牌类型值：访问令牌 */
-    private static final String TYPE_ACCESS = "access";
-    /** 令牌类型值：刷新令牌 */
-    private static final String TYPE_REFRESH = "refresh";
-    /** 租户 ID Claim 名（TD §7.2） */
-    private static final String CLAIM_TENANT_ID = "tenant_id";
-    /** 工作空间 ID Claim 名（TD §7.2） */
-    private static final String CLAIM_WS_ID = "ws_id";
-    /** 角色编码列表 Claim 名（TD §7.2） */
-    private static final String CLAIM_ROLES = "roles";
-    /** 权限编码列表 Claim 名 */
-    private static final String CLAIM_PERMISSIONS = "perms";
+    // Claim 名称统一由 common 层 JwtClaimConstants 提供（与网关共享同一契约，防 drift）
 
     /** 签名密钥 */
     private final SecretKey secretKey;

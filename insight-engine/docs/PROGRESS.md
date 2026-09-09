@@ -1,7 +1,13 @@
 # 项目进度追踪（PROGRESS）
 
+> **本文档是**：项目当前状态看板 —— 做到哪了、每个模块什么进度、卡在哪、下一步做什么。
+> **何时看**：每次对话**开始必读**、**结束必更新**（日常最高频打开的一份）。
+> **不负责**：实现细节（→ `FEATURES.md`）、接口契约（→ `IF.md`）。
+>
 > 本文件是「开发者」与「AI」之间的**共享进度真相源**，是跨对话记忆的唯一可靠载体。
 > **铁律：每次对话结束前必须更新本文件；每次新对话开始必须先读本文件。**
+>
+> **找文件看这里**：AI 入口 `AGENTS.md` 在**仓库根目录**（不在 `docs/`）；`docs/` 下真相源清单见 `DEVGUIDE.md` 附录 A；跨端同步协议见 `docs/FE-SYNC.md`；前端工单在 `D:\JavaProject\insight-engine-web\docs\BE-ISSUES.md`。
 >
 > **文档口径（2026-09-02 起执行）**：
 > - 「§五 当前阻塞 / 待解决问题」= **必须修且尚未解决**的项，阻塞对应交付收口；已办结项不在此滞留。
@@ -14,10 +20,10 @@
 
 | 项     | 值                                  |
 | ----- | ---------------------------------- |
-| 当前阶段  | 阶段 4：gateway 网关 —— 代码实现完成已提交（feature/gateway），待环境联调冒烟后合入 |
+| 当前阶段  | 阶段 4：gateway 网关 —— 2026-09-09 复跑全链路冒烟 9/9 通过（含 `X-Trace-Id` 单值修复与 2007 过期 token），工作区待提交；待云凭据收敛（§五 红级）后 PR 合入 master 收口 |
 | 当前里程碑 | M4：gateway 网关                       |
-| 当前任务  | gateway 全链路冒烟：云中间件（39.106.110.214 PG/Redis）就绪 → UMS 连接改云地址 → 本机启 UMS+gateway → curl 验证（登录/me/防伪头/2001/2007/sk- 分流/文档白名单）→ 合入 master（§六 6.4 / §七 Top1） |
-| 整体完成度 | 约 32%（阶段 1-3 完成并已全部合入 master；gateway 骨架+路由+CORS+AuthGlobalFilter 代码完成待冒烟合入；UMS 收尾项在 §6.1 待办池；联调环境由本机 Docker 迁移至云服务器推进中） |
+| 当前任务  | gateway 收口推进（2026-09-09）：路由按 TD §8.3 收窄 + TraceGlobalFilter(-200，响应头 `beforeCommit` 覆盖修重复) + 错误响应 charset + JWT Claim 常量下沉 common 已落地并复跑冒烟通过（工作区待提交）→ 待云凭据收敛（§五 红级）→ PR 合入 master → 接入 Nacos 改 `lb://`（§六 6.4 / §七 Top1/2） |
+| 整体完成度 | 约 40%（阶段 1-3 完成并已全部合入 master；gateway 复跑冒烟 9/9，路由收窄 + TraceFilter/charset/JWT 常量已落地（工作区待提交）；init.sql 角色 seed 授权补齐；环境/基础设施仍卡云上 Nacos 与凭据收敛（§五 红级）；UMS 收尾项在 §6.1 待办池） |
 
 ---
 
@@ -29,12 +35,12 @@
 | ----------------------------------------- | ----- | ---- | ---------------------------------------------- | -------------------------------------- |
 | 产品/技术/接口文档                                | ✅ 完成  | 100% | PRD/TD/IF                                      | 已定稿                                    |
 | 协作指导文档                                    | ✅ 完成  | 100% | DEVGUIDE.md                                    | 已定稿                                    |
-| 环境准备（JDK/Maven/Docker/Node）               | 🔵 进行中 | 80%  | 本机 JDK21/Maven3.9.9/Node24 + 云服务器 Docker | 本机 Docker Desktop 因未检测到虚拟化无法启动 → 中间件承载迁移至腾讯云轻量服务器（见 §三 2026-09-06）；本机 JDK/Maven/Node 不受影响   |
-| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore                                     | master 主干 + GitHub Flow；PR #1 已合入，远程无远程额外分支                |
+| 环境准备（JDK/Maven/Docker/Node）               | 🔵 进行中 | 95%  | 本机 JDK21.0.10/Maven3.9.9/Node24.13.0 + 云服务器 Docker（39.106.110.214） | ✅ 云端 PG/Redis 已部署并经 UMS 全链路冒烟实机验证可用（2026-09-08）；2026-09-09 复核本机 JDK/Maven/Node 正常、`docker` 命令不存在（本机不承载中间件）；⬜ 待办：云上补充 Nacos 容器（§七 Top2 前置） |
+| Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore + GitHub 工作流（PR/分支）                 | master 主干 + GitHub Flow；PR #1/#2/#3 均已合入 master；远程现含 master + feature/ums-security-fix + feature/gateway 分支 |
 | 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位          | `mvn clean install -DskipTests` 全量编译通过 |
-| 基础设施（docker-compose/init.sql）             | 🔵 进行中 | 70%  | docker-compose.yml / init.sql / prometheus.yml | compose/init.sql 定义完成；本机 7 中间件曾实机启动 healthy；现迁移至云服务器 39.106.110.214（Ubuntu 24.04）部署 PG/Redis，按 compose 逐项对齐重建中（见 §四 2026-09-06 踩坑） |
+| 基础设施（docker-compose/init.sql）             | 🔵 进行中 | 90%  | docker-compose.yml / init.sql / prometheus.yml | compose/init.sql 定义完成；✅ 云服务器（39.106.110.214）PG/Redis 已按 compose 逐项对齐重建完成（卷 + appendonly + unless-stopped），并经 UMS 冒烟实机验证（2026-09-08 8/8 通过）；2026-09-09 补齐 init.sql 角色 seed 授权（org_admin/ws_admin/end_user，带 `ON CONFLICT` 可增量重跑）；⬜ 待办：Nacos / RabbitMQ / MinIO / Prom / Grafana 容器迁云（Nacos 为 gateway `lb://` 前置）+ 已初始化库执行增量 seed + §五 凭据收敛 |
 | UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能实机验证通过；UMS-1（双身份源收敛）+ UMS-2（refresh 轮换撤销）回归验证通过，PR #2 已合入 master，阶段正式收口；遗留 UMS 收尾优化项转 §6.1 待办池（不阻塞） |
-| gateway 网关                                | 🔵 进行中 | 80%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ fail-fast 配置 | 认证模型已定案；代码完成并已提交 feature/gateway（f45a226）编译通过；待云中间件就绪后全链路冒烟 → 合入 master → 接入 Nacos（见 §六 6.4） |
+| gateway 网关                                | 🔵 进行中 | 90%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ TraceGlobalFilter + 常量下沉 | 全链路冒烟 8/8（2026-09-08，云 PG/Redis，UMS 7101 + gateway 7000）；3 修复 + 文档已提交 feature/gateway（fe912aa）；2026-09-09 路由按 §8.3 收窄（`/auth/**`+`/api/v1/user|role|permission/**`）+ TraceGlobalFilter(-200) + 错误响应 charset + JWT Claim 常量下沉 common，**复跑冒烟 9/9 通过**（含 `X-Trace-Id` 单值修复、2007 过期 token、`/doc.html` 白名单、`sk-` 分流；工作区待提交）；⬜ 待办：PR 合入 master → 接入 Nacos `lb://` |
 | workspace 工作空间                            | ⚪ 未开始 | 0%   |                                                |                                        |
 | model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | kb 知识库                                    | ⚪ 未开始 | 0%   |                                                |                                        |
@@ -44,7 +50,7 @@
 | billing 计费                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | obs 监控审计                                  | ⚪ 未开始 | 0%   |                                                |                                        |
 | notify 通知                                 | ⚪ 未开始 | 0%   |                                                |                                        |
-| 前端 admin（控制台）                         | ⚪ 未开始 | 0%   | FEGUIDE v1.0 + FE-PROGRESS 骨架 | 指导文档已产出，前端工程建于独立仓库 D:\JavaProject\insight-engine-web\（接口契约仍以本仓库 IF.md 为唯一事实源）；定位：控制台（管理+开发一体，角色收缩菜单）+ 对话门户独立 SPA 后置；下一步 P0 脚手架（FEGUIDE §4.2） |
+| 前端 admin（控制台）                         | 🔵 进行中 | 45%  | FEGUIDE v1.1 + FE-PROGRESS（P0/P1 ✅ 100%、P2 ~90%） | 独立仓库 D:\JavaProject\insight-engine-web\（接口契约仍以本仓库 IF.md 为唯一事实源）；P0 脚手架 + P1 认证闭环已 commit `4908c45` 并全链路实测；P2 组织与人员前端收口（workspace/member/audit 因后端未实现走 mock）；**跨端同步见 `docs/FE-SYNC.md`，前端诉求见前端 `docs/BE-ISSUES.md`** |
 | 前端 chat                                   | ⚪ 未开始 | 0%   |                                                |                                        |
 | docker-compose 全量编排                       | ⚪ 未开始 | 0%   |                                                |                                        |
 
@@ -86,6 +92,15 @@
 - [2026-09-08] ✅ 已决策并实施（文档同步①前端基线对齐）：TD §2.2 前端技术栈与前端仓库 FEGUIDE §3.1 定案对齐（Vue 3.5 / Vite 7 / TS 5.9(strict) / Arco 2.x / Tailwind 4 / Pinia 3 / Router 4 / Axios 1 / fetch-event-source / @vueuse / markdown-it+DOMPurify / ECharts 5 / MSW 2 / pnpm 工程链），并在 TD 声明「FEGUIDE §3.1 为前端侧唯一事实源」；DEVGUIDE §8.1/§8.4/D1 目录图/P7/P13 模板同步独立仓库 `D:\JavaProject\insight-engine-web\` 口径（控制台+对话门户二分、契约驱动+Mock 先行）
 - [2026-09-08] ✅ 已决策并实施（文档同步②真相源补全）：DEVGUIDE 附录 A 与 D1 目录图补 `DB.md`（数据库设计，与 init.sql 对应）与 `FEATURES.md`（功能模块实现清单）——两者 2026-08-26 即确立真相源地位但清单漏列，铁律 3 同步「5 份 → 7 份」；TD §6.1 缓存键表补 2 个已上线键：`ie:auth:lock:{account}`（30min 登录失败锁定）与 `ie:auth:refresh:{userId}`（7d refresh 会话 / jti 一次性轮换），后续服务照 TD §6 开发不再漏
 - [2026-09-08] ✅ 已决策（路由收窄纪律，防路由抢占）：TD §8.3 补注——冒烟期 `/api/v1/**` 全量直连 UMS **仅限单服务阶段**，workspace 等后续服务接入必须先把通配收窄为服务专属前缀（与 IF.md 章节一一对应），收窄与新增路由同一次提交完成；同时 DEVGUIDE 附录 B 新增 **P18 场景约束**（网关路由/新服务接入：必读 TD §8.3、前缀无交集、同步核对 routes 谓词/AuthGlobalFilter 白名单/globalcors 三处）
+- [2026-09-08] ✅ 已决策并实施（gateway 冒烟前置修复①UMS 配置切云）：`ums/application.yml` datasource/redis 指向云服务器（39.106.110.214:5433/6380），两处改动生效并实机冒烟通过；经 `feature/gateway` `d437202` 承载
+- [2026-09-08] ✅ 已决策并实施（gateway 冒烟前置修复②权限拒绝语义）：starter-security 新增 `SecurityExceptionHandlerAdvice`（`@Order(HIGHEST_PRECEDENCE)` 的 `@RestControllerAdvice`）——`@PreAuthorize` 抛出的 `AccessDeniedException` 在 DispatcherServlet 层统一转 **403/code=2006**；此前 `RestAccessDeniedHandler` 注释声称覆盖该方法级场景但异常传不到（被 starter-web 的 `Exception` 兜底误报 500）
+- [2026-09-08] ✅ 已决策并实施（gateway 冒烟前置修复③中文乱码根治）：根因 = PowerShell 5.1 等老客户端对不带 `charset` 的 `application/json` 按 ISO-8859-1 解码（服务端字节实测为合法 UTF-8「默认空间」）；修复 = starter-web `WebAutoConfiguration` 新增 WebMvcConfigurer，给 Jackson 转换器设默认 `UTF-8`（响应头带 `charset=UTF-8`），实测 PS 解码正常
+- [2026-09-09] ✅ 已决策并实施（gateway 待办收口四件）：① 路由按 TD §8.3 收窄为 `/auth/**` + `/api/v1/user|role|permission/**`（含文档路径；其余 `/api/v1/xxx` 网关层 404，不误转 UMS）；② 新增 `TraceGlobalFilter`（order=-200，校验/生成 `X-Trace-Id`，正则 `[A-Za-z0-9-]{1,64}` 防日志注入 → 请求头透传 + 响应头回写；WebFlux 不用 MDC，改请求头+日志显式带 traceId）；③ `AuthGlobalFilter.writeError` 补 `charset=UTF-8`；④ 新增 `common.constant.JwtClaimConstants`，UMS `JwtUtil` 与 gateway `GatewayJwtParser` 共享引用消除双份字面量。common/starter-security/gateway 三模块 `mvn install` 编译通过（§六 6.4）
+- [2026-09-09] ✅ 已决策并实施（init.sql 角色 seed 授权，答复 BE-20260908-03）：补 `org_admin`(46)/`ws_admin`(27)/`end_user`(7) 授权，`ws_admin` 含成员管理（`member:read/create/update/delete`）；三条 INSERT 带 `ON CONFLICT DO NOTHING` 可对已初始化库增量重跑；DB.md 同步（`ie_role_permission`=143）。**云端已初始化库需执行增量 seed 才生效（未重建库场景）**
+- [2026-09-09] ✅ 已决策（权限编码规范 + `ws:switch`，答复 BE-20260909-06/01）：① 权限编码统一「`资源路径:动作`，最后一段固定为动作」，二级/三级并存合法，前端按最后一个 `:` 切分或用权限树 `resource` 分组、禁用 `startsWith`（写入 IF §6.7，零破坏）；② **不新增 `ws:switch`**——切换范围由成员关系服务端约束，独立权限码无安全增益，前端沿用 `ws:read` 门控
+- [2026-09-09] ✅ 已答复（前端契约两项）：① `GET /api/v1/role/{id}` 的 `permissionIds` 为扁平 `Long` 数组、不含父级/分组、列表接口不返回（写入 IF §6.5，答复 BE-20260909-05）；② SSE 新增 `heartbeat` 事件（15s、`data={"ts":<epochMillis>}`、不可关闭，写入 IF §10，答复 BE-20260909-04）
+- [2026-09-09] ✅ 已修复并实测（`X-Trace-Id` 响应头重复）：冒烟复跑抓到经网关转发到 UMS 的响应出现**两个** `X-Trace-Id`（网关 set 的值 + 上游 starter-web `TraceFilter` 回传值，被 `NettyRoutingFilter` 合并追加）→ `TraceGlobalFilter` 改为在 `exchange.getResponse().beforeCommit(...)` 回调内 `headers().set(...)`（提交前覆盖为单值）。实测转发 200 / 无 token 401 / 坏 token 401 / 过期 401 / `sk-` 401 / end_user 403 六类路径 `X-Trace-Id` 计数均为 1
+- [2026-09-09] 🟡 新发现（未匹配路由不经过 GlobalFilter）：`/api/v1/nonexistent` 由网关路由层直接 404，**不进入 GlobalFilter 链**（GlobalFilter 仅在路由命中后执行）→ 该响应无 `X-Trace-Id` 且为 Spring 默认错误体（含 `requestId`，非 IF §2 统一 `Result`）。路由收窄语义正确（未误转 UMS），但统一错误格式/traceId 覆盖存在缺口，记入 §6.4 待办
 
 ---
 
@@ -105,6 +120,12 @@
 - [2026-09-04] 坑：云服务器（腾讯云 Ubuntu）`docker pull` Docker Hub 镜像报 **i/o timeout**（国内直连 Docker Hub 不通）→ 规避：daemon 配置 `registry-mirrors`（`https://docker.m.daocloud.io` 优先 + `https://mirror.ccs.tencentyun.com` 腾讯云内网），与 §三 2026-08-26 本机 DaoCloud 经验同源；兜底方案「DaoCloud 前缀拉取 + `docker tag` 回标准名」
 - [2026-09-06] 坑（协作教训，促成 P17）：手动 `docker run` 与 `docker-compose.yml` 不一致埋三处隐患——① `--restart always` vs compose `unless-stopped`（`always` 无视手动 stop 强行拉起）；② PG 未挂 `pg_data` 卷 / Redis 未挂 `redis_data` 卷且未开 `--appendonly yes`（删容器/重启即丢数据，登录态、黑名单、锁定计数全在 Redis 运行态）；③ 容器名与网络同 compose 不一致（bridge 无容器名 DNS）→ 规避：DEVGUIDE 附录 B 新增 P17 约束「容器/部署命令必须与 docker-compose.yml 逐项对齐」；删除旧容器后按 compose 对齐重建（逻辑备份 → `docker rm -f` → 新 `docker run` 挂卷开 appendonly → 持久化重启验证）；Docker 不支持对已存在容器补挂卷/改启动命令，此类修正必须重建
 - [2026-09-08] 坑：`git fetch/push` 报 `Failed to connect to 127.0.0.1 port 7890` → 根因：全局 git 代理（`C:/Users/admin/.gitconfig` 的 http.proxy/https.proxy）指向 Clash Verge 7890，但当时仅有 `clash-verge-service.exe` 后台服务在跑、代理内核未启动（7890 无监听）；实测直连 github.com 可通（HTTP 200）→ 处理：`git config --global --unset http.proxy && git config --global --unset https.proxy` 摘除全局代理走直连，`git ls-remote` 验证通过；若日后直连劣化需恢复代理：`git config --global http.proxy http://127.0.0.1:7890`（https 同）
+- [2026-09-08] 坑：IDEA 运行服务加载 `target/classes` 里的旧配置（UMS `src/main/resources/application.yml` 已改云地址 39.106.110.214，但未 Rebuild → `target/classes/application.yml` 仍是 localhost 指向）→ 登录/注册全部 500 且快速失败（本机无 PG/Redis，连接拒绝）→ 排查要点：DB/Redis/表/密码均验证正常后，对比 `target/classes/application.yml` 与 `src` 是否一致即定位（src/target 漂移）→ 规避：改 resources/依赖代码后必须 `Build → Rebuild Project` 再 Run，不能只 Run（IDEA 增量编译不保证拷 resources）；长期建议把 `target/` 加入 gitignore 心智——产物永远可能比源码旧
+- [2026-09-08] 坑：`git fetch/push` 直连 github.com 报 443 超时，但 `curl.exe --resolve` 到 140.82.114.4 / 20.27.177.113 可达（DNS 默认解析的 20.205.243.166 被墙）；api.github.com / raw.githubusercontent.com 直连可达可作快速判别 → 规避：git 走可达 IP：`git -c http.curloptResolve="github.com:443:20.27.177.113" -c http.sslBackend=schannel fetch/push/ls-remote`（Windows git 默认 openssl 后端需显式 `-c http.sslBackend=schannel`，否则报 Unsupported SSL backend）；同 IP curl 通 ≠ git 通，实测为准
+- [2026-09-08] 坑（协作规范教训，促成 LEARNING 铁律）：违反 GitHub Flow「master 只接受 PR」——在本地把 `feature/ums-security-fix` merge 进 master 并试图直接 push master → 被拦截纠正；正确处理：功能分支 commit → `git push origin feature/xxx` → 网页 PR（base=master）→ Merge → 本地 `checkout master && git pull`；已在 LEARNING.md 新增「Git 常用命令速查（2026-09-08）」固化 8 场景 + 五条铁律
+- [2026-09-08] 坑：PowerShell 5.1 `Invoke-RestMethod` 显示中文乱码（PS 对无 charset 响应按 ISO-8859-1 解码）≠ 服务端/DB 数据损坏——判定：curl 存原始字节后用 python 按 utf-8 解析看 `repr`/hex，字节合法即纯客户端解码问题；修复走服务端 charset（见 §三 2026-09-08）或脚本改字节安全读取
+- [2026-09-09] 坑：网关响应头 `X-Trace-Id` 出现两个值——根因是网关 GlobalFilter 直接 `getResponse().getHeaders().set(...)` 的时机早于 `NettyRoutingFilter` 回写上游响应头，上游 starter-web `TraceFilter` 也回传同名头，被**合并追加**而非覆盖 → 规避：网关回写响应头必须在 `beforeCommit` 回调内 `set`（响应提交前最后一刻覆盖），已验证转发/错误各路径均为单值
+- [2026-09-09] 坑：PowerShell 5.1 向 `curl.exe` 传 `-d '{"k":"v"}'` 时双引号被吞（native 参数传递规则），服务端收到 `{account:...}` → Jackson 报 `Unexpected character ('a')` 500 → 规避：请求体写入临时文件用 `-d "@file"`，勿在 PS 里内联带引号 JSON
 
 ---
 
@@ -114,7 +135,19 @@
 
 > 当前无代码级必须修项。UMS 收尾 UMS-1/UMS-2 已实机回归验证通过并合入 master（PR #2，见 §三 2026-09-03 留档），正式关闭。
 >
-> **环境前置待确认（非代码阻塞，阻塞 gateway 全链路冒烟）**：云服务器 39.106.110.214 的 PG/Redis 容器已按 compose 对齐重建（卷 + appendonly + unless-stopped），**最终验收输出（`count(*)=1`、`PONG`、重启后数据仍在）待回报**；确认后即可把 UMS 连接改云地址并启动冒烟。
+> **gateway 冒烟前置已全部打通（2026-09-08）**：云服务器 39.106.110.214 的 PG/Redis 已由 UMS 连接实机验证可用；UMS 配置已切云（§三 2026-09-08）；曾阻塞 gateway 冒烟的 3 项（master 缺 `JwtRefreshPayload` / ums/gateway pom 无 `repackage` / `@PreAuthorize` 拒绝误报 500）均已修复并随 `feature/gateway` 推送远程。§五无遗留**代码级**阻塞；下方**部署安全**项仍需收敛。
+
+### gateway PR 合入 master 前置（部署安全，2026-09-08 review 新增 / 2026-09-09 核实扩面）
+
+- [ ] **云服务器凭据明文已提交进 git（含远程仓库），合入 master 前必须收敛**
+  - 定位 [已核实 2026-09-09]：`ums/application.yml:13,15,23,25` 数据源/Redis 地址 `39.106.110.214` + 弱口令 `insight123` 明文；改动随 `feature/gateway` `d437202` 提交，**已推送 `origin/feature/gateway`**（远程分支历史已含「公网 IP + 口令」组合），且 `d437202` **尚未进 master**（`git merge-base --is-ancestor d437202 master` 为 false）→ master 是最后一道闸门，收敛应在合 PR 前完成。
+  - 暴露面比原记录更大 [已核实]：弱口令 `insight123` **早已存在于 master 历史**——`docker-compose.yml`（`ed8bfec` 引入，PG/Redis/RabbitMQ/MinIO 共 5 处）、master 版 `ums/application.yml`（localhost + 同一口令）；文档同样明文：`DEVGUIDE.md:1107,1109`、`DB.md:44`、`TD.md:1106,1123`、`LEARNING.md:4660`。**仅把 yml 改占位无法消除泄露**（口令本体已在库），必须配合口令轮换。
+  - 影响 [静态推断]：若云安全组对 5433/6380 放开公网（本机直连云库的前提），任何互联网来源可用已知口令连 PG（拖库）/ Redis（读写 key，视配置可能 RDB 落盘）。安全组来源是否已限制**需人工确认**（云控制台规则 / 云上 `ss -lntp`）。
+  - 修复建议（分层，未完成前不合 PR）：
+    - a) **口令轮换（治本）**：云 PG/Redis 改强随机口令；旧口令按已泄露处理，轮换后即便历史仍在也已作废。
+    - b) **配置外置**：`ums/application.yml` 地址/口令改 `${PG_URL}`/`${DB_PASSWORD}`/`${REDIS_PASSWORD}` 占位，本地默认回 `localhost`，云上以 profile/env 注入（`.gitignore` 已有 `.env`、`.env.*`、`application-local.yml` 规则可直接用）。
+    - c) **安全组收敛**：5433/6380 仅放行固定来源 IP，不对 `0.0.0.0/0` 开放。
+    - d) **存量清理**：`docker-compose.yml` 及 DB/DEVGUIDE 等文档改占位或引用 `.env`；历史改写（filter-repo）破坏性大，口令轮换后可不做。
 
 ---
 
@@ -132,6 +165,7 @@
 - [ ] 角色授权/创建：`permissionIds` 先去重 + 校验有效性（`RoleServiceImpl.assignPermissions/create`；`batchInsert` 改 `ON CONFLICT DO NOTHING`），防联合主键冲突与垃圾关联
 - [ ] 删除角色前检查 `ie_member` 引用（`RoleServiceImpl.delete:92-103`）：被引用返回 1003 或级联清理，防用户角色静默丢失 + 孤儿数据
 - [ ] `GlobalExceptionHandler` 补 `DuplicateKeyException`（并发注册/创建/角色唯一冲突 → 1001 友好文案）与 `HttpMessageNotReadableException`（body 解析错误 → 1002），不再一律 500
+- [x] `GlobalExceptionHandler` 补 `NoResourceFoundException` → **404/1004**（2026-09-08）：未映射路径此前被 `Exception` 兜底吞成 500/9999「系统内部错误」（与已修复的 AccessDenied 误报 500 同类病），前端「组织与人员」页误触 workspace/member 未实现接口时暴露此问题
 - [ ] 登录失败计数原子化（`AuthServiceImpl.handleLoginFail` increment+expire 竞态）：改 Lua（INCR+EXPIRE）或 SETNX EX + INCR，防 Redis 抖动导致计数 key 永不过期
 - [ ] 密码复杂度补强制大写：`RegisterRequest`/`UserCreateRequest`/`PasswordUpdateRequest` 正则改 `(?=.*[a-z])(?=.*[A-Z])(?=.*\d)`（当前只要求字母+数字，与注释宣称"含大小写"不符）
 - [ ] 账号枚举收敛：登录失败统一 2001 语义（勿用 2001/2002 区分账号存在性）；锁定/计数维度从「输入 account 字符串」改「用户维度」（email 被锁不能换 phone 绕过）
@@ -151,7 +185,7 @@
 - [ ] `ie_chunk.embedding` 维度统一约束 1024（model 网关阶段，切换 768 维本地模型需同步约束）
 - [ ] `ie_message."references"`、`ie_audit_log."before"/"after"` 双引号关键字列名 → 改 `refs`/`before_data`/`after_data`（conv/obs 模块对应阶段，同步 PRD/DB）
 - [ ] `ie_agent_invocation` 补 `status`/`error_msg` 列（agent 阶段，对齐 `ie_tool_invocation`）
-- [ ] 权限编码二级/三级混用统一规范（`kb:read` vs `model:vendor:write`）——各模块开工前约定编码体系
+- [x] 权限编码二级/三级混用统一规范（`kb:read` vs `model:vendor:write`）——**2026-09-09 完成**：统一规则「`资源路径:动作`，最后一段固定为动作」，写入 IF §6.7（前端按最后一个 `:` 切分或用权限树 `resource` 字段分组，禁用 `startsWith` 前缀匹配）；现有编码零改动，已答复前端 BE-20260909-06
 - [ ] `WorkspaceMapper` 直查 `ie_workspace` 改走 Feign（workspace 服务落地后，TD §3.2 服务边界）
 - [ ] DataScope 行级数据权限拦截器（TD §7.5）——多租户/V1.0 前必须完成，覆盖全部业务列表查询
 
@@ -160,11 +194,20 @@
 - [x] **认证模型定案**：ADR-5（网关校验 JWT 下发明文头）vs 当前「服务自校验 JWT」双轨矛盾 → 已裁决（2026-09-03）：网关校验 JWT + 下发头，但服务端通过 `insight.web.trust-gateway-headers` 开关决定是否信任，双轨共存、默认自校验，见 §三 2026-09-03 留档
 - [x] gateway 模块骨架 + 路由 + 全局 Cors（2026-09-03 完成，`feature/gateway` 分支）：POM 补 jjwt/可执行插件、`GatewayApplication`、`application.yml`（端口 7000、UMS 路由 `/auth/**`+`/api/v1/**`+文档路径、globalcors），`mvn install` 编译通过
 - [x] gateway AuthGlobalFilter：JWT 校验 + 明文头注入（防客户端伪造头）+ `sk-` API Key 分流 + 错误转 Result（TD §8.3）——代码完成并已提交 f45a226（2026-09-04），编译通过，待联调验证
-- [ ] **gateway 全链路冒烟**（待办，需云中间件就绪）：经 7000 网关验证 ① 登录/注册/刷新 ② /auth/me 与业务接口带 token 200 ③ 无 token/伪造 token → 2001 ④ 过期 token → 2007 ⑤ 伪造 X-User-Id 头被清除重建 ⑥ `/doc.html` 白名单放行 ⑦ `sk-` 前缀拒绝；通过后 PR 合入 master
+- [x] **gateway 全链路冒烟**（2026-09-08 完成，云 PG/Redis + UMS 7101 + gateway 7000）：登录/me/refresh 200、register 400 业务码、无 token/坏 token 401、权限不足 403（修复后）、logout 后旧 token 401（撤销生效）——8/8 通过；3 修复见 §三 2026-09-08；`/doc.html` 白名单、`sk-` 分流、过期 token 2007 本次未覆盖，随路由收窄/Nacos 轮补
+- [x] **gateway 复跑冒烟 9/9**（2026-09-09，云 PG/Redis + UMS 7101 + gateway 7000）：登录 200 / 转发 `user/page` 200 / 无 token 401-2001 / 坏 token 401-2001 / **过期 token 401-2007** / **`/doc.html` 200** / **`sk-` 401-2001** / end_user 403-2006 / `/api/v1/nonexistent` 404（路由收窄生效）；全部响应 `Content-Type: application/json;charset=UTF-8`，六类错误/转发路径 `X-Trace-Id` 均为单值（修复见 §三 2026-09-09）
+- [ ] 🟡 未匹配路由（`/api/v1/xxx` 无路由）不进入 GlobalFilter 链 → 404 响应无 `X-Trace-Id`、body 为 Spring 默认错误格式（非 IF §2 `Result`）；如需前端统一处理，需改用 WebFilter 或补 WebFlux 错误处理器（2026-09-09 复跑冒烟发现，不阻塞联调）
+- [x] **gateway 路由按 TD §8.3 细分**（2026-09-09 完成）：`/api/v1/**` 全量 fallback 已收窄为 `/auth/**` + `/api/v1/user|role|permission/**` → ums（含 `/doc.html`/`/webjars/**`/`/v3/api-docs/**` 文档路径），其余 `/api/v1/xxx` 网关层直接 404 不误转 UMS；后续服务接入按 P18 同批新增专属前缀
 - [ ] 服务接入 Nacos 注册/配置中心（冒烟期 UMS 路由为直连 localhost:7101，Nacos 接入后改 `lb://insight-engine-ums`）
-- [ ] 中间件与应用密码差异化：`insight123` / `application.yml` 明文密码改 `.env`/secrets + 环境变量占位注入
+- [ ] 中间件与应用密码差异化：`insight123` / `application.yml` 明文密码改 `.env`/secrets + 环境变量占位注入（云凭据收敛为 §五 gateway PR 合入前置；注意 master 历史 + compose/文档已含同口令，须先轮换，详见 §五 2026-09-09 核实）
 - [ ] 引入 Flyway schema 迁移（替代一次性 init.sql）
 - [ ] 部分容器 healthcheck 补 `start_period`（🟢）
+- [x] gateway 增 TraceGlobalFilter（order=-200，TD §8.3 过滤器链首项）——**2026-09-09 完成**：读取/校验上游 `X-Trace-Id`（非法/缺失则生成 UUID）→ 重建请求头透传 → 回写响应头；`AuthGlobalFilter` 错误响应必带 traceId
+- [x] JWT Claim 常量下沉 common——**2026-09-09 完成**：新增 `common.constant.JwtClaimConstants`（type/access/refresh/tenant_id/ws_id/roles/perms），UMS `JwtUtil` 与 gateway `GatewayJwtParser` 改为共享引用，消除双份字面量
+- [x] gateway 错误响应补 `charset=UTF-8`——**2026-09-09 完成**：`AuthGlobalFilter.writeError` 改用 `new MediaType(APPLICATION_JSON, UTF_8)`，与 UMS 侧 charset 修复对齐
+- [ ] API Key（`sk-`）通道落地（`AuthGlobalFilter` 当前一律拒绝 2001）——workspace/conv 阶段开放 OpenAPI 前必须实现 TD §7.6 校验
+- [ ] gateway 接入 Sentinel 限流（TD §8.3 RateLimitGlobalFilter，生产前）；CORS 由 `*` 收敛为白名单（生产）
+- [ ] refresh 单槽轮换多端语义：并发/多标签刷新可能被判重放并吊销全会话 → 与前端约定 refresh 单飞互斥（IF/前端联调说明）
 
 ### 6.5 长期优化池（🟢，MVP 择机处理）
 
@@ -189,14 +232,24 @@
 
 ## 七、下一步计划（Top 3）
 
-1. **gateway 全链路联调冒烟并合入 master**：确认云中间件（39.106.110.214 PG/Redis）验收 → UMS `application.yml` 数据源/Redis 地址改云 IP（改动需用户授权）→ 本机启 UMS(7101)+gateway(7000) → curl 冒烟清单见 §六 6.4 → 通过后 `feature/gateway` PR 合入
-2. **服务接入 Nacos 注册/配置中心**（gateway 阶段收尾，路由改 `lb://`，UMS/网关注册到 Nacos 服务端——云服务器后续补充 nacos 容器）
-3. 完成 §6.1 高价值 UMS 收尾项（phone 唯一索引、roleId 校验、授权去重、DuplicateKey/1002、Result traceId 回填）——独立收尾任务，不阻塞 gateway
+1. **§五 部署安全红级收敛（PR 合入前置）**：云 PG/Redis 口令轮换 + `ums/application.yml`/`docker-compose.yml` 改环境变量占位 + 安全组收敛 + DB/DEVGUIDE/TD/LEARNING 文档存量清理（需云凭据/控制台，见 §五）——**未完成不合 PR**
+2. **gateway 收口**：本轮工作区改动（路由收窄 + TraceGlobalFilter + charset + JWT 常量 + seed 授权）**复跑冒烟 9/9 已通过**（含 `/doc.html` 白名单、`sk-` 分流、2007 过期 token、`X-Trace-Id` 单值）→ commit → PR（base=master，**待 §五 红级收敛后合入**）→ 云上补 Nacos 容器后路由改 `lb://insight-engine-ums`
+3. **workspace 模块启动**：环境/基础设施收口后进入阶段 5（兑现 BE-20260908-02 交付跟踪）；§6.1 高价值 UMS 收尾项择机独立处理
 
 ---
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-09
+- 内容：gateway 收尾复跑冒烟（`X-Trace-Id` 重复修复验证）——① 复跑前先复现：经网关转发 UMS 的响应出现**两个** `X-Trace-Id`（网关 + 上游 starter-web `TraceFilter` 各回一份，被 `NettyRoutingFilter` 合并追加）→ `TraceGlobalFilter` 改为 `beforeCommit` 内 `headers().set()` 覆盖；② 停网关进程释放 jar 锁 → `mvn -pl gateway -am install` 重编译 → 重启，复跑冒烟 **9/9 通过**（登录 200 / 转发 200 / 无 token 401-2001 / 坏 token 401-2001 / 过期 token 401-2007 / `/doc.html` 200 / `sk-` 401-2001 / end_user 403-2006 / 未匹配路由 404），六类路径 `X-Trace-Id` 计数均为 1；③ 新发现 🟡：未匹配路由不进入 GlobalFilter 链 → 404 无 traceId 且为 Spring 默认错误体（记 §6.4，不阻塞联调）；④ 踩坑：PS 5.1 内联 JSON 传 `curl.exe` 双引号被吞致 500，改临时文件 `-d "@file"`；⑤ 待办：commit + push `feature/gateway`；**PR 合入受 §五 云凭据明文红级阻塞**（需云凭据/控制台做口令轮换 + 安全组收敛）
+- 日期：2026-09-09
+- 内容：环境 / 基础设施 / gateway 三线推进（计划先行）——① **开工四必读**并复述现状（阶段 4 gateway、整体 ~35%、前端 6 条待答复）；② **环境复核**：本机 JDK 21.0.10 / Maven 3.9.9 / Node 24.13.0 正常，`docker` 命令不存在（本机不承载中间件），云服务器无 SSH 凭据 → 云上操作待提供；③ **gateway 待办收口四件**（路由按 §8.3 收窄 + `TraceGlobalFilter`(-200) + 错误响应 `charset=UTF-8` + JWT Claim 常量下沉 common），common/starter-security/gateway 三模块 `mvn install` 编译通过；④ **init.sql 角色 seed 授权补齐**（org_admin 46 / ws_admin 27 / end_user 7，带 `ON CONFLICT DO NOTHING` 可增量重跑）+ DB.md 同步（143）；⑤ **前端 6 条诉求处理**：答复 BE-01（不新增 `ws:switch`）/ BE-05（role 详情示例）/ BE-06（权限编码规范）/ BE-04（SSE `heartbeat`），修复 BE-03（seed），排期 BE-02（workspace），双写 `BE-ISSUES.md` + `FE-SYNC.md §1/§2/§3`；⑥ **待办**：§五 凭据收敛（红级，PR 前置）与云上 Nacos 需云凭据；本轮工作区改动待复跑冒烟后 commit → PR
+- 日期：2026-09-09
+- 内容：建立前后端跨端同步机制（治理「进展同步 / 问题拉通 gap」）——① 新增后端根 `AGENTS.md`（AI 新会话自动加载：开工四必读含前端 BE-ISSUES、前端诉求必答双写、证据纪律、收尾三件套），后端首次拥有与前端对等的自动加载入口，不再依赖人工贴提示词；② 新增 `docs/FE-SYNC.md`（跨端协议 + BE→FE 就绪投影：§1 模块联调就绪清单带 curl 证据 / §2 契约变更 / §3 对前端答复登记 / §4 一键开场白）；③ 前端新增 `docs/BE-ISSUES.md`（FE→BE 信箱，迁移前端 FE-PROGRESS 散落诉求 6 条：`ws:switch` 权限码 / workspace 交付跟踪 / seed 授权 / SSE 心跳 / role 详情示例 / 权限编码规范），前端 `AGENTS.md` 升为「开工四必读 + 收尾四件套」；④ 修正 §二 前端看板滞后（0% → P0/P1 100%、P2 ~90%，此前误记未开始）。后续：每轮后端对话按 AGENTS 铁律 1 处理 BE-ISSUES 待答复项。
+- 日期：2026-09-08
+- 内容：全量代码 review（按 DEVGUIDE §7.4 通用方法论，范围=gateway 全量 + UMS-1/UMS-2 修复 + starter 安全/web 变更）——① 复核通过：`SecurityExceptionHandlerAdvice`（403/2006，陷阱库实例 1 已闭环）、`UserContextFilter` 默认关（UMS-1）、refresh jti 轮换/撤销链（UMS-2，logout/改密/禁用均删 refresh key）实现正确，冒烟已覆盖 401/403/轮换/撤销；② 无新代码级 🔴；③ 新发现 🟡（已入 §6.4）：gateway 缺 TraceFilter（TD §8.3 链首）/ JWT Claim 常量双份 / gateway 错误响应无 charset / sk- 通道待 workspace 阶段 / 限流与 CORS 收敛待生产 / refresh 单槽多端误吊销需前端单飞；④ 部署安全 🔴 前置：UMS yml 云凭据明文已进 git（§五 gateway PR 合入前置，改环境变量注入 + 云库强口令 + 安全组收敛后再合）；⑤ 修正：PROGRESS 工作区版本曾被我以过时内容覆盖（丢失 gateway 冒烟/云环境进展），已 `git checkout e4998c5` 恢复 HEAD 版并在此整合。
+- 日期：2026-09-08
+- 内容：gateway 冒烟收尾 + 乱码根治 + Git 规范纠偏 + 文档更新（收尾轮）——① **冒烟前置 3 阻塞修复**：a) master 缺 `JwtRefreshPayload`（补交 cde4e71 未合 master）→ 用户推送本地 master 至远程（ls-remote 核实远程 master=09cb33f，已含补交）；b) ums/gateway pom 补 `spring-boot-maven-plugin` 的 `repackage` execution（自定义父 pom 无默认绑定，此前只产普通 jar 无法 `java -jar`）→ fat jar 启动正常；c) `@PreAuthorize` 拒绝误报 500 → starter-security 新增 `SecurityExceptionHandlerAdvice`（403/code=2006）；② **中文乱码根治**：实测服务端字节为合法 UTF-8，根因 = PS 5.1 对无 charset 的 JSON 按 ISO-8859-1 解码 → starter-web 给 Jackson 转换器设默认 UTF-8（响应头带 `charset=UTF-8`），PS 实测解码「默认空间」正常；③ **Git 规范纠偏**：本地 merge master + 直接 push 违反 GitHub Flow「master 只接受 PR」被纠正（见 §四），LEARNING.md 新增「Git 常用命令速查」8 场景 + 五条铁律；④ **收尾**：文档归口 feature/gateway（a84a574 复盘批 + fad5940 Git 速查）、stash 清空、`merge origin/master`（fe912aa 无冲突）并推送远程分支（与 master 一致）；⑤ 本机服务全停（后续 IDEA 界面启动）；6.4 未覆盖冒烟项（doc.html 白名单 / sk- 分流 / 2007 过期 token）随路由收窄 + Nacos 轮补。
 - 日期：2026-09-08
 - 内容：gateway 全链路实机冒烟（UMS 7101 + gateway 7000 本机双服务，云 PG/Redis）——① **UMS 配置切云**：`application.yml` datasource/redis 指向腾讯云服务器（39.106.110.214），两处改动生效；② **修 3 个阻塞项**：a) `feature/gateway` 缺 `JwtRefreshPayload.java`（PR #3 补交 `cde4e71` 从未合入 master，master 系分支编译必挂）→ cherry-pick 到本分支，**master 仍缺该文件，需在 GitHub 把 PR #3 真正合入**；b) ums/gateway pom 的 `spring-boot-maven-plugin` 缺 `repackage` execution 绑定（自定义父 pom 不带 starter-parent 默认绑定），`package` 只产普通 jar 无法 `java -jar` → 两模块补 `repackage` 后 fat jar 正常；c) 冒烟抓到 **`@PreAuthorize` 拒绝误报 500**：`AccessDeniedException` 在 DispatcherServlet 层被 `GlobalExceptionHandler` 的 Exception 兜底捕获，到不了过滤器链的 `RestAccessDeniedHandler`（其注释声称覆盖该方法级场景但实际失效）→ starter-security 新增 `SecurityExceptionHandlerAdvice`（`@Order(HIGHEST_PRECEDENCE)` 的 `@RestControllerAdvice`，403 + code=2006）并在 `SecurityAutoConfiguration` 注册；③ **冒烟 8 项全过**：注册 400 业务码 / 登录(经网关) 200 含 jti refresh / me 200 / 无 token 401 / 坏 token 401 / 权限不足 403(修复后) / refresh 轮换出新 jti / logout 后旧 token 401（撤销生效，且第 7 步 refresh 已顶掉旧 token 亦为轮换预期）；④ 疑点：响应 `workspaceName`「默认空间」在 PS 客户端显示乱码，疑似 DB 种子数据编码，待查；冒烟脚本留存 `smoke-test.ps1`（临时）。
 - 日期：2026-09-08

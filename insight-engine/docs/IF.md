@@ -1,5 +1,9 @@
 # 智擎 AI（InsightEngine）—— 接口设计文档（IF）
 
+> **本文档是**：接口契约唯一事实源 —— 每个接口的路径、入参、出参、错误码。
+> **何时看**：写接口 / 调接口 / 联调前必读；前后端都只认这份，不读对方代码。
+> **不负责**：数据库表结构（→ `DB.md`）、产品需求（→ `PRD.md`）。
+
 > 版本：v1.0（MVP）
 > 撰写日期：2026-08-25
 > 关联文档：PRD、TD（技术方案）
@@ -427,9 +431,38 @@ curl -X POST http://localhost:7000/auth/login \
 
 `GET /api/v1/role/{id}`
 
+**响应 `data`**：
+
+```json
+{
+  "id": 10,
+  "code": "hr_operator",
+  "name": "HR 运营",
+  "scope": "WS",
+  "builtin": 0,
+  "description": "HR 业务运营",
+  "permissionIds": [124, 125, 137, 138]
+}
+```
+
+> `permissionIds`：**扁平 `Long` 数组**，元素为 `ie_permission.id`（数字），与 `PUT /api/v1/role/{id}/permissions`（§6.4）请求体同构，前端可直接用于勾选回显；**不含父级/分组节点**（分组信息仅见于 §6.3 权限树的 `resource` / `children`）。`GET /api/v1/role/list`（§6.1）不返回该字段（为 `null`）。
+
 ### 6.6 删除角色
 
 `DELETE /api/v1/role/{id}`（`builtin=1` 禁止删除，返回 `1003`）
+
+### 6.7 权限编码规范
+
+**格式**：`资源路径:动作`；资源路径可含多个 `:` 分段，**最后一段固定为动作**。
+
+| 层级 | 示例 | 资源路径 | 动作 |
+|------|------|----------|------|
+| 二级 | `kb:read` | `kb` | `read` |
+| 三级 | `model:vendor:write` | `model:vendor` | `write` |
+
+**解析规则**：按**最后一个 `:`** 切分，右侧为动作、左侧为资源路径。前端若需按域分组/前缀判断，请使用权限树返回的 `resource` 字段（§6.3），**不要对 `code` 做 `startsWith("kb:")` 之类的前缀匹配**——三级编码（如 `model:vendor:write`）会因此误判。
+
+**动作取值**：`read` / `write` / `create` / `update` / `delete`（对应 `ie_permission.action`）。
 
 ---
 
@@ -942,6 +975,7 @@ curl -X POST http://localhost:7000/api/v1/kb/1/doc/upload \
 | `reference` | 引用 | `{"docName":"员工手册.pdf","page":8,"content":"..."}` |
 | `error` | 错误 | `{"code":5001,"message":"..."}` |
 | `finish` | 结束 | `{"usage":{"totalTokens":144},"latencyMs":1320}` |
+| `heartbeat` | 心跳保活（每 15s，不可关闭） | `{"ts":1725800000000}` |
 
 **非流式（stream=false）**：
 
