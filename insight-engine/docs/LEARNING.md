@@ -1,5 +1,9 @@
 # 学习笔记（LEARNING）
 
+> **本文档是**：你的技术点笔记 —— 每个知识点的原理 + 在本项目里怎么用 + 面试可能怎么问。
+> **何时看**：学完一个技术点时追加；面试前集中复习。
+> **不负责**：项目进度（→ `PROGRESS.md`）、协作方法（→ `DEVGUIDE.md`）。
+
 > 本文件是你在开发过程中的**个人技能笔记真相源**。
 > 每学完一个技术点，让 AI 帮你把"原理 + 项目用法 + 面试追问点"沉淀到本文件。
 > 面试前快速翻阅本文件即可复习全部技术点。
@@ -34,6 +38,10 @@
 - [x] ThreadLocal 线程隔离与 remove 防串号（UserContext / MDC / SecurityContextHolder 共同底层）（2026-09-02）
 - [x] Git 实操全流程：本地仓库推到 GitHub（首次对接：remote/push/代理443/PR/main默认分支/同步清理）（2026-09-02）
 - [x] Git 常用命令速查：日常高频命令按场景查（状态/提交/分支/同步/stash/撤销与修正/代理/标准流水）（2026-09-08）
+- [x] Maven 构建与 Spring Boot 可执行 jar：生命周期阶段/插件goal/execution/父POM/fat jar/Main-Class vs Start-Class（2026-09-08，事故驱动：缺 repackage 报无主清单属性）
+- [x] Spring 异常处理分层：@PreAuthorize 403 为何被误报 500（ControllerAdvice vs Security Filter 层 / @Order / @ExceptionHandler 匹配规则）
+- [x] Spring Boot starter 设计：依赖单向 + 条件装配 + ObjectProvider 可选装配（common 零框架依赖 / AutoConfiguration.imports / @ConditionalOnXxx）
+- [x] Spring Cloud Gateway 核心原理：跟着一条请求走网关（Route/Predicate/Filter、GlobalFilter vs GatewayFilter、首配命中与路由吞并、lb:// 与 NettyRoutingFilter、WebFlux 选型）
 - [x] Docker 运维命令地图：容器生命周期命令（pull/run/ps/logs/exec/stop/start/rm）+ Linux 配套语法（重定向/管道/heredoc/systemctl）+ compose 命令对照 + `run` 参数↔compose 字段映射（2026-09-08，含实战复盘：`docker run` 漏挂数据卷导致数据零持久化）
 
 **待学习**：
@@ -4772,6 +4780,554 @@ docker exec -it insight-redis sh                                 # 交互式进�
    
    - 现象：容器删了，数据库/业务数据全没，**任何命令都找不回**。
    - 规避：删前先确认数据是否落卷——`docker inspect 容器 --format '{{json .Mounts}}'`；没挂卷又想保留，先 `docker cp` 出来或 `docker commit` 成镜像。
+
+---
+
+## Maven 构建与 Spring Boot 可执行 jar：跟着一次"打包失败"走完（零基础版）
+
+- 学于：2026-09-08（事故驱动：自定义父 POM 下 `java -jar` 报"没有主清单属性"，最终定位是缺 repackage execution）
+- 关联模块：根 `pom.xml` / `insight-engine-starter/pom.xml` / ums、gateway 模块 pom / `spring-boot-maven-plugin`
+- 来源：2026-09-08 实机排障全流程
+
+> 这一篇**不先背术语**，而是跟着一次真实故障走一遍：我们敲了 `mvn package` 拿到 jar，`java -jar` 却报「没有主清单属性」。顺着这条线，把 Maven 的工序、插件、执行绑定、父 POM、fat jar 逐个搞明白。
+>
+> **先给结论（走完后回头对一遍）**：
+> `mvn package` 只是"按工序把编译结果打成一个普通 jar"，**这个 jar 默认不能 `java -jar`**；能直接跑的是 **fat jar**——它由 `spring-boot-maven-plugin` 的 `repackage` 动作把普通 jar 重做一遍得到；而这个动作**必须写进 pom 的 `<executions>` 才会自动执行**。官方脚手架之所以看不到这段，是因为 `spring-boot-starter-parent` 帮我们写了；我们的工程是自定义父 POM，所以漏了 → 出事。
+
+---
+
+#### 第 0 步：故障现场（先看清现象）
+
+```powershell
+java -jar insight-engine-ums-1.0.0-SNAPSHOT.jar
+# → insight-engine-ums-1.0.0-SNAPSHOT.jar 中没有主清单属性
+```
+
+这句话在说什么？**JVM 打开这个 jar，读它的"说明书"（`META-INF/MANIFEST.MF`），没找到"从哪个类开始执行"这一行**，于是不知道该跑谁，直接罢工。
+
+那一刻我们只知道一件事：**这个 jar 不是一个"能自己启动"的 jar。** 往下追：为什么？
+
+#### 第 1 步：`mvn package` 到底做了什么
+
+Maven 是"照着 `pom.xml` 施工"的工具。施工顺序被写死在一张**工序表**里（叫"生命周期"），最常用的几个格子是：
+
+```
+校验 validate → 编译 compile → 测试 test → 打包 package → 安装 install
+```
+
+一条铁律：**你执行哪一个格子，它前面的格子都会先跑一遍。** 所以我们敲 `mvn package`，实际跑了 validate + compile + test + package。
+
+再看一眼真实日志——**重点来了**：
+
+```text
+[INFO] --- maven-compiler-plugin:3.x:compile (default-compile) ---
+[INFO] --- maven-surefire-plugin:3.x:test (default-test) ---
+[INFO] --- maven-jar-plugin:3.4.1:jar (default-jar) ---
+[INFO] BUILD SUCCESS
+```
+
+这三行就是"谁在干活"：编译是 compiler 插件干的，跑测试是 surefire 插件干的，**打 jar 是 jar 插件干的**。
+
+> **关键认知（本篇最重要的三句话之一）**：工序表上的"格子"本身不干活，它只是个顺序位；干活的是**挂在格子上的插件动作**。日志里 `插件名:动作名` 就是证据。
+> 而我们这次的日志里，**没有 `spring-boot:repackage` 这一行**——缺的那一步就在这。
+
+#### 第 2 步：这个 jar 为什么跑不起来
+
+先用一条命令看清它肚子里有什么：
+
+```bash
+jar tf insight-engine-ums-1.0.0-SNAPSHOT.jar | Select-String "BOOT-INF"
+# → 什么都没有
+```
+
+`BOOT-INF` 是 Boot 可执行 jar 的标志目录，**没有它 = 这只是一个普通 jar**。普通 jar 长这样：
+
+```
+insight-engine-ums-1.0.0-SNAPSHOT.jar
+├── com/insightengine/ums/…        ← 我们的类，直接躺在根路径
+└── META-INF/MANIFEST.MF           ← 说明书里没有 Main-Class（或有 Main-Class 但…）
+```
+
+想想 `java -jar` 的规定：JVM 只认说明书里的 `Main-Class`，没有就报"没有主清单属性"；**就算有，依赖 jar 又不在包里**，启动后加载第一个第三方类就 `ClassNotFoundException`。
+
+所以"能直接跑"必须同时满足两条：
+1. 说明书里有**正确的入口**；
+2. **依赖也得在包里**（否则找不到类）。
+
+#### 第 3 步：能跑的 jar（fat jar）长什么样
+
+`repackage` 做的事，就是把上面那个"普通包裹"重新打包成"全装在一起的大包裹"：
+
+```
+insight-engine-ums-1.0.0-SNAPSHOT.jar        ← fat jar
+├── BOOT-INF/classes/com/insightengine/ums/… ← 我们的类挪进这里
+├── BOOT-INF/lib/spring-boot-3.2.5.jar        ← 所有依赖被装进来
+├── BOOT-INF/lib/insight-engine-starter-*.jar
+├── META-INF/MANIFEST.MF
+└── org/springframework/boot/loader/…         ← 引导器 JarLauncher
+```
+
+问题：JVM 压根不认识 `BOOT-INF` 这种目录，怎么办？Boot 派了个"引导器"当入口：
+
+```
+java -jar xxx.jar
+  │  JVM 看说明书的 Main-Class → 找到 JarLauncher，执行它
+  ▼
+JarLauncher 用自定义类加载器（能读 BOOT-INF/lib 里嵌套的 jar）
+  ▼
+反射调用 Start-Class（我们的 UmsApplication.main）
+```
+
+> **Main-Class 与 Start-Class 一句话记住**：`Main-Class` = 谁发动引擎（`JarLauncher`），`Start-Class` = 真正要跑的程序（`UmsApplication`）。JVM 只认前者，后者是 Boot 自己约定的。
+
+#### 第 4 步：怎么把普通 jar 变成 fat jar（插件 / goal / execution）
+
+三个词在"施工队"比喻下一句话就懂：
+
+- **插件（plugin）** = 一个施工队（如 `spring-boot-maven-plugin`）；
+- **goal（动作）** = 这个队会的具体手艺（`repackage` 就是"把普通 jar 重做成 fat jar"这门手艺）；
+- **execution（派工单）** = 在图纸上写清"**做到 package 这道工序时，派这个队用这门手艺**"。
+
+**不写派工单会怎样？** 施工队照样在工地待命，但没人叫它——你得自己手动敲 `mvn spring-boot:repackage`。我们当时就是没写派工单，所以 `mvn package` 跑完，没人做"重做成 fat jar"这一步。
+
+派工单长这样（修复后）：
+
+```xml
+<plugin>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-maven-plugin</artifactId>
+    <configuration>
+        <mainClass>com.insightengine.ums.UmsApplication</mainClass>  <!-- 填进 Start-Class -->
+    </configuration>
+    <executions>
+        <execution>
+            <goals>
+                <goal>repackage</goal>      <!-- 派工：用 repackage 这门手艺 -->
+            </goals>
+            <!-- 没写 <phase>：用该动作的默认工序，repackage 默认就是 package -->
+        </execution>
+    </executions>
+</plugin>
+```
+
+#### 第 5 步：为什么我们的工程没自动做这一步（父 POM 的差异）
+
+子模块写 `<parent>` = **继承父 POM 的构建配置**（插件、版本、默认参数都跟着继承）。
+
+`spring-boot-starter-parent`（Spring Boot 官方的"标准父亲"）替所有 Boot 应用做了一件关键事：**它自己就写好了 `spring-boot-maven-plugin`，并且已经带了那段 `<executions>` 绑定**。
+
+所以从 start.spring.io 生成的工程，pom 里**看不到** executions 那段——**看不到 ≠ 没有，是从父亲那里继承来的。**
+
+而我们的工程是**自定义父 POM**（`insight-engine` 聚合父 POM + starter 父 POM），父 POM 里只放了 `<pluginManagement>`：
+
+> **`pluginManagement` 与 `plugins` 一句话区别**：`pluginManagement` 只"登记这个插件用几号版本"，**不会激活**；真正让插件干活的是子模块 `<build><plugins>` 里写它。
+
+于是：我们的 ums/gateway pom 写了插件 + `mainClass`，却**漏了 `<executions>`** → package 阶段没人做 repackage → 产出的还是普通 jar。**这就是事故的第二层原因**（第一层是"不知道 package 默认只产普通 jar"）。
+
+#### 第 6 步：修复与验证（实际敲了什么、看到了什么）
+
+```powershell
+# ① 两个 pom 补 executions（见第 4 步那段 XML），然后重新打包
+cd d:/CodexProject/insight-engine
+mvn -q -pl insight-engine-modules/insight-engine-ums,insight-engine-modules/insight-engine-gateway -am package -DskipTests
+
+# ② 验证：看到 BOOT-INF 说明已经是 fat jar
+jar tf insight-engine-modules/insight-engine-ums/target/insight-engine-ums-1.0.0-SNAPSHOT.jar | Select-String "BOOT-INF"
+# → META-INF/MANIFEST.MF
+#   BOOT-INF/classes/com/
+#   BOOT-INF/classes/com/insightengine/
+
+# ③ 启动：Tomcat/Netty 起来 = 成功
+java -jar insight-engine-modules/insight-engine-ums/target/insight-engine-ums-1.0.0-SNAPSHOT.jar
+# → Tomcat started on port 7101 (http)
+# → Started UmsApplication in 2.4 seconds
+```
+
+**插播：另一个坑（比第一个更隐蔽）**——fat jar 做好了，启动时却报某个类找不到：
+
+```text
+Caused by: java.io.FileNotFoundException:
+  class path resource [com/insightengine/starter/security/session/TokenSessionService.class] cannot be opened
+```
+
+原因：fat jar 里 `BOOT-INF/lib/insight-engine-starter-security-*.jar` 是**本地仓库里的旧构件**（时间戳 8/26），新加的类不在里面。教训两点：
+
+1. **依赖模块（starter 等）改过之后，先全量 `mvn install` 把新构件刷进本地仓库，再 `package` 应用模块**；
+2. **别只信 `BUILD SUCCESS`**——要看产物：`jar tf BOOT-INF/lib/xxx.jar | Select-String "新类名"` 核对嵌套 jar 内容（必要时先 `jar xf` 把嵌套 jar 抽出来再 `jar tf`）。
+
+### 一张表：本篇出现过的术语速查
+
+| 术语 | 一句话解释 |
+|---|---|
+| `pom.xml` | 施工图纸：依赖清单 + 构建配置 + 坐标 |
+| 生命周期（lifecycle） | 那张固定顺序的"工序表" |
+| 阶段（phase） | 工序表上的格子：compile / test / package / install…；执行某格 = 前面全跑一遍 |
+| 插件（plugin） | 施工队，如 `maven-jar-plugin`、`spring-boot-maven-plugin` |
+| goal（动作） | 施工队的一门手艺，如 `jar:jar`（打成 jar）、`repackage`（重做成 fat jar） |
+| execution（派工单） | 写明"哪个阶段派哪个插件做哪个 goal"；不写就只能手动 `mvn 插件:goal` |
+| 父 POM（parent） | 子模块继承它的构建配置；`spring-boot-starter-parent` 已预置 repackage 绑定 |
+| `pluginManagement` | 只登记插件版本、不激活；子模块需在 `<plugins>` 里引用才生效 |
+| 普通 jar | 只有自己的类 + 说明书，依赖不在包里 → 不能直接 `java -jar` |
+| fat jar | `BOOT-INF/classes` + `BOOT-INF/lib`（依赖）+ 引导器 → 能直接 `java -jar` |
+| `Main-Class` | jar 说明书里"JVM 该执行谁"（fat jar 里是 `JarLauncher`） |
+| `Start-Class` | Boot 约定的"真正的业务启动类"（如 `UmsApplication`） |
+| `repackage` | `spring-boot-maven-plugin` 的动作：把普通 jar 重做成 fat jar |
+
+### 面试可能追问
+
+- **Q1：`mvn package` 与 `mvn install` 区别？** 答：package 只产出 jar 到 `target/`；install 在 package 基础上把 jar 复制进本地仓库，供**其他模块/工程**作为依赖引用。`-am`（also make）是让 reactor 连带构建依赖模块。
+- **Q2：为什么自定义父 POM 时 Boot 插件不自动 repackage？** 答：repackage 到 package 阶段的绑定是 `spring-boot-starter-parent` 在 `<build><plugins>` 里**预置的 execution**；自定义父 POM 没继承它，就要自己写 `<executions>`。同理，`spring-boot-maven-plugin` 的版本往往也由父 POM 的 `<pluginManagement>` 统一。
+- **Q3：`Main-Class` 和 `Start-Class` 的关系？** 答：JVM 只认 `Main-Class`；fat jar 的 Main-Class 是 `JarLauncher`（Boot 的引导器），由它用自定义类加载器加载 `BOOT-INF/lib` 里的嵌套依赖，再反射执行 `Start-Class`（真正的业务 Application 类）。两层结构是为了让"JVM 无法理解的分层 jar"能被自定义 ClassLoader 加载。
+- **Q4：普通 jar 直接引依赖会怎样？** 答：类能编进 jar，但依赖不在 jar 里，`java -jar` 启动后第一步 `loadClass` 就 `ClassNotFoundException`。要解决只能手动拼 classpath（`java -cp`），或做成 fat jar / 用启动器脚本。
+- **Q5：phase、plugin、goal、execution 四者一句话各是什么？** 答：phase=工序表顺序；plugin=工具箱；goal=具体工具；execution=把工具排进工序表的"排班记录"（含默认阶段）。阶段不干活，干活的是绑定到阶段上的 goal。
+
+### 踩坑提醒
+
+1. **坑：改完 pom 忘 `mvn install` 依赖模块** —— 应用模块 fat jar 里打进的是本地仓库旧构件（本项目 starter-security 缺新类）。规避：依赖模块改动后先 `install` 再 `package`，并 `jar tf BOOT-INF/lib/` 验证。
+2. **坑：只信 `BUILD SUCCESS` 不看产物结构** —— 增量构建可能跳过重建。规避：看 jar 时间戳是否更新 + `jar tf` 检查 BOOT-INF。
+3. **坑：把 `java -jar` 跑通当成了唯一的验证** —— 还要 curl 探活确认服务真的监听了端口。
+
+---
+
+## Spring 异常处理的分层：`@PreAuthorize` 的 403 为什么会被误报成 500
+
+- 学于：2026-09-08（事故驱动：冒烟时带 token 访问无权限接口返回 500，应为 403）
+- 关联模块：`starter-web/handler/GlobalExceptionHandler` / `starter-security/handler/RestAccessDeniedHandler`（新增 `SecurityExceptionHandlerAdvice`）/ `SecurityAutoConfiguration` / `@PreAuthorize`
+- 来源：2026-09-08 冒烟实测 + 堆栈定位
+
+> 目标：搞懂「一次请求抛出的异常，到底被哪一层接住」——为什么方法级 `@PreAuthorize` 拒绝时，Security 配置的 `accessDeniedHandler` 救不了场，而 ControllerAdvice 的 Exception 兜底却把 403 变成了 500。
+
+### 直观类比（先建立直觉）
+
+一次 HTTP 请求像一份文件在**政府办事大厅里逐层流转**，每层都有自己的"保安"和"窗口"：
+
+```
+浏览器
+  │  请求进来
+  ▼
+① 大厅门口的保安队（Filter 链）
+   └ 其中 Security 的 ExceptionTranslationFilter 是"安检主管"：
+     在这里拦下的异常 → 由 AuthenticationEntryPoint（未登录）/ AccessDeniedHandler（无权限）出错误单
+  ▼
+② 办事窗口（DispatcherServlet：MVC 的心脏）
+   └ ControllerAdvice = 窗口里的"值班经理"：业务代码抛的异常，先在窗口内部处理
+   └ 方法级安全 @PreAuthorize 是在这层用 AOP 把方法"包一层安检"
+  ▼
+③ 具体柜台（Controller 方法）
+```
+
+**关键认知：只要异常是在 ②窗口内部抛出来的，①大厅门口的保安就永远看不见它——因为文件根本没出窗口。**
+
+### 一、两条"授权防线"，负责的位置完全不同
+
+Spring Security 有**两层授权**，拦截位置和异常出口都不同：
+
+| | URL 级授权 | 方法级授权 |
+|---|---|---|
+| 配置写法 | `authorizeHttpRequests(auth -> auth.requestMatchers("/admin/**").hasRole(...))` | 方法上 `@PreAuthorize("hasAuthority('member:read')")` |
+| 拦截位置 | **Filter 链**（`AuthorizationFilter`，在 DispatcherServlet **之前**） | **AOP 方法拦截**（`AuthorizationManagerBeforeMethodInterceptor`，在 DispatcherServlet **内部**、Controller 方法**调用前**） |
+| 拒绝时抛出 | 在 Filter 层抛 `AccessDeniedException` | 在 Controller 调用栈内抛 `AccessDeniedException` |
+| 谁能接住 | `ExceptionTranslationFilter` → `accessDeniedHandler(...)` 你配的处理器 | **先被 `@RestControllerAdvice` 的 `@ExceptionHandler` 抢到**（它就在同一线程栈里更靠近异常抛出点） |
+
+> 一句话记忆：**filter 层的 AccessDeniedHandler 只能管"进 DispatcherServlet 之前被拦的请求"；`@PreAuthorize` 的异常发生在 DispatcherServlet 内部，出不了门，归 ControllerAdvice 管。**
+
+### 二、本项目事故：403 变成 500 的完整链路
+
+```
+带 token 请求 /api/v1/user/page（end_user 角色，无 member:read 权限）
+   ↓
+请求通过 Filter 链（URL 级只要求 authenticated，放行）
+   ↓
+进入 DispatcherServlet → Controller 方法前
+   ↓
+@PreAuthorize("hasAuthority('member:read')") 拦截器抛 AccessDeniedException
+   ↓  ← 关键：此刻还在 DispatcherServlet 内部
+@RestControllerAdvice（GlobalExceptionHandler）
+   └ @ExceptionHandler(AccessDeniedException.class)？—— 没有这个方法！
+   └ 退而匹配 @ExceptionHandler(Exception.class) 兜底 → 记 [systemError]，返回 500
+```
+
+同时 `RestAccessDeniedHandler`（实现了 Security 的 `AccessDeniedHandler`）**注释声称**覆盖 `@PreAuthorize` 场景，但它挂在 `ExceptionTranslationFilter` 上——异常根本走不到 filter 层，**它的代码永远不执行**。于是：预期 403/2006，实际 500/9999。
+
+### 三、修复：给"值班经理"排好班
+
+思路 = 在 DispatcherServlet 层**显式**接住 `AccessDeniedException`，按语义返回 403：
+
+```java
+@Slf4j
+@Order(Ordered.HIGHEST_PRECEDENCE)          // 关键①：优先级要高于 Exception 兜底所在 advice
+@RestControllerAdvice
+public class SecurityExceptionHandlerAdvice {
+    @ExceptionHandler(AccessDeniedException.class)   // 关键②：显式接住
+    public ResponseEntity<Result<Void>> handleAccessDenied(AccessDeniedException e,
+                                                           HttpServletRequest request) {
+        log.warn("[accessDenied] uri={}, message={}", request.getRequestURI(), e.getMessage());
+        Result<Void> result = Result.fail(ErrorCode.FORBIDDEN);   // code=2006, http=403
+        // ... 回填 traceId
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(result);
+    }
+}
+```
+
+两个"关键"对应的规则：
+- **`@ExceptionHandler` 匹配规则**：Spring 在**所有 advice 的所有 handler 方法里**选"最能处理该异常"的那个——先按异常类型最具体（`AccessDeniedException` 比 `Exception` 具体），多个 advice 再按 `@Order`（数值小优先，默认 `LOWEST_PRECEDENCE`）。修复前兜底 advice 无 `@Order`，排最后；但新 advice 若不标高优先级，理论上兜底（Exception）与它都"能处理"时，**同一 advice 内看类型具体性，跨 advice 看优先级**——标 `HIGHEST_PRECEDENCE` 保证先轮到它。
+- 结果：无权限 → HTTP 403 + `code=2006 无权限`，语义正确，且不再污染错误日志（不再当 systemError 打堆栈）。
+
+### 四、为什么推荐"另起一个 advice"而不是在兜底里 `instanceof` 判断
+
+```
+兜底写法（不推荐）：
+@ExceptionHandler(Exception.class) 
+handle(e){ if (e instanceof AccessDeniedException) return 403; else return 500; }
+```
+问题：把"错误分类逻辑"塞进一个不断膨胀的兜底方法；新异常类型一多就全是 if-else；且 403 不该走 systemError 日志路径。**正确姿势 = 用 advice/ExceptionHandler 的"多态分发"替代手写 instanceof**，每个异常一种 handler、天然 OCP。
+
+### 面试可能追问
+
+- **Q1：`@PreAuthorize` 被拒绝时抛的异常会被 filter 层 AccessDeniedHandler 捕获吗？** 答：不会。方法级拦截在 DispatcherServlet 内部（AOP 在 Controller 调用链上），异常在 MVC 层就被 `@RestControllerAdvice` 处理了，到不了 `ExceptionTranslationFilter`。URL 级授权（`authorizeHttpRequests`）被拒才由 filter 层 handler 接管。
+- **Q2：多个 `@ExceptionHandler` 都能匹配时选谁？** 答：类型最具体的优先；跨 advice 时按 `@Order`（小者优先）。兜底 `Exception` 只在没有更具体 handler 时命中。
+- **Q3：`@RestControllerAdvice` 与 `@ControllerAdvice` 区别？** 答：后者可配 `@ResponseBody`/返回 `ResponseEntity`；前者默认所有 handler 返回值走消息转换（相当于 +@ResponseBody），REST 场景用它。还可指定 `basePackages`/`assignableTypes` 缩小作用域。
+- **Q4：`AccessDeniedHandler`、`AuthenticationEntryPoint`、`@ExceptionHandler` 三者分工？** 答：前两者是 Security filter 层的"错误出口"（EntryPoint=未认证，Handler=已认证无权限），处理**走不出 DispatcherServlet 的异常用不到**；`@ExceptionHandler` 是 MVC 层的异常出口，业务/方法级安全异常在这层处理。Rest API 项目通常三层都要配，各管一段。
+- **Q5：方法级安全还有哪些实现（除 @PreAuthorize）？** 答：`@Secured`、`@RolesAllowed`(JSR-250)、`@PostAuthorize`（方法后校验返回值）。Spring Security 6 的 `AuthorizationManager` 是统一抽象，`AuthorizationManagerBeforeMethodInterceptor` 负责方法前拦截。
+
+### 踩坑提醒
+
+1. **坑：给 Security 配了 `accessDeniedHandler` 就以为 `@PreAuthorize` 有兜底** —— handler 只管 filter 层异常。规避：方法级被拒的语义（403）在 ControllerAdvice 显式补一个 `@ExceptionHandler(AccessDeniedException.class)`，并记得给该 advice 标高优先级。
+2. **坑：兜底 `Exception` 会把所有"没专门处理"的异常当 500** —— 权限拒绝、工具禁用(403)、模型超时(504)等有语义的状态码都会失真。规避：给业务异常定义带 HTTP 语义的 ErrorCode + 每种有意义的异常配专门 handler。
+3. **坑：新 advice 忘 `@Order`** —— 若目标类型也出现在低优先级 advice 的 Exception 兜底里，优先级不定会误入兜底。规避：显式标 `@Order(HIGHEST_PRECEDENCE)`。
+
+---
+
+## Spring Boot starter 设计：依赖单向 + 条件装配 + ObjectProvider 可选装配
+
+- 学于：2026-09-08（复盘 starter-web 为何不处理 `AccessDeniedException`、gateway 为何不能引 starter-web）
+- 关联模块：`insight-engine-common/api` + 8 个 starter + 业务模块；`WebAutoConfiguration` / `SecurityAutoConfiguration` / `JwtAuthFilter`
+- 来源：2026-09-08 权限修复复盘 + 工程架构复盘
+
+> 目标：把 starter 的"分层规矩"讲透——为什么依赖要单向、为什么配置要条件装配、为什么"接口在 starter、实现在业务模块"用 `ObjectProvider` 做可选装配。这是架构面试的高频题。
+
+### 直观类比（先建立直觉）
+
+- **common** = 纯"常识库"（常量、POJO、异常定义），不依赖任何框架——就像字典，谁都能查，查它不会把别的书带进房间；
+- **starter** = "能力包/插座"：声明"我提供 XX 能力，插上就有"，比如 starter-security 提供"安全插座"；
+- **业务模块（ums/gateway）** = 真正用电的电器：需要什么能力就插什么插座；
+- 规矩只有一条：**插座不能反向依赖电器，更不许两个插座互相插**（依赖单向、无环）。
+
+### 一、为什么 common 必须"零框架依赖"
+
+工程分四层：`common` → `api` → `starter` → 业务模块（modules）。规则是**上层依赖下层、单向**。
+
+`gateway` 是 **WebFlux**（响应式）栈，业务服务（UMS）是 **WebMvc**（Servlet）栈。如果 `common` 里引了 Servlet 的 `HttpServletRequest` 之类，gateway 一引 common，WebFlux 应用就被迫把 Servlet 全家桶拖进 classpath → 两套 Web 体系共存冲突（`ClassCastException`/Bean 重复等）。所以：
+
+> **common 只放"与 web 框架无关"的东西（纯 POJO、ErrorCode、Result、常量），让两种栈都能安全复用。**
+
+### 二、starter 的"三件套"：自动配置类 + 条件装配 + imports 注册
+
+一个 starter 生效靠三样：
+
+1. **自动配置类**（`XxxAutoConfiguration`，标 `@Configuration`）——把能力相关的 Bean 都声明好；
+2. **注册文件**：`src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`，内容一行一个自动配置类全限定名。Spring Boot 启动时读这个文件加载配置类（**这就是"引了 starter 就自动生效"的机制**）；
+3. **条件装配**：`@ConditionalOnXxx` 让配置"看情况才生效"。
+
+条件装配全家福（常问）：
+
+| 注解 | 生效条件 |
+|---|---|
+| `@ConditionalOnClass` | classpath 有某类（常配合 `@ConditionalOnMissingBean` 防重） |
+| `@ConditionalOnMissingBean` | 容器里没有某 Bean（业务可覆盖 starter 默认） |
+| `@ConditionalOnWebApplication(type = SERVLET)` | 当前是 Servlet 应用（**gateway WebFlux 不会加载**） |
+| `@ConditionalOnProperty(...)` | 配置项满足才生效（本项目 `trust-gateway-headers=true` 才注册 UserContextFilter） |
+
+### 三、本项目两个直接案例
+
+**案例 1：starter-web 的条件装配（为什么 gateway 不会被污染）**
+
+```java
+@Configuration
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+public class WebAutoConfiguration {
+    @Bean @ConditionalOnMissingBean(TraceFilter.class)
+    public FilterRegistrationBean<TraceFilter> traceFilterRegistration() { ... }
+    // UserContextFilter 更是双重条件：SERVLET + insight.web.trust-gateway-headers=true
+}
+```
+
+- gateway 是 WebFlux（非 SERVLET），加载 `WebAutoConfiguration` 时条件不满足 → 不会给 Netty 网关注册 Servlet Filter，天然隔离。
+
+**案例 2：AccessDeniedException 为什么放 starter-security 而不放 starter-web**
+
+- 处理 `AccessDeniedException` 需要 import `spring-security` 的类；starter-web 不依赖 security（保持轻量可被 gateway/WebFlux 复用）——所以按"分层职责"它由 **starter-security 提供**（`SecurityExceptionHandlerAdvice`），web 侧的异常兜底故意不管它。这正是注释里"该 starter 不依赖 Spring Security，保持 starter-web 轻量"的设计意图。
+
+### 四、ObjectProvider：把"可选依赖"变成"优雅降级"
+
+场景：starter-security 要校验"登录态"，但登录态存储需要 Redis——starter 不想强制依赖 Redis，怎么办？**接口定义在 starter，实现由业务模块提供，用 `ObjectProvider` 注入"可能有、也可能没有"**：
+
+```java
+public SecurityFilterChain securityFilterChain(..., 
+        ObjectProvider<TokenSessionService> sessionProvider) {   // 可选的
+    TokenSessionService sessionService = sessionProvider.getIfAvailable();  // 没有就 null
+    new JwtAuthFilter(jwtUtil, objectMapper,
+            blacklistProvider.getIfAvailable(),   // TokenBlacklistService 同样可选
+            sessionProvider.getIfAvailable());    // 业务提供就校验登录态；没提供退化为纯无状态 JWT
+    ...
+}
+```
+
+- `getIfAvailable()` = 有实现就返回，没有返回 `null`，**绝不抛错**；
+- UMS 提供 `RedisTokenSessionService`（实现），业务服务若不需要登录态，不提供实现即可——**starter 从"必须配套"变成"能力可选"**。
+
+> 记忆：**`@Autowired ObjectProvider<T>` ≈ "这个 Bean 有就用，没有就算了"。** 是写"扩展点"（strategy 模式在 Spring 里的落点）。
+
+### 面试可能追问
+
+- **Q1：为什么 common 不能依赖 Spring Web？** 答：common 被最广泛复用，gateway（WebFlux）与业务服务（WebMvc）共用；一旦 common 引 Servlet 栈会污染 WebFlux 应用，导致双 Web 体系冲突。保持纯 POJO 让它两种栈都能安全复用。
+- **Q2：starter 怎么做到"引了就生效、不引不生效"？** 答：自动配置类 + `META-INF/spring/...AutoConfiguration.imports` 注册 + `@ConditionalOnXxx`。Boot 启动按 imports 逐个评估条件，满足才装配。
+- **Q3：`@ConditionalOnMissingBean` 有什么用？** 答：业务方已有自定义 Bean（如自己配了 SecurityFilterChain）时，starter 的默认实现不覆盖——提供"可覆盖默认"的扩展口。
+- **Q4：`ObjectProvider` 与直接 `@Autowired(required=false)` 区别？** 答：两者都能表达"可空"；ObjectProvider 还支持 `getIfAvailable(默认值)`、延迟/集合获取（`stream()`），更适合条件装配和策略注入。
+- **Q5：starter 命名规范？** 答：官方 `spring-boot-starter-*`；自定义常见 `xxx-spring-boot-starter`（避免与官方前缀撞）。
+
+### 踩坑提醒
+
+1. **坑：starter 里直接依赖业务模块/反向依赖** —— 破坏单向，可能循环依赖。规避：能力依赖只往 common/官方库走；要业务定制就留接口 + ObjectProvider。
+2. **坑：自动配置类没注册进 imports 文件** —— 配置写了却永不生效。规避：检查 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 是否含该类全限定名。
+3. **坑：条件装配类型不匹配** —— 把 `@ConditionalOnWebApplication` 用错栈（gateway 上写 Servlet 专用 Filter 等）。规避：Servlet/WebFlux 混合复用 starter 时，一律标 `type = SERVLET` 或用 `@ConditionalOnWebApplication` 区分。
+
+---
+
+## Spring Cloud Gateway 核心工作原理：跟着一条请求走一遍网关（零基础版）
+
+- 学于：2026-09-08（gateway 冒烟通过后、路由收窄开发前的原理补课）
+- 关联模块：`insight-engine-gateway`（`application.yml` 路由 / `AuthGlobalFilter`）
+- 来源：TD §8.3、PROGRESS 路由收窄纪律（P18）、Spring Cloud Gateway 官方模型
+
+> 目标：搞懂三件事——① 网关里 Route / Predicate / Filter 三个词到底指什么；② 一条请求从进网关到被转发，内部走了哪几步；③ 为什么「`/api/v1/**` 全量 fallback 排在细分路由前面」会吃掉其他服务的请求（这就是 PROGRESS 里路由收窄硬约束的技术根因）。
+
+### 直观类比（先建立直觉）
+
+网关 = **公司前台总机**：
+
+- 来访者只认识前台电话（`7000` 端口），不认识内部各部门分机（UMS 7101、kb 7103…）；
+- **Route（路由）**= 前台桌上的一张"接待规则卡"：「凡是找『认证』相关业务的，转 7101 分机」——一张卡 = 一条转发规则；
+- **Predicate（谓词）**= 规则卡上的**判断条件**：「看来访者说的是不是 `/auth/**` 开头」——回答"这条规则适不适用于这次来访"；
+- **Filter（过滤器）**= 转接前/后的**加工动作**：转接前撕掉访客自己贴的"内部工牌"（防伪造头）、核验通行证（JWT 校验）；转接后在回执上盖章（加响应头）；
+- **转发目标 uri** = 规则卡背面写的分机号（`http://localhost:7101`）。
+
+> 一句话：**Route = 规则卡，Predicate = 卡上的匹配条件，Filter = 匹配后要做的加工，uri = 转去哪。**
+
+### 一、三个概念对着本项目真实配置看
+
+`insight-engine-gateway/src/main/resources/application.yml`（冒烟版）：
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:                          # ← 路由表：一张张"接待规则卡"按顺序排列
+        - id: insight-engine-ums       #   卡片编号（起名用，唯一）
+          uri: http://localhost:7101   #   卡片背面：转去哪（直连；Nacos 后改 lb://insight-engine-ums）
+          predicates:                  #   判断条件：什么样的请求适用这张卡
+            - Path=/auth/**,/api/v1/**,/doc.html,/v3/api-docs/**,...
+          # filters:（本项目冒烟版没配，如 StripPrefix/AddRequestHeader 等）
+```
+
+- **Route**：上面一整块就是一条 Route——"满足条件的请求 → 转发到 uri"；
+- **Predicate**：`Path=/auth/**,…` 是路径谓词；还有 `Method=POST`、`Header=X-Token,\d+`、`Query=name`、`After=2026-…` 等几十种，可组合（AND 关系）；
+- **Filter**：分两种（见下节）。
+
+### 二、一条请求在网关内部的完整旅程（重点）
+
+以「带 token 的 `GET /auth/me`」为例：
+
+```
+① 请求打到 Netty（gateway 是 WebFlux 应用，跑在 Netty 上，不是 Tomcat）
+        ↓
+② DispatcherHandler 找"谁来处理"：唯一起作用的是 RoutePredicateHandlerMapping
+        ↓
+③ 拿出整张路由表（RouteLocator），按【声明顺序】逐张卡片评估 Predicate
+   → /auth/me 命中 Path=/auth/** 那张卡（第一个匹配的胜出，后面不再看）
+        ↓
+④ 命中的 Route 挂进请求上下文（exchange 的 attribute：GATEWAY_ROUTE_ATTR）
+        ↓
+⑤ 进入"过滤器链"：框架内置 GlobalFilter + 这条路由配置的 GatewayFilter
+   合并成一条链，按 order 从小到大依次执行（前半段处理请求，过半后转发，响应逆序回填）
+        ↓
+⑥ 链尾的 NettyRoutingFilter 真正发起对 http://localhost:7101/auth/me 的调用
+        ↓
+⑦ UMS 响应回来 → 过滤器链逆序走完剩余部分 → 响应回给浏览器
+```
+
+其中 ⑤ 的过滤器链里，和我们直接相关的内置 GlobalFilter 有：
+
+| 内置 GlobalFilter | 干什么 | 备注 |
+|---|---|---|
+| `ForwardPathFilter` | 必要时改写请求路径 | |
+| `RouteToRequestUrlFilter` | 组装真正要转发的目标 URL | |
+| `ReactiveLoadBalancerClientFilter` | 把 `lb://服务名` 换成真实 IP:端口 | **Nacos 接入后走这里**（lb 负载均衡就在这一步发生） |
+| `NettyRoutingFilter` | 真正发出转发请求（http/https 的执行者） | |
+
+### 三、GlobalFilter 与 GatewayFilter：同一链条，两种来源
+
+这是面试最常问的对比：
+
+| | `GlobalFilter` | `GatewayFilter` |
+|---|---|---|
+| 作用范围 | **所有路由**共享 | 只作用于**配置它的那条路由** |
+| 定义位置 | 代码里 `@Component implements GlobalFilter, Ordered`（框架内置的也全是这种） | yml 的某条 route 下 `filters:` 配置，或代码定义 |
+| 典型例子 | 我们的 `AuthGlobalFilter`（鉴权所有请求都要过）、上面的转发类过滤器 | `StripPrefix`、`AddRequestHeader` 这类按路由定制 |
+| 最终去向 | **两者合并进同一条过滤器链**，统一按 `getOrder()` 排序执行（没有"两条链"） | 同左 |
+
+> 本项目的 `AuthGlobalFilter` 就是典型的自定义 `GlobalFilter`：白名单放行 → 清除客户端伪造的 `X-User-Id` 等头 → 校验 JWT（2001/2007）→ `sk-` API Key 分流 → 把可信身份写进转发头。因为它实现了 `GlobalFilter`，**所有命中路由的请求都会过它**。
+
+### 四、路由匹配顺序：为什么会"吞路由"（P18 硬约束的根因）
+
+规则：**路由按声明顺序逐张评估 Predicate，第一条匹配的胜出，之后的卡片看都不看。**
+
+用本项目的未来场景演示事故：
+
+```yaml
+routes:
+  - id: ums
+    uri: http://localhost:7101
+    predicates: [ "Path=/api/v1/**" ]        # ← 卡①：全量通配，写在前面
+  - id: kb
+    uri: http://localhost:7103
+    predicates: [ "Path=/api/v1/kb/**" ]     # ← 卡②：知识库细分，写在后面
+```
+
+请求 `GET /api/v1/kb/list`：
+
+```
+评估卡①：/api/v1/kb/list 匹配 Path=/api/v1/** ？ 匹配！→ 胜出
+评估卡②：根本轮不到
+结果：知识库的请求被转发给了 UMS(7101) → UMS 没有这个接口 → 404
+```
+
+**这就是「细分路由必须排在通配之前、或干脆禁止通配 fallback」的原因**——不是风格问题，是 Spring Cloud Gateway 的匹配算法决定的。所以 PROGRESS 的收窄纪律规定：workspace/kb 等服务接入时，把 `/api/v1/**` 收窄成服务专属前缀，且收窄与新增路由同一次提交（P18 三处同步：routes 谓词 / AuthGlobalFilter 白名单 / globalcors）。
+
+> 顺带一提：路由的先后顺序也可以用 `Route` 的 `order` 显式指定（数字小的先评估）；不写时按 yml 声明顺序。
+
+### 五、网关为什么用 WebFlux（预热下一篇）
+
+- 网关的活是"收请求 → 转发 → 回响应"，**几乎没有业务计算，纯 IO 密集**；
+- Servlet（Tomcat）模型：一个请求占一个线程，转发等上游响应时线程干等——1000 并发就要 1000 个线程；
+- WebFlux（Netty）模型：少量线程 + 非阻塞 IO，等待上游时线程去处理别的请求——**用少量线程扛大量连接**，这正是"转发型服务"最需要的；
+- 代价：代码是响应式风格（`Mono`/`Flux`），不能随手写阻塞调用（如同步 JDBC）——**所以 gateway 不引 starter-mybatis，也不引 Servlet 栈的 starter-web/security**（呼应 starter 分层那篇）。
+
+### 面试可能追问
+
+- **Q1：Route、Predicate、Filter 分别是什么？** 答：Route 是一条转发规则（条件 + 目标 uri）；Predicate 判断请求是否匹配该规则（Path/Method/Header…可组合）；Filter 是匹配后对请求/响应的加工链（鉴权、改头、改路径、限流）。
+- **Q2：GlobalFilter 与 GatewayFilter 区别？** 答：作用范围（全部路由 vs 单条路由）；但最终合并为同一条过滤器链按 order 排序执行，机制上无两条链之分。
+- **Q3：两条路由的谓词都匹配时走哪条？** 答：按路由顺序（声明顺序或显式 order）取第一条，之后的不再评估——所以通配路由放前面会吞掉细分路由的请求。
+- **Q4：`lb://insight-engine-ums` 是怎么变成真实地址的？** 答：`ReactiveLoadBalancerClientFilter` 通过负载均衡器（从 Nacos 拉到的服务实例列表）选一个实例，把 uri 替换成 `http://ip:port`，再交给 `NettyRoutingFilter` 转发。
+- **Q5：为什么网关做鉴权而不是每个服务自己做？** 答：统一入口统一校验，避免每个服务重复实现、且能在边缘拒绝无效流量（本项目双轨并存：网关校验 + 服务自校验默认开，`trust-gateway-headers` 开关决定是否信任下发头——见「微服务身份传递的信任边界」篇）。
+- **Q6：网关能做哪些横切能力？** 答：鉴权/防伪造头、限流（`RequestRateLimiter` + Redis）、灰度路由、熔断降级（`CircuitBreaker` filter）、日志与 traceId 透传、CORS 统一处理。
+
+### 踩坑提醒
+
+1. **坑：通配谓词排在前，吞掉后续服务的路由** —— 见第四节；规避：细分在前/收窄通配，P18 三处同步。
+2. **坑：过滤器 order 没想清楚** —— 鉴权 filter 若排在转发 filter 之后，等于没鉴权。规避：`AuthGlobalFilter` 标注明确的低 order 值（早执行），转发类过滤器由框架控制。
+3. **坑：在 WebFlux 网关里写阻塞代码**（同步 JDBC / `.block()` 滥用）—— 会拖垮少量线程的高并发模型。规避：网关只做转发与轻量校验（JWT 解析是纯计算，可以），重活交给下游服务。
+4. **坑：改了 routes 不重启/不刷新** —— MVP 用 yml 静态路由，改配置要重启；后续接 Nacos 配置中心可动态刷新路由。
 
 ---
 

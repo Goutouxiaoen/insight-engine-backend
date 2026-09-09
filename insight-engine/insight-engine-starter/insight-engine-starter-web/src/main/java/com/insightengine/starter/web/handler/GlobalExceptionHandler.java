@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -76,6 +77,20 @@ public class GlobalExceptionHandler {
         Result<Void> result = Result.fail(ErrorCode.PARAM_ERROR, e.getMessage());
         result.setTraceId(currentTraceId());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(result);
+    }
+
+    /**
+     * 请求路径未映射到任何 Controller（Spring Boot 3.2+ 静态资源兜底抛此异常）。
+     * <p>必须显式处理：否则落入 {@link #handleException} 兜底，把「接口不存在」
+     * 伪装成 500/9999「系统内部错误」，误导排查（与 AccessDenied 误报 500 同类病）。</p>
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Result<Void>> handleNoResourceFound(NoResourceFoundException e,
+                                                              HttpServletRequest request) {
+        log.warn("[notFound] uri={}, resourcePath={}", request.getRequestURI(), e.getResourcePath());
+        Result<Void> result = Result.fail(ErrorCode.RESOURCE_NOT_FOUND);
+        result.setTraceId(currentTraceId());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(result);
     }
 
     /**

@@ -47,7 +47,8 @@ import java.util.List;
  * </ul>
  *
  * <p>执行顺序：{@link #getOrder()} = -100，位于路由转发过滤器之前；
- * 后续若补充网关 TraceFilter（生成/透传 traceId），其 order 应取更小值（如 -200）保证最先执行。</p>
+ * 前置于 {@link TraceGlobalFilter}（order=-200，负责生成/透传 traceId），
+ * 故认证失败时也能拿到 traceId 回填错误响应。</p>
  */
 @Slf4j
 @Component
@@ -190,13 +191,15 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     /**
      * 写出统一格式的错误响应（JSON + Result 结构），并直接结束请求不进入路由。
-     * <p>错误响应的 traceId 回填请求头携带的 X-Trace-Id，保证前端/日志可按链路定位
-     * （网关自身 TraceFilter 落地前，透传客户端已携带的 traceId）。</p>
+     * <p>错误响应的 traceId 回填请求头携带的 X-Trace-Id，保证前端/日志可按链路定位。
+     * 该头已由 {@link TraceGlobalFilter}（order=-200）先生成/校验并写回请求，故此处必有值。</p>
      */
     private Mono<Void> writeError(ServerWebExchange exchange, ErrorCode errorCode) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.valueOf(errorCode.getHttpStatus()));
-        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        // 显式带 charset=UTF-8：与 UMS 侧 charset 修复对齐，避免 PS 5.1 等老客户端
+        // 对无 charset 的 application/json 按 ISO-8859-1 解码导致 401/403 中文文案乱码
+        response.getHeaders().setContentType(new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8));
 
         Result<Void> result = Result.fail(errorCode);
         String traceId = exchange.getRequest().getHeaders().getFirst(Constants.HEADER_TRACE_ID);

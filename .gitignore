@@ -31,6 +31,7 @@ application-local.yml
 # 日志
 logs/
 *.log
+*.err
 
 # 系统
 .DS_Store

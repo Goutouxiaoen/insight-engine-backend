@@ -1090,8 +1090,36 @@ INSERT INTO ie_role_permission (role_id, permission_id)
 SELECT 4, id FROM ie_permission
 WHERE resource LIKE 'kb%' OR resource LIKE 'agent%' OR resource LIKE 'tool%' OR resource LIKE 'conv%';
 
---    说明：org_admin(2)/ws_admin(3)/end_user(5) 的精细化授权依赖阶段 3 UMS 的
---    @PreAuthorize 注解与 ABAC 数据范围实现，届时再精确分配，本阶段仅预置 super_admin 与 app_developer。
+--    org_admin(id=2) 组织下一切权限（PRD §12.2.2）：除平台级 auth:write / system:write 外全量授予
+--    下列三条授权带 ON CONFLICT DO NOTHING，可安全地对已初始化的库增量重跑（用于补 seed，无需重建库）
+INSERT INTO ie_role_permission (role_id, permission_id)
+SELECT 2, id FROM ie_permission
+WHERE resource LIKE 'org%' OR resource LIKE 'ws%' OR resource LIKE 'member%' OR resource LIKE 'role%'
+   OR resource LIKE 'model%' OR resource LIKE 'kb%' OR resource LIKE 'agent%' OR resource LIKE 'tool%'
+   OR resource LIKE 'conv%' OR resource LIKE 'billing%' OR resource LIKE 'obs%' OR resource LIKE 'audit%'
+   OR code IN ('auth:read', 'api:write', 'system:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+--    ws_admin(id=3) 空间内一切权限（PRD §12.2.2）：ws 编辑/成员管理 + 空间级资源全量 + 组织/角色只读
+--    不含 ws:create / ws:delete（工作空间增删属组织级）、org:*、role:write
+INSERT INTO ie_role_permission (role_id, permission_id)
+SELECT 3, id FROM ie_permission
+WHERE code IN ('ws:read', 'ws:write',
+               'member:read', 'member:create', 'member:update', 'member:delete',
+               'role:read',
+               'kb:read', 'kb:write', 'kb:doc:read', 'kb:doc:write', 'kb:retrieval:read',
+               'agent:read', 'agent:write', 'agent:workflow:write', 'agent:publish:write',
+               'tool:read', 'tool:write', 'tool:builtin:read', 'tool:http:write',
+               'conv:read', 'conv:write',
+               'model:list:read', 'model:usage:read',
+               'billing:quota:read', 'obs:metric:read', 'audit:log:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+--    end_user(id=5) 仅限个人使用（PRD §12.2.2）：可查看/对话，不可管理资源
+INSERT INTO ie_role_permission (role_id, permission_id)
+SELECT 5, id FROM ie_permission
+WHERE code IN ('ws:read', 'kb:read', 'agent:read', 'tool:read', 'conv:read', 'conv:write', 'model:list:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- 7) 内置工具（IF §11.6，6 个；workspace_id=NULL 表示平台级）
 INSERT INTO ie_tool (id, workspace_id, code, name, type, description, builtin, enabled) VALUES

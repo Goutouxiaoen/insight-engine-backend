@@ -10,6 +10,12 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_ROLES;
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_TENANT_ID;
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_TYPE;
+import static com.insightengine.common.constant.JwtClaimConstants.CLAIM_WS_ID;
+import static com.insightengine.common.constant.JwtClaimConstants.TYPE_ACCESS;
+
 /**
  * 网关侧 JWT 访问令牌解析器。
  *
@@ -27,16 +33,7 @@ import java.util.List;
  */
 public class GatewayJwtParser {
 
-    /** 令牌类型 Claim 名（与 UMS JwtUtil 常量一致） */
-    private static final String CLAIM_TYPE = "type";
-    /** 访问令牌类型值（与 UMS JwtUtil 常量一致） */
-    private static final String TYPE_ACCESS = "access";
-    /** 租户 ID Claim 名（TD §7.2） */
-    private static final String CLAIM_TENANT_ID = "tenant_id";
-    /** 工作空间 ID Claim 名（TD §7.2） */
-    private static final String CLAIM_WS_ID = "ws_id";
-    /** 角色编码列表 Claim 名（TD §7.2） */
-    private static final String CLAIM_ROLES = "roles";
+    // Claim 名称统一由 common 层 JwtClaimConstants 提供（与 UMS 共享同一契约，防 drift）
 
     /** 签名密钥（由配置属性在构造时派生） */
     private final SecretKey secretKey;

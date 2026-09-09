@@ -1,5 +1,9 @@
 # 智擎 AI（InsightEngine）—— 数据库设计文档（DB）
 
+> **本文档是**：数据库表结构地图 —— 每张表、每个字段、为什么这么设计（与 `init.sql` 一一对应）。
+> **何时看**：建表 / 改表 / 写 SQL / 排查数据问题前。
+> **不负责**：接口出入参（→ `IF.md`）、技术选型理由（→ `TD.md`）。
+
 > 版本：v1.0（MVP）
 > 撰写日期：2026-08-26
 > 关联文档：PRD（需求）、TD（技术方案 §5 数据库设计）、IF（接口）
@@ -830,10 +834,14 @@ ie_role ──N:M── ie_permission      │──1:N── ie_agent ──N:M
 | ie_role | 5 | super_admin / org_admin / ws_admin / app_developer / end_user |
 | ie_member | 1 | 管理员绑定 super_admin（org=1 / ws=1） |
 | ie_permission | 48 | 权限字典（覆盖账号/模型/知识库/Agent/工具/对话/计费/审计/系统） |
-| ie_role_permission | 63 | super_admin=48（全部）+ app_developer=15（kb/agent/tool/conv） |
+| ie_role_permission | 143 | super_admin=48（全部）+ org_admin=46 + ws_admin=27 + app_developer=15（kb/agent/tool/conv）+ end_user=7 |
 | ie_tool | 6 | current_time / calculator / uuid / md5 / json_parse / http_get |
 
-> 说明：org_admin / ws_admin / end_user 的精细化授权依赖阶段 3 UMS 的 @PreAuthorize 落地后再分配。
+> 说明：五个内置角色均已按 PRD §12.2.2 完成授权（阶段 3 UMS 的 `@PreAuthorize` 已落地）。
+> - `org_admin`：组织下一切权限，仅不含平台级 `auth:write` / `system:write`；
+> - `ws_admin`：空间内 ws 编辑 + 成员管理 + 空间级资源全量，不含 `ws:create` / `ws:delete` / `org:*` / `role:write`；
+> - `end_user`：只读 + 对话（`ws:read` / `kb:read` / `agent:read` / `tool:read` / `conv:read|write` / `model:list:read`）。
+> - 工作空间切换器由 `ws:read` 门控（不单独设 `ws:switch`：可切换范围已由成员关系在服务端约束）。
 
 ---
 
