@@ -45,7 +45,7 @@
 | 主机 | `127.0.0.1`（容器名 `postgres`，走 compose 内部网络） |
 | 端口 | `5433`（宿主映射；容器内 `5432`，见 TD §18.2.3） |
 | 数据库 | `insight_engine` |
-| 用户 / 密码 | `insight` / 取 `.env` 的 `POSTGRES_PASSWORD`（不入库） |
+| 用户 / 密码 | `insight` / 取 `.env` 的 `POSTGRES_PASSWORD`（不入库；Spring 侧经 `application-local.yml` 或环境变量注入，见 TD §18.2.6） |
 | 容器名 | `insight-postgres` |
 
 > 微服务内部连接走 compose 内部网络：`postgres:5432`，账号同上（见 TD §18.2.4）。

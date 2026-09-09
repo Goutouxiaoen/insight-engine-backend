@@ -27,7 +27,7 @@
 - 第九部分：迭代节奏与验收
 - 第十部分：常见坑与排查清单
 - 附录 A：真相源文件清单
-- 附录 B：Prompt 模板库（P1~P17 唯一权威，所有可复制 prompt 集中在这）
+- 附录 B：Prompt 模板库（P1~P19 唯一权威，所有可复制 prompt 集中在这）
 - 附录 C：阶段验收 Checklist
 - 附录 D：实操手册（新开对话 / 提示词 / 具体操作步骤）
 
@@ -37,7 +37,7 @@
 
 > 如果你只想快速知道"下一步具体怎么做"，看这一节就够。详细原理见后面各章节与附录 D。
 >
-> **所有可复制的 prompt 模板集中在「附录 B」（编号 P1~P17）**，正文与附录 D 只引用编号、不再重复粘贴。要复制模板，直接跳到附录 B。
+> **所有可复制的 prompt 模板集中在「附录 B」（编号 P1~P19）**，正文与附录 D 只引用编号、不再重复粘贴。要复制模板，直接跳到附录 B。
 >
 > **对后端工程还不熟 / 链路看晕了？先读 `docs/ARCHITECTURE.md`**——它按「总览→局部」逐层画清每个服务职责与"请求从哪到哪"；开发前先看它，能少绕很多弯。
 
@@ -78,19 +78,21 @@
 
 ## 铁律 3：先定"真相源"，再写代码
 
-在动手前，先确定 7 份**真相源文件（Source of Truth）**，它们是你和 AI 之间的"共享大脑"。后面每阶段、每个对话都围绕它们展开。
+在动手前，先确定 11 份**真相源文件（Source of Truth）**，它们是你和 AI 之间的"共享大脑"。后面每阶段、每个对话都围绕它们展开。
 
 真相源文件清单（详见附录 A）：
 
 | 文件 | 作用 | 谁维护 |
 |------|------|--------|
 | `docs/PRD.md` | 产品做什么（已产出） | 你 + 工具 |
+| `docs/ARCHITECTURE.md` | 系统长什么样、请求从哪到哪 | 你 + 工具 |
 | `docs/TD.md` | 技术怎么做（已产出） | 你 + 工具 |
 | `docs/IF.md` | 接口契约（已产出） | 你 + 工具 |
 | `docs/DEVGUIDE.md` | 本文档（协作方法） | 你 + 工具 |
 | `docs/PROGRESS.md` | **进度与状态追踪（核心！）** | 你 + 工具 |
 | `docs/DB.md` | 数据库怎么建（已产出，与 init.sql 对应） | 你 + 工具 |
 | `docs/FEATURES.md` | 实现了什么/怎么实现（每模块增量沉淀） | 你 + 工具 |
+| `docs/LEARNING.md` | 学习笔记（技术点原理 + 项目用法 + 面试追问） | 你 + 工具 |
 | `docs/FE-SYNC.md` | 跨端同步协议 + 面向前端的就绪信号（2026-09-09 新增） | 工具（后端） |
 | **仓库根 `AGENTS.md`** | AI 会话硬约束（自动加载入口，**在仓库根目录，不在 `docs/`**） | 你 + 工具 |
 
@@ -868,8 +870,9 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 | P14 | 场景约束：文档更新 | 更新文档护栏 |
 | P15 | 防发散话术（3 句） | AI 开始跑偏时 |
 | P16 | 质量自查清单 | 收尾自查 |
-| P17 | 场景约束：部署/容器命令（对齐 compose） | 生成 docker/compose/服务器命令时 |
+| P17 | 场景约束：部署/容器命令（对齐 compose 结构） | 生成 docker/compose/服务器命令时 |
 | P18 | 场景约束：网关路由 / 新服务接入（对齐 TD §8.3） | 改 gateway 路由或新服务接入网关时 |
+| P19 | 场景约束：配置与凭据（禁止明文入库） | 改 application*.yml / docker-compose.yml / 新增配置项时 |
 
 ---
 
@@ -1107,21 +1110,23 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 6. 有无 TODO/占位符/伪代码/空实现？
 ```
 
-## P17 场景约束：部署 / 容器命令（必须对齐 docker-compose.yml）
+## P17 场景约束：部署 / 容器命令（对齐 docker-compose.yml 结构）
 
 ```
 【约束】本次涉及生成 docker / docker-compose / 服务器部署命令时：
 1. 动手前必须先读项目 docker-compose.yml（d:/CodexProject/insight-engine/docker-compose.yml）
    与 docs/TD.md §18，以它为唯一基准；禁止凭记忆、禁止自行发明参数。
 2. 无论用 compose 还是裸 docker run，容器的「镜像 tag、容器名、端口映射、命名卷、
-   环境变量、持久化参数」必须与 docker-compose.yml 对应服务逐项一致，不得简化省略。
+   环境变量名、持久化参数」必须与 docker-compose.yml 对应服务逐项一致，不得简化省略。
+   ⚠️ 对齐的是「结构」，不是「凭据值」——密码 / 密钥一律写占位符
+   （`${POSTGRES_PASSWORD}` 等），**禁止把任何明文口令抄进命令、脚本或回复**（见 P19）。
 3. 重点核对项（最容易漏、漏了必出问题）：
    - PostgreSQL：必须挂命名卷 pg_data:/var/lib/postgresql/data；init.sql 以 :ro 挂载；
-     端口 5433:5432；账号 insight / 密码取 .env 的 POSTGRES_PASSWORD（不入库）/ 库 insight_engine。
+     端口 5433:5432；账号 insight / 密码取 `.env` 的 `POSTGRES_PASSWORD`（不入库）/ 库 insight_engine。
    - Redis：必须带 --appendonly yes（AOF 持久化）+ 命名卷 redis_data:/data；
-     端口 6380:6379；密码取 .env 的 REDIS_PASSWORD（不入库）。
+     端口 6380:6379；密码取 `.env` 的 `REDIS_PASSWORD`（不入库）。
    - 其他中间件同理：每个都必须挂对应命名卷，禁止无卷裸跑。
-4. 给命令前，先说明一句：「已核对 docker-compose.yml，命令参数与 XX 服务一致」。
+4. 给命令前，先说明一句：「已核对 docker-compose.yml，命令结构与 XX 服务一致；凭据取占位符」。
 5. 若环境无法用 compose（如远程服务器单独拉起中间件），也必须按 compose 对应服务
    逐项翻译成 docker run，并保留全部命名卷与持久化参数；如确需偏差，先报告差异点并等我确认，不得擅自降级。
 ```
@@ -1140,6 +1145,32 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
    白名单、globalcors；同时更新 TD §8.3 路由表，保持文档与实现对齐。
 5. 给出改动前，先声明一句：「已核对 TD §8.3，新路由前缀为 XX，
    与既有路由无交集」，再展示 diff。
+```
+
+## P19 场景约束：配置与凭据（禁止明文入库）
+
+```
+【约束】本次涉及 application*.yml / docker-compose.yml / init.sql / 部署脚本，
+或新增任何「账号、口令、密钥、Token、连接串」配置项时：
+1. 一律写占位符，禁止写字面量：
+   - Spring（`application*.yml`）：`${INSIGHT_PG_HOST}` / `${INSIGHT_PG_PASSWORD}` / `${INSIGHT_REDIS_*}` 等；
+     `:` 后的默认值只允许「明显的开发占位串」，禁止与真实口令相同（prod 下含 "change-me" 会被 fail-fast 拦截）。
+   - compose（`docker-compose.yml`）：`${POSTGRES_PASSWORD:?必填提示}` 等，真实值放同目录 `.env`。
+   - ⚠️ **两套注入路径勿混用**：compose 自动加载 `.env`；**Spring 不会自动读 `.env`**，
+     应用侧走 `application-local.yml`（已 gitignore）或环境变量（IDEA Run Configuration / systemd /
+     容器 environment），模板见 `ums/src/main/resources/application-local.example.yml`（详见 TD §18.2.6）。
+2. `.env` 永不入库（`.gitignore` 已含 `.env` / `.env.*` / `application-local.yml` / `*.secret`）；
+   仓库内只维护模板 `.env.example`（变量名 + 用途说明，无真实值）。
+   ⚠️ `.env.*` 会把 `.env.example` 一起忽略，故 `.gitignore` 必须保留 `!.env.example` 例外行。
+3. 新增配置项必须同时更新 `.env.example`（必要时加 `application-local.example.yml`）
+   与相关文档（TD §18 / DB §1.1），各处变量名一致。
+4. 收尾自检（必做并贴结果）：
+   `git grep -niE "(password|passwd|secret|token|apikey)" -- ':!*.md' ':!*.example' ':!.gitignore'`
+   命中项逐条判断：占位符 ✅ / 明文 ❌（❌ 必须先报告再改，不得擅自扩大改动范围）。
+   注意 `git grep` 只搜**已跟踪**文件，新增未 `git add` 的文件需另用文本搜索覆盖。
+5. 若发现**历史提交**中已有明文：不要用「改文件 / 删文件 / 加 .gitignore」掩盖，
+   在汇报中明确写「明文已进历史，需轮换口令止血」，并登记 `docs/PROGRESS.md` §五。
+6. 禁止把真实口令写进：注释、日志、单元测试、curl 示例、commit message、聊天记录。
 ```
 
 ---
@@ -1294,4 +1325,4 @@ CodeBuddy 里开新对话的方式（二选一）：
 >
 > 总结一句话：**把文件当长期记忆，把对话当短期工作区；一个对话干一件事，干完就落盘、提交、关闭。**
 >
-> 所有可复制 prompt 模板集中在「附录 B」（P1~P17）；当前项目进度见 `PROGRESS.md`。
+> 所有可复制 prompt 模板集中在「附录 B」（P1~P19）；当前项目进度见 `PROGRESS.md`。

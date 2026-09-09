@@ -1,0 +1,26 @@
+# =============================================================================
+# 本地开发覆盖配置（application-local.example.yml）
+#
+# 用法：
+#   1) 复制本文件为同目录 application-local.yml（已被 .gitignore 忽略，永不入库）
+#   2) 把 change-me-* 换成真实值
+#   3) 启动时激活 local profile：IDEA Run Configuration → Active profiles 填 local，
+#      或程序参数 --spring.profiles.active=local
+#
+# 为什么需要它：application.yml 里的 ${INSIGHT_*} 没有默认值，未注入时启动会
+# fail-fast（占位符无法解析）——有意设计，避免「忘了配 → 静默用空口令连库」。
+#
+# 替代方案：不建本文件，改在 IDEA Run Configuration → Environment variables 里
+# 逐个填 INSIGHT_PG_* / INSIGHT_REDIS_*（见 .env.example）。
+# =============================================================================
+spring:
+  datasource:
+    # 本机跑容器 → 127.0.0.1:5433；连云服务器 → 换成云 IP:5433
+    url: jdbc:postgresql://127.0.0.1:5433/insight_engine
+    username: insight
+    password: change-me-pg-strong-random
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6380
+      password: change-me-redis-strong-random

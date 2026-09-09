@@ -27,7 +27,7 @@
 ## 铁律 3：范围与质量红线
 
 - 只动 `d:/CodexProject/insight-engine/`；前端仓库只读（唯一例外见铁律 1 的双写）。
-- 遵守 DEVGUIDE 附录 B 场景约束（P1~P18），不「顺手」重构。
+- 遵守 DEVGUIDE 附录 B 场景约束（P1~P19），不「顺手」重构。
 - 后端没实现的接口，不得在文档 / 汇报中暗示前端可联调。
 
 ## 铁律 4：收尾三件套（每个会话结束必做）
@@ -36,6 +36,15 @@
 2. 更新 `docs/PROGRESS.md`（进度 / 决策 / 踩坑 / 阻塞 / §八 摘要）；**模块状态变化必须同步 `docs/FE-SYNC.md` §1**
 3. git commit（`feat(模块): …` / `fix(模块): …` / `docs: …`）；按 GitHub Flow 走 PR，**不直推 master**
 
+## 铁律 5：凭据纪律（禁止明文入库）
+
+- **禁止**把任何口令 / 密钥 / Token / 连接串（含「地址 + 口令」组合）写入**受版本控制的文件**——`application*.yml`、`docker-compose.yml`、`init.sql`、脚本、测试、文档、注释、commit message 一律适用。
+- 配置只写**占位符 + 外部注入**（如 `${INSIGHT_PG_PASSWORD}` / `${POSTGRES_PASSWORD}`）；真实值只放 `.env`（`.gitignore` 已忽略）或环境变量 / secrets。**`.env` 永不入库**，仓库内只留 `.env.example` 模板。
+- 新增配置项必须**同时**做三件事：① 代码写占位符；② 补 `.env.example`；③ 在文档写明变量名。缺一即视为未完成。
+- 提交前自检：`git grep -niE "(password|passwd|secret|token|apikey)" -- ':!*.md' ':!*.example' ':!.gitignore'` 逐条确认有无明文，命中即**先报告再处理**，不得静默保留。
+- 历史已泄露的凭据**按已泄露处理**：改文件 / 改文档只减少新增暴露面，**唯一止血是轮换口令**（见 `docs/PROGRESS.md` §五）。
+- 不得以「本地联调方便」「先跑通再说」为由破例。
+
 ## 一句话版本
 
-> **先读四份（PROGRESS / FE-SYNC / BE-ISSUES / IF）再动手；前端诉求必答必回填；说"实测"必给证据；模块状态变了同步 FE-SYNC；收尾必 commit 走 PR。**
+> **先读四份（PROGRESS / FE-SYNC / BE-ISSUES / IF）再动手；前端诉求必答必回填；说"实测"必给证据；模块状态变了同步 FE-SYNC；凭据一律占位符、明文永不入库；收尾必 commit 走 PR。**

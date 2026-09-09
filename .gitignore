@@ -25,6 +25,8 @@ dist/
 # 环境与密钥
 .env
 .env.*
+# 例外：模板必须入库（否则 .env.* 会把模板也忽略掉）
+!.env.example
 application-local.yml
 *.secret
 

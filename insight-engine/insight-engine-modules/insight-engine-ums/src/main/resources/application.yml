@@ -1,7 +1,11 @@
 # =============================================================================
 # UMS 服务配置
-# 端口 7101（PRD §9.2）；数据源/Redis 走云服务器中间件（39.106.110.214）的宿主映射端口
-# （PG 5433 / Redis 6380，见 TD §18.2.3）。JWT 密钥仅开发默认，生产务必覆盖。
+# 端口 7101（PRD §9.2）；数据源/Redis 的主机与口令一律走环境变量注入（不写明文）：
+#   INSIGHT_PG_HOST / INSIGHT_PG_PORT / INSIGHT_PG_DB / INSIGHT_PG_USERNAME / INSIGHT_PG_PASSWORD
+#   INSIGHT_REDIS_HOST / INSIGHT_REDIS_PORT / INSIGHT_REDIS_PASSWORD
+# 注入方式见 .env.example 末尾说明（推荐 application-local.yml 或 IDEA 环境变量）；
+# 未注入时启动 fail-fast（占位符无法解析），这是有意设计，避免静默用空口令连库。
+# 凭据纪律：AGENTS.md 铁律 5 / DEVGUIDE P19。
 # =============================================================================
 server:
   port: 7101
@@ -10,9 +14,9 @@ spring:
   application:
     name: insight-engine-ums
   datasource:
-    url: jdbc:postgresql://39.106.110.214:5433/insight_engine
-    username: insight
-    password: insight123
+    url: jdbc:postgresql://${INSIGHT_PG_HOST}:${INSIGHT_PG_PORT}/${INSIGHT_PG_DB}
+    username: ${INSIGHT_PG_USERNAME}
+    password: ${INSIGHT_PG_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -20,9 +24,9 @@ spring:
       connection-timeout: 30000
   data:
     redis:
-      host: 39.106.110.214
-      port: 6380
-      password: insight123
+      host: ${INSIGHT_REDIS_HOST}
+      port: ${INSIGHT_REDIS_PORT}
+      password: ${INSIGHT_REDIS_PASSWORD}
       database: 0
       timeout: 3000
 

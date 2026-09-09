@@ -22,8 +22,8 @@
 | ----- | ---------------------------------- |
 | 当前阶段  | 阶段 4：gateway 网关 —— **PR #5（`f84ffd2`）已合入 master**（路由按 §8.3 收窄 + TraceGlobalFilter + charset + JWT 常量下沉，复跑冒烟 9/9）；遗留 🔴 云凭据明文已进 master 历史（§五，闸门已失守，待口令轮换止血） |
 | 当前里程碑 | M4：gateway 网关                       |
-| 当前任务  | gateway 阶段收口完成（PR #5 已合 master）→ 下一步：云上补 Nacos 容器 + 路由改 `lb://insight-engine-ums`（§六 6.4 / §七 Top2）；并行推进 §五 口令轮换（学习开发期暂缓） |
-| 整体完成度 | 约 40%（阶段 1-4 已完成并全部合入 master；gateway 路由收窄 + TraceFilter/charset/JWT 常量已合入，冒烟 9/9；init.sql 角色 seed 授权补齐；⬜ 待办：云上 Nacos/RabbitMQ/MinIO 迁云 + §五 口令轮换；UMS 收尾项在 §6.1 待办池） |
+| 当前任务  | gateway 阶段收口完成（PR #5 已合 master）→ **下一步：workspace 模块启动（阶段 5，兑现 BE-20260908-02）**；云上 Nacos 需云 SSH 凭据，凭据到手再做（§六 6.4 / §七 Top2）。**2026-09-09 三批已完成**：① 文档口令明文改占位引用 + §五 闸门失守修正；② 凭据纪律硬约束（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 文档口径统一（P1~P19、真相源 11 份）；③ 代码侧配置占位化（compose 6 处 + ums yml 4 处改 `${VAR}`，新增 `.env.example` / `application-local.example.yml` 模板，`git grep` 明文归零） |
+| 整体完成度 | 约 40%（阶段 1-4 已完成并全部合入 master；gateway 路由收窄 + TraceFilter/charset/JWT 常量已合入，冒烟 9/9；init.sql 角色 seed 授权补齐；凭据纪律硬约束 + 配置占位化已落地（`git grep` 明文归零）；⬜ 待办：云上 Nacos/RabbitMQ/MinIO 迁云 + §五 a) 口令轮换 + workspace 模块（阶段 5）；UMS 收尾项在 §6.1 待办池） |
 
 ---
 
@@ -102,6 +102,9 @@
 - [2026-09-09] ✅ 已修复并实测（`X-Trace-Id` 响应头重复）：冒烟复跑抓到经网关转发到 UMS 的响应出现**两个** `X-Trace-Id`（网关 set 的值 + 上游 starter-web `TraceFilter` 回传值，被 `NettyRoutingFilter` 合并追加）→ `TraceGlobalFilter` 改为在 `exchange.getResponse().beforeCommit(...)` 回调内 `headers().set(...)`（提交前覆盖为单值）。实测转发 200 / 无 token 401 / 坏 token 401 / 过期 401 / `sk-` 401 / end_user 403 六类路径 `X-Trace-Id` 计数均为 1
 - [2026-09-09] 🟡 新发现（未匹配路由不经过 GlobalFilter）：`/api/v1/nonexistent` 由网关路由层直接 404，**不进入 GlobalFilter 链**（GlobalFilter 仅在路由命中后执行）→ 该响应无 `X-Trace-Id` 且为 Spring 默认错误体（含 `requestId`，非 IF §2 统一 `Result`）。路由收窄语义正确（未误转 UMS），但统一错误格式/traceId 覆盖存在缺口，记入 §6.4 待办
 - [2026-09-09] ✅ 已决策并实施（SSE 心跳升为通用约定，答复 BE-20260909-07）：新增 **IF §2.6「SSE 流式通用约定」**作为心跳**单一事实源**——所有 `stream=true` 接口均含 `heartbeat`（15s / 不可关闭 / `data={"ts":<epochMillis>}`），端点事件表只列业务事件、不再重复声明；修正 **§12.4 括号枚举遗漏（补 `heartbeat`）**，§7.5 / §8.3 / §10.3 / §13.6 统一引用 §2.6。前端 `sse.ts` 读超时保护按「任意事件即重置」统一实现，消除按端点漂移。**上述流式端点尚未实现，本次仅收敛契约，不构成可联调**
+- [2026-09-09] ✅ 已决策并实施（凭据纪律硬约束落地，补规范缺口）：复盘「弱口令明文进 master」根因——**不是 `.gitignore` 漏规则**（`.env` / `.env.*` / `application-local.yml` / `*.secret` 早已就位），而是**事前硬约束从未存在**：P2 第 6 条只约束「不改配置项」、P5 第 4 项属事后 Review、P17 反而要求「与含明文的 compose 逐项对齐」，`AGENTS.md` 至 2026-09-09 才建立且无凭据条款。→ 本次落地：① `AGENTS.md` 新增**铁律 5：凭据纪律**（禁止明文入库 / 占位符 + `.env` 注入 / 新增配置项三件套 / 提交前自检 / 历史泄露按已泄露处理）；② `DEVGUIDE.md` 附录 B 新增 **P19 场景约束：配置与凭据**；③ **修正 P17**——对齐范围明确为「结构（镜像 tag / 容器名 / 端口映射 / 命名卷 / 环境变量名 / 持久化参数）」，**凭据值一律占位符、禁止抄明文**，消除「文档说取 `.env`、compose 写明文」的自相矛盾；④ 附录 B 标题 / 索引 / 正文引用同步为 `P1~P19`；⑤ DEVGUIDE 铁律 3 真相源份数与表格、附录 A 对齐（7 份 → 11 份，补 `ARCHITECTURE.md` / `LEARNING.md`）。**代码侧配置占位化（§五 b）已于同日第三批完成，见下条**
+
+- [2026-09-09] ✅ 已实施（凭据占位化落地，§五 b / §6.4 收口，第三批）：① `docker-compose.yml` 口令 6 处改 `${VAR:?必填提示}`（PG / Redis `--requirepass` + healthcheck `-a` / RabbitMQ / MinIO / Grafana）；② `ums/application.yml` 4 处改 `${INSIGHT_PG_*}` / `${INSIGHT_REDIS_*}`——**不给默认值**，未注入即 fail-fast（避免「忘配 → 静默用空口令连库」）；③ 新增 `.env.example`（入库模板：变量名 + 用途 + 两套注入路径指引）+ `.env`（真实值，已被 gitignore）；④ 新增 `application-local.example.yml`（入库模板）+ `application-local.yml`（真实值，已被 gitignore）——**关键事实：Spring Boot 不会自动读 `.env`**，应用侧只能走 profile 覆盖 / 环境变量，已写入 TD **§18.2.6**；⑤ `.gitignore` 补 `!.env.example`（原 `.env.*` 会把模板一起忽略，模板提不上去）；⑥ 同步 DEVGUIDE **P19**（两套注入路径 / gitignore 例外 / 自检命令只搜已跟踪文件的局限）、TD §18.2.4 应用侧注释、DB §1.1。自检：通用凭据模式 `git grep -niE "(password|passwd|secret|token|apikey)" -- ':!*.md' ':!*.example'` 与公网 IP 扫描均 **无输出**；`git check-ignore` 确认 `.env` / `application-local.yml` 被忽略、两个 `.example` 模板**不被忽略**。**未做：口令轮换（§五 a）——占位化只防「以后泄露」，不能回收已泄露历史**
 
 ---
 
@@ -127,6 +130,7 @@
 - [2026-09-08] 坑：PowerShell 5.1 `Invoke-RestMethod` 显示中文乱码（PS 对无 charset 响应按 ISO-8859-1 解码）≠ 服务端/DB 数据损坏——判定：curl 存原始字节后用 python 按 utf-8 解析看 `repr`/hex，字节合法即纯客户端解码问题；修复走服务端 charset（见 §三 2026-09-08）或脚本改字节安全读取
 - [2026-09-09] 坑：网关响应头 `X-Trace-Id` 出现两个值——根因是网关 GlobalFilter 直接 `getResponse().getHeaders().set(...)` 的时机早于 `NettyRoutingFilter` 回写上游响应头，上游 starter-web `TraceFilter` 也回传同名头，被**合并追加**而非覆盖 → 规避：网关回写响应头必须在 `beforeCommit` 回调内 `set`（响应提交前最后一刻覆盖），已验证转发/错误各路径均为单值
 - [2026-09-09] 坑：PowerShell 5.1 向 `curl.exe` 传 `-d '{"k":"v"}'` 时双引号被吞（native 参数传递规则），服务端收到 `{account:...}` → Jackson 报 `Unexpected character ('a')` 500 → 规避：请求体写入临时文件用 `-d "@file"`，勿在 PS 里内联带引号 JSON
+- [2026-09-09] 协作教训（促成铁律 5 / P19）：凭据明文能进 master，根因是**规范缺口**而非工具缺失——`.gitignore` 早已能拦 `.env`，但 `docker-compose.yml` / `ums/application.yml` 本身必须入库，明文写死在文件里就必然被提交；**凡是要入库的配置文件，只能写占位符**。P17 原先「与 compose 逐项对齐」的口径还会反向推动明文扩散（compose 是明文，命令就得抄明文），已修正为「对齐结构、凭据取占位符」
 
 ---
 
@@ -138,19 +142,20 @@
 >
 > **gateway 冒烟前置已全部打通（2026-09-08）**：云服务器 39.106.110.214 的 PG/Redis 已由 UMS 连接实机验证可用；UMS 配置已切云（§三 2026-09-08）；曾阻塞 gateway 冒烟的 3 项（master 缺 `JwtRefreshPayload` / ums/gateway pom 无 `repackage` / `@PreAuthorize` 拒绝误报 500）均已修复并随 `feature/gateway` 推送远程。§五无遗留**代码级**阻塞；下方**部署安全**项仍需收敛。
 
-### gateway PR 合入 master 前置（部署安全，2026-09-08 review 新增 / 2026-09-09 核实扩面）
+### 云服务器凭据安全收敛（部署安全，2026-09-08 review 新增 / 2026-09-09 核实扩面）
 
 - [ ] 🔴 **云服务器凭据明文已进入 master 历史（闸门已失守），止血只能靠口令轮换**
-  - **闸门结论修正 [已核实 2026-09-09]**：原判「`d437202` 尚未进 master → master 是最后一道闸门」**已失效**——PR #5（`f84ffd2`）已把 `feature/gateway` 合入 master，`git merge-base --is-ancestor d437202 master` 现返回 0，即 `d437202`（`ums/application.yml` 的公网 IP `39.106.110.214` + 弱口令 `insight123`）**已是 master 祖先**。→ 明文已进主干历史，改文件/改文档都无法回收。
-  - 暴露面 [已核实]：弱口令 `insight123` 同时存在于 master 历史的 `docker-compose.yml`（`ed8bfec` 引入，PG/Redis/RabbitMQ/MinIO 共 5 处）与 `ums/application.yml`；文档明文：`DEVGUIDE.md:1120,1122`、`DB.md:48`、`TD.md:1110,1127`、`LEARNING.md:4706`。
-  - **本次已做（2026-09-09）**：文档明文改占位/引用 `.env`（`TD.md`/`DEVGUIDE.md`/`DB.md`/`LEARNING.md`，减少新增暴露面）；`.ssh_run.py`、`.remote_cmd.sh` 加 `.gitignore`（防误提交）。**注意：这不等于消除泄露**——历史版本仍在，且口令本体未变；`docker-compose.yml` 与 `ums/application.yml` 的占位化属「配置外置」（见 b），本次未做。
+  - **闸门结论修正 [已核实 2026-09-09]**：原判「`d437202` 尚未进 master → master 是最后一道闸门」**已失效**——PR #5（`f84ffd2`）已把 `feature/gateway` 合入 master，`git merge-base --is-ancestor d437202 master` 现返回 0，即 `d437202`（`ums/application.yml` 的公网 IP + 弱口令明文）**已是 master 祖先**。→ 明文已进主干历史，改文件/改文档都无法回收。
+  - 暴露面 [已核实]：弱口令明文同时存在于 master 历史的 `docker-compose.yml`（`ed8bfec` 引入，PG/Redis/RabbitMQ/MinIO 共 5 处）与 `ums/application.yml`；文档明文：`DEVGUIDE.md:1120,1122`、`DB.md:48`、`TD.md:1110,1127`、`LEARNING.md:4706`。
+  - **本次已做（2026-09-09）**：文档明文改占位/引用 `.env`（`TD.md`/`DEVGUIDE.md`/`DB.md`/`LEARNING.md`，减少新增暴露面）；`.ssh_run.py`、`.remote_cmd.sh` 加 `.gitignore`（防误提交）；**同日第三批：代码侧配置占位化完成（见 b），`git grep` 明文归零**。**注意：这不等于消除泄露**——历史版本仍在，且口令本体未变。
   - **未做（唯一止血手段）**：口令轮换。当前处于学习/开发期，为本地联调方便**暂缓**；进入正式联调或对外部署前必须完成（届时旧口令按已泄露处理，轮换后历史残留即作废）。
   - 影响 [静态推断]：若云安全组对 5433/6380 放开公网（本机直连云库的前提），任何互联网来源可用已知口令连 PG（拖库）/ Redis（读写 key，视配置可能 RDB 落盘）。安全组来源是否已限制**需人工确认**（云控制台规则 / 云上 `ss -lntp`）。
   - 修复清单（分层）：
     - a) 🔴 **口令轮换（治本）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令；**未完成前本项不闭环**。
-    - b) **配置外置**：`ums/application.yml` 地址/口令改 `${INSIGHT_PG_*}`/`${INSIGHT_REDIS_*}` 占位，用 `.env` / IDEA 环境变量注入（`.gitignore` 已有 `.env`、`.env.*`、`application-local.yml` 规则可直接用）。
+    - b) ✅ **配置外置（2026-09-09 已完成）**：`docker-compose.yml` 5 处口令 + `ums/application.yml` 4 处（PG/Redis 地址与口令）全部改占位符；新增 `.env.example`（入库模板）/`.env`（真实值，不入库）/`application-local.example.yml` + `application-local.yml`（Spring 侧注入）；`.gitignore` 补 `!.env.example` 例外（原 `.env.*` 会把模板一起忽略）。**关键：Spring 不自动读 `.env`，应用侧须走 `application-local.yml` 或环境变量（TD §18.2.6 / DEVGUIDE P19）**。
     - c) **安全组收敛**：5433/6380 等仅放行固定来源 IP，不对 `0.0.0.0/0` 开放。
-    - d) **存量清理**：文档已改占位（**本次已完成**）；`docker-compose.yml` 待随 b) 一并占位化；历史改写（filter-repo）破坏性大，口令轮换后可不做。
+    - d) **存量清理**：文档占位化已完成（2026-09-09 两批）；`docker-compose.yml` 占位化随 b) 完成；历史改写（filter-repo）破坏性大，口令轮换后可不做。
+    - e) **规范补缺（2026-09-09 第二批，已完成）**：事前硬约束落地——`AGENTS.md` **铁律 5：凭据纪律** + `DEVGUIDE.md` **P19 场景约束：配置与凭据** + **P17 修正**（对齐范围改为「结构」，凭据值一律占位符）。**作用只是「防止再次发生」，不能替代 a) 轮换止血**；b) 代码侧占位化已于同日第三批完成。
 
 ---
 
@@ -202,7 +207,8 @@
 - [ ] 🟡 未匹配路由（`/api/v1/xxx` 无路由）不进入 GlobalFilter 链 → 404 响应无 `X-Trace-Id`、body 为 Spring 默认错误格式（非 IF §2 `Result`）；如需前端统一处理，需改用 WebFilter 或补 WebFlux 错误处理器（2026-09-09 复跑冒烟发现，不阻塞联调）
 - [x] **gateway 路由按 TD §8.3 细分**（2026-09-09 完成）：`/api/v1/**` 全量 fallback 已收窄为 `/auth/**` + `/api/v1/user|role|permission/**` → ums（含 `/doc.html`/`/webjars/**`/`/v3/api-docs/**` 文档路径），其余 `/api/v1/xxx` 网关层直接 404 不误转 UMS；后续服务接入按 P18 同批新增专属前缀
 - [ ] 服务接入 Nacos 注册/配置中心（冒烟期 UMS 路由为直连 localhost:7101，Nacos 接入后改 `lb://insight-engine-ums`）
-- [ ] 中间件与应用密码差异化：`insight123` / `application.yml` 明文密码改 `.env`/secrets + 环境变量占位注入（**注意：PR #5 已合入 master，闸门失效，明文已进主干历史；须先轮换口令，详见 §五 2026-09-09 修正**）
+- [ ] 中间件与应用密码差异化 + 明文占位化：**占位化部分 2026-09-09 已完成**（`docker-compose.yml` 5 处 + Grafana 1 处 + `ums/application.yml` 4 处全部改 `${VAR}`；新增 `.env.example`/`.env`/`application-local.example.yml`/`application-local.yml`；`git grep` 明文归零）；**「差异化」（各中间件/应用改用不同强随机口令）仍待随 §五 a) 轮换一并做**。注意 **Spring 不自动读 `.env`**，应用侧注入见 TD §18.2.6。**PR #5 已合入 master，明文已进主干历史，须先轮换口令，详见 §五 2026-09-09 修正**
+- [ ] 🟡 铁律 5 自检残留两处「有意保留的明文」待收口（2026-09-09 自检发现，**非本轮占位化范围**）：① `init.sql:999` 种子管理员注释含明文口令（`admin@example.com`，BCrypt hash 已入库，前端 P1 登录即用此账号）；② `gateway/application.yml:37` / `ums/application.yml:46` 的 JWT 本地开发默认值（含 `change-me`，prod profile fail-fast 拦截）。二者均为「本地开发便利」的有意妥协；收口方向：种子账号改「首次登录强制改密」或由部署方注入，JWT 去默认值改强制注入（需同步 `.env.example` + 本地启动说明）
 - [ ] 引入 Flyway schema 迁移（替代一次性 init.sql）
 - [ ] 部分容器 healthcheck 补 `start_period`（🟢）
 - [x] gateway 增 TraceGlobalFilter（order=-200，TD §8.3 过滤器链首项）——**2026-09-09 完成**：读取/校验上游 `X-Trace-Id`（非法/缺失则生成 UUID）→ 重建请求头透传 → 回写响应头；`AuthGlobalFilter` 错误响应必带 traceId
@@ -235,14 +241,18 @@
 
 ## 七、下一步计划（Top 3）
 
-1. **§五 口令轮换（唯一止血手段）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档/compose 明文清理本次已完成——**注意：闸门已失守（PR #5 已合 master），未轮换前该项不闭环**
-2. **gateway 收口已完成**：PR #5（`f84ffd2`）已合入 master（路由收窄 + TraceGlobalFilter + charset + JWT 常量 + seed 授权，冒烟 9/9）→ 下一步：云上补 Nacos 容器后路由改 `lb://insight-engine-ums`
-3. **workspace 模块启动**：环境/基础设施收口后进入阶段 5（兑现 BE-20260908-02 交付跟踪）；§6.1 高价值 UMS 收尾项择机独立处理
+1. **§五 口令轮换（唯一止血手段）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档占位化 + **规范补缺（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 代码侧配置占位化（§五 b）均已完成**——**未轮换前该项不闭环**
+2. **workspace 模块启动（阶段 5，下一步主线）**：模块空壳 → 建表核对 → 接口实现 → 联调（兑现 BE-20260908-02）；网关路由按 P18 同批加 `/api/v1/org|workspace|member/**` 专属前缀（先直连 `localhost:7102`，Nacos 接入后改 `lb://`）；§6.1 高价值 UMS 收尾项择机独立处理
+3. **云上补 Nacos 容器 + 路由改 `lb://insight-engine-ums`**：**需云服务器 SSH 凭据（未提供前暂缓）**；RabbitMQ/MinIO/Prom/Grafana 迁云同理
 
 ---
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-09
+- 内容：凭据占位化落地 + 本轮收尾（§五 b / §6.4 收口，第三批）——① `docker-compose.yml` 6 处口令改 `${VAR:?必填提示}`（PG / Redis `--requirepass` + healthcheck `-a` / RabbitMQ / MinIO / Grafana）；② `ums/application.yml` 4 处改 `${INSIGHT_PG_*}` / `${INSIGHT_REDIS_*}`——**不给默认值**，未注入即 fail-fast（避免「忘配 → 静默用空口令连库」）；③ 新增 `.env.example`（入库模板：变量名 + 用途 + 两套注入路径指引）+ `.env`（真实值，已被 gitignore）；④ 新增 `application-local.example.yml`（入库模板）+ `application-local.yml`（真实值，已被 gitignore）——**关键事实：Spring Boot 不会自动读 `.env`**，应用侧只能走 profile 覆盖 / 环境变量，已写入 TD **§18.2.6**；⑤ `.gitignore` 补 `!.env.example`（原 `.env.*` 会把模板一起忽略，模板提不上去）；⑥ 同步 DEVGUIDE **P19**、TD §18.2.4、DB §1.1、PROGRESS §一/§五/§6.4/§七；⑦ 自检：通用凭据模式 `git grep -niE "(password|passwd|secret|token|apikey)" -- ':!*.md' ':!*.example'` 与公网 IP 扫描均**无输出**；`git check-ignore` 确认 `.env` / `application-local.yml` 被忽略、两个 `.example` 模板**不被忽略**。**未做：口令轮换（§五 a）——占位化只防「以后泄露」，不能回收已泄露历史。下一步：workspace 模块（阶段 5）。**
+- 日期：2026-09-09
+- 内容：凭据纪律硬约束落地（补规范缺口，回应用户「为什么会被提交上去 / 提示词里写了没有」）——① **根因复盘**：明文能进 master **不是 `.gitignore` 漏规则**（`.env` / `.env.*` / `application-local.yml` / `*.secret` 早已就位），而是**事前硬约束从未存在**——P2 第 6 条只约束「不改配置项」、P5 第 4 项属事后 Review、P17 反而要求「与含明文的 compose 逐项对齐」，`AGENTS.md` 至 2026-09-09 才建立且无凭据条款；而 `docker-compose.yml` / `ums/application.yml` 本身必须入库，明文写死在文件里就必然被提交；② **落地**：`AGENTS.md` 新增**铁律 5：凭据纪律**（禁止明文入库 / 占位符 + `.env` 注入 / 新增配置项三件套 / 提交前 `git grep` 自检 / 历史泄露按已泄露处理）；`DEVGUIDE.md` 附录 B 新增 **P19 场景约束：配置与凭据**；③ **修正 P17**：对齐范围明确为「结构（镜像 tag / 容器名 / 端口 / 命名卷 / 环境变量名 / 持久化参数）」，凭据值一律占位符、禁止抄明文；④ **文档口径统一**：附录 B 标题 / 索引 / 正文引用同步 `P1~P19`（含 AGENTS 铁律 3 的 `P1~P18` → `P1~P19`）、DEVGUIDE 铁律 3 真相源份数与表格对齐附录 A（7 份 → 11 份，补 `ARCHITECTURE.md` / `LEARNING.md`）；⑤ **同步** §一 当前任务 / 完成度、§三 决策、§四 踩坑、§五 e) 规范补缺、§6.4 待办池；⑥ **边界**：本次只补规范，**未改代码配置**——`docker-compose.yml` / `ums/application.yml` 仍为明文（§五 b），**轮换止血（a）仍未做**，§五 红级不闭环
 - 日期：2026-09-09
 - 内容：云凭据安全收口（局部）+ PROGRESS §五 闸门结论修正 —— ① 停掉本机残留 gateway(7000)/UMS(7101) 进程，解除 IDEA 端口占用（保留 IDEA 本体与 mysqld）；② 文档清明文：`TD.md:1110,1127`、`DEVGUIDE.md:1120,1122`、`DB.md:48`、`LEARNING.md:4706` 一律改 `.env` 占位引用（文档不再出现口令本体）；③ **§五 闸门结论修正**：PR #5（`f84ffd2`）已合入 master，`d437202` 已是 master 祖先（`git merge-base --is-ancestor` 返回 0）→ 原判「master 是最后一道闸门」**失效**，明文已进主干历史、改文件无法回收，**止血只能靠口令轮换**（当前学习开发期暂缓，进入联调/部署前必须完成）；④ `.ssh_run.py`/`.remote_cmd.sh` 加 `.gitignore` 防误提交；⑤ 同步修正 §一 当前阶段/任务/完成度、§二 gateway 看板（PR 已合）、§6.4 密码差异化项、§七 Top1/2 中所有「待 PR 合入」过期表述。
 - 日期：2026-09-09

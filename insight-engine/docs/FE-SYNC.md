@@ -34,7 +34,7 @@
 | 模块 | 接口前缀 | 状态 | 前端可联调 | 证据（curl + traceId + 日期） | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | UMS 认证 | `/auth/**`、`/api/v1/user\|role\|permission/**` | ✅ 已就绪 | 是 | 2026-09-08 全链路冒烟 8/8（登录/me/refresh 轮换/logout 撤销/401/403/2006），见 PROGRESS §六 6.4 | 前端 P1/P2 已真联调；register 已修复 |
-| gateway 网关 | 前端统一入口 `:7000` | ✅ 已就绪（冒烟级） | 是 | **2026-09-09 复跑 9/9**：登录 200 / 转发 200 / 无 token 401-2001 / 坏 token 401-2001 / 过期 token 401-2007 / `/doc.html` 200 / `sk-` 401-2001 / end_user 403-2006 / 未匹配路由 404；六类路径 `X-Trace-Id` 均为单值 | 路由已按 TD §8.3 收窄（user/role/permission 专属前缀）；TraceGlobalFilter(-200)、错误响应 charset=UTF-8、JWT Claim 常量下沉 common 已落地；Nacos 未接（待云上容器）。**PR 合入受 §五 云凭据收敛（红级）阻塞** |
+| gateway 网关 | 前端统一入口 `:7000` | ✅ 已就绪（冒烟级） | 是 | **2026-09-09 复跑 9/9**：登录 200 / 转发 200 / 无 token 401-2001 / 坏 token 401-2001 / 过期 token 401-2007 / `/doc.html` 200 / `sk-` 401-2001 / end_user 403-2006 / 未匹配路由 404；六类路径 `X-Trace-Id` 均为单值 | 路由已按 TD §8.3 收窄（user/role/permission 专属前缀）；TraceGlobalFilter(-200)、错误响应 charset=UTF-8、JWT Claim 常量下沉 common 已落地；Nacos 未接（待云上容器）。**PR #5（`f84ffd2`）已合入 master** |
 | workspace 工作空间 | `/api/v1/org\|workspace\|member/**` | ⚪ 未开始 | 否（mock） | — | 模块空壳（仅 pom.xml）；前端 BE-20260908-02 跟踪 |
 | model 模型网关 | `/api/v1/model/**` | ⚪ 未开始 | 否（mock） | — | 阶段 6 |
 | kb 知识库 | `/api/v1/kb/**` | ⚪ 未开始 | 否（mock） | — | 上传 + 状态轮询 |

@@ -1124,7 +1124,7 @@ spring:
     host: rabbitmq          # compose 服务名
     port: 5672              # 容器内端口（不是 5673！）
     username: insight
-    password: ${RABBITMQ_PASSWORD}   # 真实值放 .env（不入库）
+    password: ${RABBITMQ_PASSWORD}   # 环境变量注入（Spring 不自动读 .env，见 §18.2.6）
 ```
 
 本机 IDE 直连调试时（不打容器、直接跑本地 jar）：
@@ -1146,6 +1146,19 @@ spring:
 | 风险 | 无 | 4.0 移除了部分 deprecated 特性（classic mirroring 等） |
 
 **决策**：本项目**独立起 `rabbitmq:3.13-management`**，不复用本机 4.2 容器。理由：项目环境隔离、版本受控、可复现；避免与现有项目耦合、避免 4.0 breaking changes 的不确定性。本项目只用基础交换机/队列/死信，3.13 完全够用。
+
+#### 18.2.6 凭据注入路径（compose 与 Spring 是两套，勿混用）
+
+| 侧 | 读取方式 | 真实值放哪 | 入库模板 |
+|----|----------|-----------|----------|
+| compose（中间件容器） | compose 自动加载同目录 `.env` | `insight-engine/.env`（已被 `.gitignore` 忽略） | `insight-engine/.env.example` |
+| Spring 应用（ums / gateway 等） | 环境变量 / profile 覆盖 | `ums/src/main/resources/application-local.yml`（已被 `.gitignore` 忽略），或 IDEA Run Configuration 环境变量 / systemd / 容器 `environment` | `ums/src/main/resources/application-local.example.yml` |
+
+> ⚠️ **Spring Boot 不会自动读取 `.env`**——`.env` 只服务 compose。应用侧必须另行注入，
+> 否则 `application.yml` 里的 `${INSIGHT_PG_*}` / `${INSIGHT_REDIS_*}` 无法解析 → 启动 fail-fast
+> （有意设计：宁可启动失败，也不静默用空口令连库）。
+> 变量名清单见 `.env.example` 末尾「应用侧注入」段；新增配置项须同步三处
+> （`.env.example` / `application-local.example.yml` / 本文档），规则见 DEVGUIDE P19。
 
 ### 18.3 Dockerfile（后端示例）
 
