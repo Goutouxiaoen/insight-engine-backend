@@ -123,6 +123,15 @@
 - 时间：ISO-8601，`2026-08-25T10:30:00Z`（UTC）
 - 金额：字符串，单位「元」，6 位小数，如 `"0.001200"`
 
+### 2.6 SSE 流式通用约定（所有 `stream=true` 接口适用）
+
+> **本节是 SSE 心跳的单一事实源**；各流式端点事件表只列**业务事件**，不再重复声明心跳。
+
+- **所有 SSE 流式接口均包含 `heartbeat` 事件**：周期 **15s**，**不可关闭**，`data = {"ts":<epochMillis>}`。
+- 前端读超时保护统一按「收到任意事件（含 `heartbeat`）即重置」实现，**不得按端点差异化处理**。
+- 端点事件表以「事件同 §10.3」等方式引用时，**同样包含 `heartbeat`**。
+- 适用端点：§7.5 聊天补全、§8.3 调试、§10.3 Agent 调用、§12.4 conv 发送消息、§13.6 OpenAPI 对话流式。
+
 ---
 
 ## 3. 认证接口（auth）
@@ -569,7 +578,7 @@ curl -X POST http://localhost:7000/auth/login \
 }
 ```
 
-**流式（stream=true）**：SSE，事件 `message`（delta）/ `error` / `finish`（含 usage）。
+**流式（stream=true）**：SSE，事件 `message`（delta）/ `error` / `finish`（含 usage）；**另含通用 `heartbeat`（见 §2.6）**。
 
 **curl**：
 
@@ -690,7 +699,7 @@ curl -X POST http://localhost:7000/api/v1/model/chat/completions \
 }
 ```
 
-**响应**：SSE 流式，同聊天补全流式格式；同时服务端记录 `prompt_debug_record`。
+**响应**：SSE 流式，事件同 §7.5（**含通用 `heartbeat`，见 §2.6**）；同时服务端记录 `prompt_debug_record`。
 
 ### 8.4 调试历史
 
@@ -975,7 +984,7 @@ curl -X POST http://localhost:7000/api/v1/kb/1/doc/upload \
 | `reference` | 引用 | `{"docName":"员工手册.pdf","page":8,"content":"..."}` |
 | `error` | 错误 | `{"code":5001,"message":"..."}` |
 | `finish` | 结束 | `{"usage":{"totalTokens":144},"latencyMs":1320}` |
-| `heartbeat` | 心跳保活（每 15s，不可关闭） | `{"ts":1725800000000}` |
+| `heartbeat` | 心跳保活（每 15s，不可关闭；通用约定见 §2.6） | `{"ts":1725800000000}` |
 
 **非流式（stream=false）**：
 
@@ -1209,7 +1218,7 @@ curl -N -X POST http://localhost:7000/api/v1/agent/1/invoke \
 }
 ```
 
-**响应**：SSE，事件同 Agent 调用（`message` / `tool_call` / `tool_result` / `reference` / `error` / `finish`）。
+**响应**：SSE，事件同 §10.3 Agent 调用（`message` / `tool_call` / `tool_result` / `reference` / `error` / `finish` / `heartbeat`）。
 
 **说明**：该接口内部会调用 Agent 服务，并把消息持久化到 `ie_message`。
 
@@ -1311,7 +1320,7 @@ curl -N -X POST http://localhost:7000/api/v1/agent/1/invoke \
 
 `POST /api/v1/openapi/agent/{appCode}/stream`
 
-**说明**：与 13.4 相同，`stream=true` 的 SSE 版本。
+**说明**：与 13.4 相同，`stream=true` 的 SSE 版本；**另含通用 `heartbeat`（见 §2.6）**。
 
 ---
 
