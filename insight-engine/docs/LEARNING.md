@@ -46,25 +46,67 @@
 
 **待学习**：
 
-- [ ] Spring Boot 3 与 Java 17 新特性
-- [ ] Spring Cloud Gateway 与过滤器链
-- [ ] OpenFeign 服务调用
-- [ ] MyBatis-Plus 与数据权限拦截器
-- [ ] PostgreSQL + PGVector 向量检索
-- [ ] Spring AI 与模型适配器模式
-- [ ] LangChain4j 与 Agent
-- [ ] ReAct 与 Function Calling 原理
-- [ ] RabbitMQ 异步任务与死信
-- [ ] Redis 分布式锁（Redisson）/ 缓存穿透·击穿·雪崩
+> 按轨道分组，组内自上而下即推荐学习顺序；条目格式：`知识点 —— 关键问题 + 项目对应位置`。
+> 开新学习对话时，把某一条原样粘给 AI 当学习目标；学完移入「已沉淀」并在正文按模板补笔记。范围：仅后端。
+
+**轨道 A：语言与框架基础**
+
+- [ ] Spring Boot 3 与 Java 17 新特性 —— records / sealed / 文本块 / 虚拟线程、`jakarta.*` 迁移、Boot 3 自动装配变化
+
+**轨道 B：微服务通信**
+
+- [ ] OpenFeign 服务调用 —— 声明式客户端原理、`@FeignClient` 的 name/contextId、超时与重试、与 LoadBalancer 的协作（项目：TD §8.2，`insight-engine-api` 的 `KbClient`）
+- [ ] Spring Cloud Gateway 过滤器链（补漏）—— `GlobalFilter` 顺序控制、`RateLimitGlobalFilter` 落点（核心原理已沉淀）
+
+**轨道 C：微服务治理（★ 用户点名优先）**
+
+- [ ] Nacos 注册中心 —— 服务注册/注销、心跳与健康检查、临时实例（ephemeral）vs 持久实例、保护阈值（项目：Gateway 路由 `lb://insight-engine-ums`，UMS 注册）
+- [ ] Nacos 配置中心 —— Namespace / Group / DataId 三层模型、`@RefreshScope` 动态刷新、配置优先级、规则外置（项目：TD §13.1 Sentinel 规则经 Nacos 下发）
+- [ ] 负载均衡 LB —— 客户端负载均衡原理、`lb://` 如何把服务名解析成实例列表、Spring Cloud LoadBalancer 的轮询/随机/权重与自定义策略、健康实例摘除；客户端 LB vs 服务端 LB（Nginx）、Ribbon 为何退场（项目：TD §8.3 全部路由 `uri: lb://...`）
+- [ ] 限流 —— 四种算法（固定窗口/滑动窗口/漏桶/令牌桶）；Sentinel 流控模式（直接/关联/链路）与流控效果（快速失败/Warm Up/排队等待）；QPS vs 并发线程数阈值（项目：TD §13.1 三层限流——网关 IP/接口、服务 租户+模型/用户）
+- [ ] 熔断降级 —— 熔断器三态（Closed/Open/Half-Open）、慢调用比例/异常比例/异常数三种策略、熔断与重试的叠加风险、fallback 兜底（项目：TD §8.2 OpenFeign 熔断、§8.4 模型调用熔断 + 指数退避）
+- [ ] Sentinel 落地 —— `@SentinelResource` 的 `blockHandler` vs `fallback`、规则持久化到 Nacos、网关适配与自定义限流响应（项目：TD §8.3 `RateLimitGlobalFilter`，PROGRESS §6.4 待实现）
+
+**轨道 D：数据与持久层**
+
+- [ ] MyBatis-Plus 与数据权限拦截器 —— 分页插件、乐观锁、逻辑删除、`TenantLineHandler` 自定义数据权限拦截（项目：多租户 `tenant_id`、workspace 隔离）
+- [ ] PostgreSQL + PGVector 向量检索 —— 向量类型与索引（IVFFlat / HNSW）、距离算子、相似度检索 SQL（项目：知识库 RAG）
+
+**轨道 E：缓存与消息**
+
+- [ ] Redis 分布式锁（Redisson）/ 缓存穿透·击穿·雪崩 —— 看门狗续期、RedLock 争议、布隆过滤器、空值缓存、逻辑过期（项目：`ie:lock:{biz}:{id}`）
 - [ ] Redis 内存淘汰策略（maxmemory-policy）与持久化（RDB/AOF）对「登录态丢失」的影响
-- [ ] Redis Pipeline / Lua 脚本（本项目待解决：`INCR`+`EXPIRE` 竞态）
-- [ ] Redis 底层编码（SDS / listpack / hashtable / skiplist）
-- [ ] Sentinel 限流熔断
-- [ ] Micrometer + Prometheus 可观测
-- [ ] Dockerfile 编写与镜像分层 / 构建优化（命令与编排已学，见「Docker 网络模型与端口映射」「Docker 运维命令地图」）
-- [ ] 镜像加速器（registry mirror）原理 vs 私有仓库的区别
-- [ ] 默认 bridge vs 自定义 bridge 网络（为什么默认不支持容器名 DNS）
-- [ ] Vue 3 + Vite + TypeScript（初步了解）
+- [ ] Redis Pipeline / Lua 脚本 —— 原子性、减少 RTT；本项目待解决：`INCR` + `EXPIRE` 竞态
+- [ ] Redis 底层编码 —— SDS / listpack / quicklist / hashtable / skiplist 与内存开销
+- [ ] RabbitMQ 异步任务与死信 —— 交换机类型（direct/topic/fanout/headers）、publisher confirm + 手动 ack、死信队列与延迟消息、幂等消费（项目：TD §12）
+
+**轨道 F：AI 工程**
+
+- [ ] Spring AI 与模型适配器模式 —— `ChatModel` / `EmbeddingModel` 抽象、Advisor 机制、工具调用（项目：TD §9.1 自研 `ChatAdapter`）
+- [ ] LangChain4j 与 Agent —— `AiServices`、`@Tool` 注解、Memory、与 Spring AI 的分工（项目：TD §9/§10）
+- [ ] ReAct 与 Function Calling 原理 —— 思考-行动-观察循环、工具描述如何影响模型选择、流式工具调用
+- [ ] RAG 全链路 —— 切分 / 嵌入 / 召回 / 重排 / prompt 拼装、召回评估（项目：TD §10）
+
+**轨道 G：可观测**
+
+- [ ] Micrometer + Prometheus 可观测 —— counter/gauge/timer、`MeterRegistry` 埋点、Prometheus 抓取配置、Grafana 看板与告警（项目：TD §14.1 `ie_*` 指标）
+- [ ] 日志与链路 —— logback JSON 输出、跨服务 traceId 传递、慢查询与异常聚合（MDC 已沉淀）
+
+**轨道 H：运维与部署（本次新增）**
+
+- [ ] 云盘三层模型与在线扩容 —— 块设备 → 分区（MBR/GPT）→ 文件系统（ext4/xfs）；`lsblk` 判断、`growpart` 扩分区、`resize2fs`/`xfs_growfs` 扩文件系统；为什么云厂商升配后 OS 里还要再扩一次（项目：云盘已 50GB，分区仍 29.8GB）
+- [ ] Linux 内存口径 —— `free` 的 `used` vs `available`、`buff/cache` 可回收性、RSS vs VSZ vs PSS、为什么排查内存看 `available`（项目：4GB 跑 7 中间件 + 2 JVM）
+- [ ] swap 机制 —— swapfile vs swap 分区、`vm.swappiness`、为何不能替代内存扩容、OOM Killer 的 `oom_score` 与排查（项目：当前无 swap，建议 2GB + swappiness=10）
+- [ ] 容器资源限制与 JVM —— `--memory` / `--cpus`、compose `deploy.resources`、cgroup v2、`UseContainerSupport` / `MaxRAMPercentage`（项目：Nacos 256m、UMS 512m、Gateway 256m）
+- [ ] Docker 磁盘与日志治理 —— `docker system df`、镜像/卷清理、`json-file` 日志轮转（max-size / max-file）（项目：镜像 670MB、卷 102MB）
+- [ ] Docker 网络与镜像 —— 默认 bridge vs 自定义 bridge（为何默认不支持容器名 DNS）、Dockerfile 分层与构建优化、registry mirror vs 私有仓库
+- [ ] 端口暴露面收敛 —— 云安全组 / ufw / iptables 三层优先级、只监听内网地址、SSH 隧道替代公网暴露（项目：PG 5433、Redis 6380 待收敛）
+- [ ] 凭据治理 —— 弱口令轮换 SOP、`.env` / secrets 注入、避免明文进 git（项目弱口令涉及 PG/Redis/RabbitMQ/MinIO，**文档中勿复述口令本体**）
+- [ ] SSH 加固 —— 密钥登录 → 关 `PermitRootLogin` / `PasswordAuthentication` → 改端口 → fail2ban；如何避免把自己锁在外面
+
+**暂缓（前端，当前只学后端）**
+
+- [ ] Vue 3 + Vite + TypeScript
 
 ---
 
@@ -4661,7 +4703,7 @@ try {
 
 > ⚠️ **参数顺序铁律**：`docker run [选项] 镜像 [命令]` —— **选项必须在镜像名之前；镜像名之后的内容是要执行的命令，会覆盖镜像默认 CMD**。顺序写错报 `unknown flag`。
 
-**③ CMD 覆盖**：镜像名后面跟命令 = 覆盖默认 CMD。例：`redis:7-alpine redis-server --requirepass insight123` 把"无密码启动"改成"带密码启动"；等价于 compose 里的 `command: [...]`。
+**③ CMD 覆盖**：镜像名后面跟命令 = 覆盖默认 CMD。例：`redis:7-alpine redis-server --requirepass <REDIS_PASSWORD>` 把"无密码启动"改成"带密码启动"；等价于 compose 里的 `command: [...]`。
 
 ### 我在项目里怎么用的（逐条拆运维脚本）
 
