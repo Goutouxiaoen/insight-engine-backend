@@ -17,6 +17,7 @@
 
 - 一、UMS 认证与用户服务（insight-engine-ums）
 - 二、基础设施 starter（starter-web / mybatis / redis / security）
+- 三、Workspace 工作空间与组织服务（insight-engine-workspace）
 
 ---
 
@@ -178,13 +179,14 @@
 
 ### 内置角色与权限（init.sql 种子）
 
-| 角色 | code | 说明 |
-|------|------|------|
-| 超级管理员 | super_admin | 全部 48 个权限 |
-| 组织管理员 | org_admin | 组织级管理 |
-| 空间管理员 | ws_admin | 工作空间级管理 |
-| 普通成员 | member | 空间内操作 |
-| 访客 | end_user | 最小权限（注册默认角色） |
+| 角色 | code | 授权数 | 说明 |
+|------|------|--------|------|
+| 超级管理员 | super_admin | 48 | 全部权限（init.sql 全量授予） |
+| 组织管理员 | org_admin | 46 | 组织下全量（不含平台级 `auth:write`/`system:write`） |
+| 空间管理员 | ws_admin | 27 | 空间内管理（ws 编辑 + 成员管理 + 空间级资源），**不含 `ws:create`/`ws:delete`/`org:*`/`role:write`** |
+| 应用开发者 | app_developer | 15 | kb/agent/tool/conv 域权限 |
+| 业务用户 | end_user | 7 | 最小权限（注册默认角色），可查看/对话 |
+| **合计** | — | **143** | 与 DB.md 种子表一致（2026-09-16 云端库核对） |
 
 ---
 
@@ -204,24 +206,102 @@
   3. 审计字段自动填充：created_at/updated_at/created_by/updated_by（UTC + 未登录兜底 0）
 - **为什么逻辑删除用全局配置而非逐实体注解**：避免新表漏配导致数据被物理删除
 
-## starter-redis（本次实现）
+## starter-redis（序列化 + 登录态/黑名单实现，2026-09-16 下沉）
 
-- **定位**：RedisTemplate 统一序列化
-- **实现类**：`RedisAutoConfiguration`
-- **能力**：key 用 StringRedisSerializer（可读），value 用 JSON 序列化（保留类型信息，反序列化还原 POJO 而非 LinkedHashMap）
-- **为什么不用 JDK 默认序列化**：二进制不可读、要求实现 Serializable、不可跨语言
+- **定位**：RedisTemplate 统一序列化 + **starter-security 两个可选安全接口的 Redis 实现**
+- **实现类**：`RedisAutoConfiguration` / `RedisTokenSessionService` / `RedisTokenBlacklistService`
+- **能力**：
+  1. key 用 StringRedisSerializer（可读），value 用 JSON 序列化（保留类型信息，反序列化还原 POJO 而非 LinkedHashMap）；不用 JDK 默认序列化（二进制不可读、要求 Serializable、不可跨语言）
+  2. `TokenSessionService`（登录态）= 校验 `ie:auth:token:{userId}` 摘要与当前 token 是否一致 → 支撑「改密/禁用/登出/换签后旧 token 立即失效」（**单会话语义**）
+  3. `TokenBlacklistService`（登出黑名单）= `ie:auth:blacklist:{sha256(token)}`，TTL=剩余有效期
+- **为什么下沉**：workspace 切换空间需覆盖登录态、且「踢人」必须在**所有**服务一致生效；各服务各写一份会导致 Redis 键/摘要算法漂移 → 静默失效（登录态永远判定无效）。键的**唯一口径**在 `common.constant.CacheKeyConstants`
 
 ## starter-security（本次实现）
 
 - **定位**：无状态 JWT 认证体系，任何业务服务引入即获得统一鉴权
-- **实现类**：`SecurityAutoConfiguration` / `JwtUtil` / `JwtAuthFilter` / `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler` / `TokenBlacklistService`
+- **实现类**：`SecurityAutoConfiguration` / `JwtUtil` / `JwtAuthFilter` / `TokenDigestUtil` / `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler` / `SecurityExceptionHandlerAdvice`
 - **能力**：
   1. SecurityFilterChain：关闭 CSRF + 无状态 Session + 白名单放行 + 其余需认证
-  2. JWT 签发/解析（HS256）：access(2h) / refresh(7d)，`type` Claim 防令牌混淆
-  3. 认证过滤器：Bearer 头解析 → 权限转 authorities → 填充 UserContext
-  4. 未认证/无权限统一转 Result 结构（2001/2006）
-  5. 可选黑名单：`TokenBlacklistService` 接口 + `ObjectProvider` 注入，未提供实现则退化为纯无状态校验
+  2. JWT 签发/解析（HS256）：access(2h) / refresh(7d)，`type` Claim 防令牌混淆；`ws_id` 为空（组织级管理员）时条件写入
+  3. 认证过滤器：Bearer 头解析 → 权限转 authorities → 填充 UserContext（并在 finally 清理，防线程复用串号）
+  4. 未认证/无权限统一转 Result 结构（2001/2006）；`@PreAuthorize` 拒绝由 `SecurityExceptionHandlerAdvice` 转 403/2006
+  5. 可选登录态/黑名单：接口 + `ObjectProvider` 注入，未提供实现则退化为纯无状态校验（Redis 版本由 starter-redis 提供）
 - **为什么黑名单做成可选接口**：starter-security 不依赖 Redis，其他服务复用时不强制引入 Redis 依赖
+
+---
+
+# 三、Workspace 工作空间与组织服务（insight-engine-workspace）
+
+## 模块概览
+
+| 项 | 值 |
+|----|----|
+| 服务名 | insight-engine-workspace（工作空间与组织服务） |
+| 端口 | 7102（PRD §9.2） |
+| 定位 | 组织 / 工作空间 / 成员 —— 所有业务资源的归属边界与数据权限维度 |
+| 依赖 starter | web / security / mybatis / redis / nacos |
+| 核心表 | ie_organization / ie_workspace / ie_member（只读引用 ie_user / ie_role / ie_permission） |
+| 接口文档 | Knife4j：`http://localhost:7102/doc.html` |
+| 接口数量 | 11 个（组织 2 + 空间 5 + 成员 4） |
+| 网关前缀 | `/api/v1/org\|workspace\|member/**` → `lb://insight-engine-workspace`（TD §8.3） |
+
+## 功能模块 1：组织（OrgController / OrgService）
+
+### 1.1 创建组织 `POST /api/v1/org`
+- **权限**：`org:create`；**实现类**：`OrgServiceImpl.create()`
+- **关键逻辑**：编码同租户唯一（先查友好提示 + `uk_org_code_tenant` 索引兜底）→ 落库，`owner_id` = 当前用户，`status=1`
+
+### 1.2 组织详情 `GET /api/v1/org/{id}`
+- **权限**：`org:read`；不存在返回 `1004`
+
+## 功能模块 2：工作空间（WorkspaceController / WorkspaceService）
+
+### 2.1 创建空间 `POST /api/v1/workspace`
+- **权限**：`ws:create`；**实现类**：`WorkspaceServiceImpl.create()`
+- **关键逻辑**：组织存在校验 → 编码组织内唯一 → 落库 → **创建者自动挂 `ws_admin` 成员**（事务）
+- **为什么创建者要自动成为成员**：可见范围与切换范围都以成员关系为准，不落成员关系则「新建空间自己看不到、也切不过去」
+
+### 2.2 更新空间 `PUT /api/v1/workspace/{id}`
+- **权限**：`ws:write`；可改 `name/maxApps/maxKbSizeMb`，**`code`/`orgId` 不可改**（编码是组织内稳定标识）
+
+### 2.3 删除空间 `DELETE /api/v1/workspace/{id}`
+- **权限**：`ws:delete`
+- **关键逻辑**：逻辑删除空间 + **其全部成员关系**（对齐前端「删除后成员将同时移出」确认文案）；**禁止删除当前所处空间**（`1003`，防当前 token 的 `ws_id` 指向已删空间）
+
+### 2.4 空间分页 `GET /api/v1/workspace/page`
+- **权限**：`ws:read`
+- **关键逻辑（可见范围收敛）**：持 `org:write`（组织级管理员及以上）→ 组织内全部；其他用户 → 仅自己所属空间（`WorkspaceMapper.selectWorkspaceIdsByUserId` 反查；为空直接返回空页，避免 `IN ()` 语义风险）
+
+### 2.5 切换空间 `POST /api/v1/workspace/switch` ★
+- **权限**：`ws:read`（**不新增 `ws:switch`**：范围由成员关系强约束，独立权限码无安全增益，见 PROGRESS §三 2026-09-09 裁决）
+- **实现类**：`WorkspaceServiceImpl.switchWorkspace()`
+- **关键逻辑（五步）**：
+  1. 目标空间存在且未停用（`1004`/`1003`）
+  2. **成员关系校验**（非成员 `403/2006`）——切换范围的唯一依据
+  3. 按**目标空间维度**重展开 `roles` / `perms`（避免「切到 A 空间却带着 B 空间权限」）
+  4. 重签 access token（`ws_id`=目标空间）+ **refresh 一次性轮换**（新 jti）
+  5. **覆盖服务端会话**（`ie:auth:token:*` / `ie:auth:refresh:*`，键口径来自 `CacheKeyConstants`）→ 旧 access token 立即 401
+- **为什么换签要覆盖会话**：否则旧 token 在 UMS 侧仍有效（两地上下文不一致），且新 token 会因摘要不匹配被拒
+
+## 功能模块 3：成员（MemberController / MemberService）
+
+### 3.1 成员分页 `GET /api/v1/member/page`
+- **权限**：`member:read`；`MemberMapper.selectMemberPage` **一条联表 SQL** 取回 `ie_member + ie_user + ie_role`（昵称/邮箱/角色名），避免 N+1
+
+### 3.2 添加成员 `POST /api/v1/member/invite`
+- **权限**：`member:create`
+- **关键逻辑**：空间存在 → 邮箱定位**已注册用户**（未注册 `1001`）→ 非重复成员（`1001`）→ `roleId` 存在校验（防孤儿关系）→ 落成员关系（tenant/org 取自空间）
+
+### 3.3 移除成员 `DELETE /api/v1/member/{id}`
+- **权限**：`member:delete`；逻辑删除；**不允许移除自己**（`1003`）
+
+### 3.4 修改成员角色 `PUT /api/v1/member/{id}/role`
+- **权限**：`member:update`；校验 `roleId` 存在；**不允许修改自己的空间角色**（`1003`，防自提权/自降权）
+
+## 贯穿设计：与 UMS 的协作边界（MVP 现状）
+
+- **同库只读引用**：workspace 按邮箱定位用户（`UserRefMapper` → `ie_user`）、UMS 取空间名（`WorkspaceMapper` → `ie_workspace`），均为 MVP 临时方案，Service 间契约化（Feign + api 模块）后收口（TD §3.2，PROGRESS §6.3）
+- **共享登录态**：两端写入/读取同一组 `ie:auth:*` 键（`CacheKeyConstants`），实现「UMS 登录态 ⇄ workspace 换签」双向一致
 
 ---
 

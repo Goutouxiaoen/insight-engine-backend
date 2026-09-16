@@ -52,7 +52,7 @@
 |------|--------------|------|
 | auth | 5 | 登录/刷新/登出/注册/用户信息 |
 | user | 5 | 用户 CRUD + 密码 |
-| org / workspace | 8 | 组织、空间、成员 |
+| org / workspace | 11 | 组织（创建/详情）、空间（创建/更新/删除/分页/切换）、成员（分页/添加/移除/改角色） |
 | role / permission | 6 | 角色、权限、分配 |
 | model | 10 | 厂商、模型、路由、调用 |
 | prompt | 6 | 模板、示例、调试 |
@@ -244,6 +244,11 @@ curl -X POST http://localhost:7000/auth/login \
 }
 ```
 
+**字段语义（2026-09-16 明确）**：
+- `workspaceId` / `workspaceName` = **当前工作空间**，以请求 JWT 的 `ws_id` Claim 为准；调用 §5.5 切换空间后再次调用本接口即返回新空间；
+- 仅当令牌不含 `ws_id`（组织级管理员，如 `org_admin` 不挂具体空间）时，回退为「成员关系中最早加入的空间」；
+- `roles` 为**全局角色编码**（跨空间聚合），与 JWT 中按当前空间展开的 `roles` 语义不同（后者用于权限判定）。
+
 ---
 
 ## 4. 用户接口（user）
@@ -313,6 +318,9 @@ curl -X POST http://localhost:7000/auth/login \
 
 ## 5. 组织与工作空间接口
 
+> **服务归属**：`insight-engine-workspace`（宿主端口 7102），网关前缀 `/api/v1/org/**`、`/api/v1/workspace/**`、`/api/v1/member/**`（TD §8.3）。
+> **实现状态（2026-09-16）**：8 个端点已实现并实机冒烟通过（证据见 `FE-SYNC.md` §1）。
+
 ### 5.1 创建组织
 
 `POST /api/v1/org`
@@ -325,15 +333,31 @@ curl -X POST http://localhost:7000/auth/login \
 
 **权限**：`org:create`
 
+**响应 `data`**：新组织 ID（number）。编码在同租户内唯一，重复返回 `1001`。
+
 ### 5.2 组织详情
 
 `GET /api/v1/org/{id}`
 
-### 5.3 创建/更新工作空间
+**权限**：`org:read`
 
-`POST /api/v1/workspace` / `PUT /api/v1/workspace/{id}`
+**响应 `data`**：
 
-**请求体**：
+```json
+{
+  "id": 1,
+  "tenantId": 1,
+  "name": "智擎科技",
+  "code": "zhiqing",
+  "ownerId": 1,
+  "status": 1,
+  "createdAt": "2026-09-08T06:55:35.787091"
+}
+```
+
+### 5.3 创建 / 更新 / 删除工作空间
+
+- `POST /api/v1/workspace` — 创建（权限 `ws:create`）
 
 ```json
 {
@@ -345,37 +369,100 @@ curl -X POST http://localhost:7000/auth/login \
 }
 ```
 
-**权限**：`ws:create`
+- `PUT /api/v1/workspace/{id}` — 更新（权限 `ws:write`）
+
+```json
+{ "name": "研发部", "maxApps": 10, "maxKbSizeMb": 1024 }
+```
+
+- `DELETE /api/v1/workspace/{id}` — 删除（权限 `ws:delete`）
+
+**字段约束**：`code` 与 `orgId` 创建后不可修改；`name`/`code` 同组织内唯一；`maxApps`/`maxKbSizeMb` 可选（默认 10 / 1024）。
+
+**语义**：
+- 创建者自动成为该空间的 `ws_admin` 成员（否则新空间「自己都切不过去、列表里也看不到」）；
+- 删除为逻辑删除，**同时逻辑删除该空间全部成员关系**（前端确认文案「删除后成员将同时移出」）；
+- 不允许删除**当前所处**的工作空间（返回 `1003`，提示先切换）。
 
 ### 5.4 工作空间列表
 
 `GET /api/v1/workspace/page?orgId=1&pageNum=1&pageSize=10`
 
+**权限**：`ws:read`
+
+**可见范围**：组织级管理员及以上（持 `org:write`）返回组织内全部空间；其他用户**仅返回自己所属（成员关系覆盖）的空间**。
+
+**响应 `data.records[]`**：
+
+```json
+{
+  "id": 1,
+  "orgId": 1,
+  "name": "默认空间",
+  "code": "default",
+  "maxApps": 10,
+  "maxKbSizeMb": 1024,
+  "status": 1,
+  "createdAt": "2026-09-08T06:55:35.787091"
+}
+```
+
 ### 5.5 切换当前工作空间
 
 `POST /api/v1/workspace/switch`
 
+**权限**：`ws:read`（切换目标范围由服务端成员关系强约束，故不增设 `ws:switch` 权限码，见 §6.7）
+
 **请求体**：`{ "workspaceId": 2 }`
 
-**响应**：返回新 token（重签 JWT 携带新 ws_id）。
+**响应 `data`**：
+
+```json
+{ "token": "eyJ...", "refreshToken": "eyJ...", "expiresIn": 7200 }
+```
+
+**语义**：
+- 服务端校验当前用户是目标空间成员（非成员 `403/2006`；空间不存在 `1004`；空间停用 `1003`）；
+- 重签 access token：`ws_id` = 目标空间，`roles`/`perms` 按**目标空间维度**重新展开；
+- refresh token **一次性轮换**；
+- 覆盖服务端登录态缓存 → **换签前的旧 access token 立即失效（401/2001，单会话语义）**；
+- 换签后 `GET /auth/me` 返回的 `workspaceId` / `workspaceName` 即为新空间（见 §3.5 语义说明）。
 
 ### 5.6 成员管理
 
-- `GET /api/v1/member/page?workspaceId=1&pageNum=1&pageSize=10` — 成员列表
-- `POST /api/v1/member/invite` — 邀请成员
+- `GET /api/v1/member/page?workspaceId=1&pageNum=1&pageSize=10` — 成员列表（`member:read`）
+- `POST /api/v1/member/invite` — 添加成员（`member:create`）
 
 ```json
 { "workspaceId": 1, "email": "user@example.com", "roleId": 4 }
 ```
 
-- `DELETE /api/v1/member/{id}` — 移除成员
-- `PUT /api/v1/member/{id}/role` — 修改角色
+- `DELETE /api/v1/member/{id}` — 移除成员（`member:delete`）
+- `PUT /api/v1/member/{id}/role` — 修改角色（`member:update`）
 
 ```json
 { "roleId": 5 }
 ```
 
-**权限**：`member:read` / `member:create` / `member:delete` / `member:update`
+**响应 `data.records[]`**（成员分页，联表返回用户与角色信息）：
+
+```json
+{
+  "id": 14,
+  "workspaceId": 1,
+  "userId": 12,
+  "nickname": "张三",
+  "email": "user@example.com",
+  "roleId": 4,
+  "roleName": "应用开发者",
+  "joinedAt": "2026-09-16T06:36:14.135382"
+}
+```
+
+**业务规则**：
+- 添加成员要求邮箱对应**平台已注册用户**，未注册 / 重复加入均返回 `1001`；
+- 添加与改角色均校验 `roleId` 存在（防孤儿成员关系）；
+- 操作保护：不允许移除自己、不允许修改自己的空间角色（`1003`）。
 
 ---
 

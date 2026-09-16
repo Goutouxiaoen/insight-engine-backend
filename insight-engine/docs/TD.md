@@ -414,6 +414,8 @@ CREATE UNIQUE INDEX uk_ws_code_org ON ie_workspace(org_id, code) WHERE deleted =
 | `ie:user:info:{userId}` | hash | 30min | 用户缓存 |
 | `ie:role:permissions:{roleId}` | set | 10min | 角色权限 |
 | `ie:ws:member:{workspaceId}` | set | 10min | 空间成员 userId |
+
+> **实现侧口径（2026-09-16）**：上表 `ie:auth:*` 五个键的**字面量统一定义在 `common.constant.CacheKeyConstants`**（UMS 写入：登录/刷新/登出/锁定；workspace 写入：切换空间换签；各服务读取：starter-redis 的登录态/黑名单实现）。新增/改名键必须只改这一处，禁止在各服务内重复写字面量（防 drift 致静默失效）。
 | `ie:model:list:enabled` | string(json) | 5min | 启用模型列表 |
 | `ie:kb:meta:{kbId}` | string(json) | 30min | KB 元信息 |
 | `ie:quota:used:{scopeType}:{scopeId}:{type}` | string | 周期内 | 配额已用（incr） |
@@ -566,6 +568,9 @@ spring:
         - id: ums
           uri: lb://insight-engine-ums
           predicates: [Path=/auth/**, /api/v1/user/**, /api/v1/role/**]
+        - id: workspace
+          uri: lb://insight-engine-workspace
+          predicates: [Path=/api/v1/org/**, /api/v1/workspace/**, /api/v1/member/**]
         - id: kb
           uri: lb://insight-engine-kb
           predicates: [Path=/api/v1/kb/**]
@@ -576,6 +581,8 @@ spring:
 ```
 
 > **实现现状与路由收窄纪律（2026-09-08 决策，见 PROGRESS §三）**：冒烟期实际实现为单条路由 `/auth/**,/api/v1/**`（含文档路径）全量直连 UMS（`http://localhost:7101`）；**2026-09-09 已按本节收窄为服务专属前缀并经 Nacos 服务发现走 `lb://insight-engine-ums`**。该全量通配**仅限单服务冒烟期**：后续服务（workspace/kb/model…）接入时，必须先把 `/api/v1/**` 收窄为按服务细分前缀（与本表一致，且与 IF.md 章节划分一一对应），收窄与新增路由在**同一次提交**完成，禁止新服务寄生在全量通配下造成路由抢占。路由变更受 DEVGUIDE 附录 B P18 约束。
+>
+> **workspace 接入（2026-09-16）**：新增 `insight-engine-workspace → lb://insight-engine-workspace`，谓词 `/api/v1/org/**,/api/v1/workspace/**,/api/v1/member/**`（与 UMS 前缀无交集，IF §5 章节一一对应）；workspace 自身 Knife4j 文档走服务端口 7102（网关 `doc.html` 仍指向 UMS）。
 
 > **`lb://` 语义（读配置时最易卡住的一点）**：`lb://` 后面跟的是**服务名**（= 提供方 `spring.application.name`），**不是主机/IP**，因此**配置里看不到"均衡到哪几台机器"**；真实实例清单在 **Nacos 注册表**里（`服务名 → [ip:port ...]`），由各实例启动时注册、运行时动态增删，调用方（网关）拉快照缓存在本进程。多实例时按负载均衡策略选一台；**单实例时等价于直连**（本项目当前即此状态，仅 UMS 单实例）。查清单用 `GET /nacos/v1/ns/instance/list?serviceName=<服务名>`，详见 LEARNING「负载均衡 LB」篇附节。
 
@@ -1155,7 +1162,7 @@ spring:
 | 侧 | 读取方式 | 真实值放哪 | 入库模板 |
 |----|----------|-----------|----------|
 | compose（中间件容器） | compose 自动加载同目录 `.env` | `insight-engine/.env`（已被 `.gitignore` 忽略） | `insight-engine/.env.example` |
-| Spring 应用（ums / gateway 等） | 环境变量 / profile 覆盖 | `ums/src/main/resources/application-local.yml`（已被 `.gitignore` 忽略），或 IDEA Run Configuration 环境变量 / systemd / 容器 `environment` | `ums/src/main/resources/application-local.example.yml` |
+| Spring 应用（ums / workspace 等，**每服务各自一份**） | 环境变量 / profile 覆盖 | `<服务>/src/main/resources/application-local.yml`（已被 `.gitignore` 忽略），或 IDEA Run Configuration 环境变量 / systemd / 容器 `environment` | `<服务>/src/main/resources/application-local.example.yml`（现已有 `ums` 与 `workspace` 两份） |
 
 > ⚠️ **Spring Boot 不会自动读取 `.env`**——`.env` 只服务 compose。应用侧必须另行注入，
 > 否则 `application.yml` 里的 `${INSIGHT_PG_*}` / `${INSIGHT_REDIS_*}` 无法解析 → 启动 fail-fast

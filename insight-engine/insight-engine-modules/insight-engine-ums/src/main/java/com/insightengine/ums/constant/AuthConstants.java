@@ -1,10 +1,15 @@
 package com.insightengine.ums.constant;
 
+import com.insightengine.common.constant.CacheKeyConstants;
+
 /**
  * UMS 认证与用户相关常量。
  *
  * <p>集中管理登录锁定阈值、Redis Key 前缀、默认角色等，避免魔法数字/字符串散落。
  * Key 命名遵循 TD §6.1 规范 {@code ie:auth:*}/{@code ie:user:*}}。</p>
+ *
+ * <p>注意：Redis 键前缀的真实值统一定义在 {@link CacheKeyConstants}（跨服务契约），
+ * 本类只做「UMS 语义化别名」，避免 UMS / starter-redis / workspace 各写一份字面量而漂移。</p>
  */
 public final class AuthConstants {
 
@@ -20,22 +25,22 @@ public final class AuthConstants {
     /** 账号锁定时长（秒）：30 分钟 */
     public static final long LOGIN_LOCK_SECONDS = 30 * 60L;
 
-    /* ============ Redis Key 前缀（TD §6.1） ============ */
+    /* ============ Redis Key 前缀（TD §6.1，值统一定义在 common CacheKeyConstants） ============ */
 
     /** 登录失败计数 Key：ie:auth:login-fail:{account}，TTL=锁定窗口 */
-    public static final String KEY_LOGIN_FAIL = "ie:auth:login-fail:";
+    public static final String KEY_LOGIN_FAIL = CacheKeyConstants.AUTH_LOGIN_FAIL;
 
     /** 账号锁定 Key：ie:auth:lock:{account}，TTL=锁定时长 */
-    public static final String KEY_LOGIN_LOCK = "ie:auth:lock:";
+    public static final String KEY_LOGIN_LOCK = CacheKeyConstants.AUTH_LOGIN_LOCK;
 
     /** 登录态 Key：ie:auth:token:{userId}，值=access token 摘要，TTL=2h */
-    public static final String KEY_AUTH_TOKEN = "ie:auth:token:";
+    public static final String KEY_AUTH_TOKEN = CacheKeyConstants.AUTH_TOKEN;
 
     /** refresh 会话 Key：ie:auth:refresh:{userId}，值=当前有效 refresh token 的 jti 摘要，TTL=7d */
-    public static final String KEY_AUTH_REFRESH = "ie:auth:refresh:";
+    public static final String KEY_AUTH_REFRESH = CacheKeyConstants.AUTH_REFRESH;
 
     /** 登出黑名单 Key：ie:auth:blacklist:{tokenHash}，TTL=token 剩余有效期 */
-    public static final String KEY_AUTH_BLACKLIST = "ie:auth:blacklist:";
+    public static final String KEY_AUTH_BLACKLIST = CacheKeyConstants.AUTH_BLACKLIST;
 
     /* ============ 注册默认值（MVP 单租户） ============ */
 

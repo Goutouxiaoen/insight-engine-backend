@@ -152,7 +152,7 @@ bill → model（用量计量）
 agent → kb / tool / model
 ```
 
-> ⚠️ 当前真实进度：**只有 UMS 与 Gateway 有代码**；其余微服务为空的 Maven 骨架模块。中间件：PG/Redis 已在 Docker 运行；RabbitMQ/Nacos/MinIO/Prometheus/Grafana 已写好 compose 待拉起（阶段 2 完成）。
+> ⚠️ 当前真实进度（2026-09-16）：**Gateway / UMS / Workspace 已有代码**（workspace 阶段 5 实现完成、实机冒烟 28/28）；其余微服务仍为空的 Maven 骨架模块。中间件：PG/Redis/Nacos 已在云主机 Docker 运行；RabbitMQ/MinIO/Prometheus/Grafana 已写好 compose 待拉起。
 
 ### 2.1 业务服务端口速查（TD §18.2.3 端口约定）
 
@@ -160,7 +160,7 @@ agent → kb / tool / model
 |------|---------|------|------|
 | gateway | 7000 | ✅ | 唯一入口，所有 HTTP 请求先进这里 |
 | ums | 7101 | ✅ | 认证/用户/角色/权限 |
-| workspace | 7102 | ⚪ | 工作空间/组织/成员 |
+| workspace | 7102 | ✅ | 工作空间/组织/成员（2026-09-16 实现，冒烟 28/28） |
 | model | 7103 | ⚪ | 模型接入/路由 |
 | kb | 7104 | ⚪ | 知识库/文档/检索 |
 | agent | 7105 | ⚪ | Agent/工作流 |
@@ -332,7 +332,7 @@ flowchart TD
 | 位置 | `insight-engine-modules/insight-engine-gateway` |
 | 关键类 | `AuthGlobalFilter`（全局认证过滤器）、`GatewayJwtParser`、`GatewaySecurityProperties` |
 | 技术特性 | WebFlux（响应式，非 Spring MVC） |
-| 路由规则 | 按服务专属前缀转发（TD §8.3 收窄后）：`/auth/**` + `/api/v1/user\|role\|permission/**` + 文档路径 → `lb://insight-engine-ums`（经 Nacos 服务发现，2026-09-09 接入；其余 `/api/v1/xxx` 网关层 404） |
+| 路由规则 | 按服务专属前缀转发（TD §8.3 收窄后）：`/auth/**` + `/api/v1/user\|role\|permission/**` + 文档路径 → `lb://insight-engine-ums`（经 Nacos 服务发现，2026-09-09 接入）；**2026-09-16 新增 `/api/v1/org\|workspace\|member/**` → `lb://insight-engine-workspace`**；其余 `/api/v1/xxx` 网关层 404 |
 | 依赖 | common（Result/ErrorCode/Constants） |
 
 ### 5.2 ✅ UMS（用户权限服务）—— 已实现，最完整
@@ -343,16 +343,29 @@ flowchart TD
 | 端口 | 7101 |
 | 位置 | `insight-engine-modules/insight-engine-ums` |
 | 功能清单 | 登录/注册/刷新/登出/当前用户；用户 CRUD；角色 CRUD；权限树 |
-| 关键类 | `AuthServiceImpl`（登录核心）、`RedisTokenSessionService`、`RedisTokenBlacklistService`、`JwtUtil`（starter-security 提供） |
+| 关键类 | `AuthServiceImpl`（登录核心）、`JwtUtil`（starter-security）、`RedisTokenSessionService` / `RedisTokenBlacklistService`（2026-09-16 已下沉 starter-redis，由自动装配提供） |
 | 数据表 | `ie_user` / `ie_role` / `ie_permission` / `ie_role_permission` / `ie_member` / `ie_workspace` |
 | 外部依赖 | PG（localhost:5433）、Redis（localhost:6380，存会话+黑名单） |
 | 引入的 starter | starter-web、starter-security、starter-mybatis、starter-redis |
 
-### 5.3 ⚪ 其余业务服务（骨架，待开发）
+### 5.3 ✅ Workspace（工作空间与组织服务）—— 已实现（2026-09-16）
+
+| 项 | 值 |
+|----|----|
+| 职责 | 组织、工作空间、成员管理；工作空间是后续资源（KB/Agent/工具）的归属边界与数据权限维度 |
+| 端口 | 7102 |
+| 位置 | `insight-engine-modules/insight-engine-workspace` |
+| 功能清单 | 组织创建/详情；空间创建/更新/删除/分页/**切换（换签 JWT）**；成员分页/添加/移除/改角色 |
+| 关键类 | `WorkspaceServiceImpl`（空间与切换核心）、`MemberServiceImpl`、`OrgServiceImpl`、`MemberMapper.selectMemberPage`（成员联表分页） |
+| 数据表 | `ie_organization` / `ie_workspace` / `ie_member`（只读引用 `ie_user` / `ie_role` / `ie_permission`） |
+| 外部依赖 | PG、Redis（登录态/黑名单，与 UMS 共享键口径 `CacheKeyConstants`） |
+| 引入的 starter | starter-web、starter-security、starter-mybatis、starter-redis、starter-nacos |
+| 与 UMS 的边界 | 共享登录态（`ie:auth:*`）；`/auth/me` 的当前空间语义以 JWT `ws_id` 为准（切换后随之变化）；跨服务契约化（Feign）待 §6.3 收口 |
+
+### 5.4 ⚪ 其余业务服务（骨架，待开发）
 
 | 服务 | 职责一句话 | 核心依赖 | 端口 |
 |------|-----------|---------|------|
-| workspace | 工作空间/组织/成员关系 | PG | 7102 |
 | model | 模型厂商接入 + 路由 + Token 计量 | 大模型、PG、Redis | 7103 |
 | kb | 文档上传解析切片 → Embedding → PGVector 检索 | MQ、MinIO、PG | 7104 |
 | agent | Prompt + 工具 + 知识库组装，ReAct/工作流 | model/kb/tool | 7105 |

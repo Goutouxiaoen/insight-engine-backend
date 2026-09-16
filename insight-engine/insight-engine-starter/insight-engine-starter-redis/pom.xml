@@ -14,20 +14,27 @@
       insight-engine-starter-redis：Redis 起步依赖
       职责（TD §6.1~§6.4）：
         1. RedisTemplate 序列化配置（JSON 序列化，避免 JDK 序列化二进制不可读）
-        2. 分布式锁封装（SETNX + Lua 释放）
-        3. 缓存注解与三大问题（穿透/击穿/雪崩）防护
-      当前状态：阶段 1 仅建骨架，具体能力在对应服务阶段实现。
+        2. 登录态 / 登出黑名单的 Redis 实现（starter-security 的可选接口实现，2026-09-16 下沉）
+        3. 分布式锁封装（SETNX + Lua 释放）
+        4. 缓存注解与三大问题（穿透/击穿/雪崩）防护
+      当前状态：RedisTemplate 与安全会话实现已就绪，分布式锁/缓存防护在对应服务阶段实现。
     -->
     <artifactId>insight-engine-starter-redis</artifactId>
     <packaging>jar</packaging>
 
     <name>insight-engine-starter-redis</name>
-    <description>智擎 AI Redis 起步依赖（序列化/分布式锁/缓存防护）</description>
+    <description>智擎 AI Redis 起步依赖（序列化/登录态与黑名单实现/分布式锁/缓存防护）</description>
 
     <dependencies>
         <dependency>
             <groupId>com.insightengine</groupId>
             <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- 依赖 starter-security：实现其可选接口 TokenSessionService / TokenBlacklistService
+             （登录态与黑名单的 Redis 版本；starter-security 自身保持对 Redis 零依赖） -->
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-security</artifactId>
         </dependency>
         <!-- Spring Data Redis -->
         <dependency>

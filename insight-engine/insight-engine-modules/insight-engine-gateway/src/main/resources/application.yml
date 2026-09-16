@@ -25,14 +25,20 @@ spring:
           enabled: false
     gateway:
       # 路由表（TD §8.3 / P18）：按服务专属前缀细分，禁止 /api/v1/** 全量 fallback。
-      # 当前仅 UMS 单服务：/auth/** 与 /api/v1/user|role|permission/** 转 UMS；
-      # 其余 /api/v1/xxx（kb/workspace/org/member 等后续服务）在网关层即 404，不误转 UMS。
+      # UMS：/auth/** 与 /api/v1/user|role|permission/**（含文档路径）；
+      # workspace：/api/v1/org|workspace|member/**（IF §5，与 UMS 前缀无交集）；
+      # 其余 /api/v1/xxx（kb/model/agent 等后续服务）在网关层即 404，不误转已接入服务。
       routes:
         - id: insight-engine-ums
           # 经 Nacos 服务发现负载均衡（2026-09-09 接入，原为 http://localhost:7101 直连）
           uri: lb://insight-engine-ums
           predicates:
             - Path=/auth/**,/api/v1/user/**,/api/v1/role/**,/api/v1/permission/**,/doc.html,/webjars/**,/v3/api-docs/**,/swagger-resources/**,/favicon.ico
+        - id: insight-engine-workspace
+          # 组织 / 工作空间 / 成员（IF §5）；服务注册名见 workspace 的 spring.application.name
+          uri: lb://insight-engine-workspace
+          predicates:
+            - Path=/api/v1/org/**,/api/v1/workspace/**,/api/v1/member/**
       # 全局跨域（TD §8.3：MVP 放开，生产收敛为白名单）
       globalcors:
         add-to-simple-url-handler-mapping: true

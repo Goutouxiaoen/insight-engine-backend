@@ -20,10 +20,10 @@
 
 | 项     | 值                                  |
 | ----- | ---------------------------------- |
-| 当前阶段  | 阶段 4：gateway 网关 —— **PR #5（`f84ffd2`）已合入 master**（路由按 §8.3 收窄 + TraceGlobalFilter + charset + JWT 常量下沉，复跑冒烟 9/9）；**云上 Nacos 2.3.2 已部署（healthy，8848/9848 1:1 端口，自报 39.106.110.214:8848）+ UMS/gateway Nacos 接入代码完成、全量 BUILD SUCCESS（路由已改 `lb://insight-engine-ums`）**，**P2-2/P2-3 注册与 lb:// 转发验证通过（冒烟 8/8，2026-09-09 安全组放行后）**；遗留 🔴 云凭据明文已进 master 历史（§五，闸门已失守，待口令轮换止血） |
-| 当前里程碑 | M4：gateway 网关                       |
-| 当前任务  | **云上 Nacos 部署 + UMS/gateway Nacos 接入（2026-09-09，P2）**：Nacos 2.3.2 容器已部署（healthy，`8848/9848` 1:1 端口修正，`NACOS_SERVER_IP` 强制自报 `39.106.110.214:8848`）；UMS/gateway 代码已接入（starter-nacos + loadbalancer + `fail-fast:false` + 路由改 `lb://insight-engine-ums`），全量 `mvn -DskipTests package` **BUILD SUCCESS**；✅ **注册实机验证通过（2026-09-09 安全组放行后）**：UMS/gateway 注册 Nacos 实例 UP（172.18.128.1:7101/7000 healthy），gateway `lb://insight-engine-ums` 转发冒烟 8/8（login/me/user/page/role/list 200、无/坏 token 401-2001、错口令 401-2002、`/doc.html` 200）。此前已完成：P1 运维加固（云盘扩容 vda3→49.8G、swap 2G + swappiness=0）实机复核通过 + 凭据纪律/占位化批次（2026-09-09）。**下一步：workspace 模块启动（阶段 5，兑现 BE-20260908-02）**；✅ 2026-09-16 交接体检完成：文档口径一致、2 commits 已推送（远程 `6af1c75`），可新开对话进阶段 5 |
-| 整体完成度 | 约 43%（阶段 1-4 已完成并全部合入 master；gateway 路由收窄 + TraceFilter/charset/JWT 常量已合入，冒烟 9/9；init.sql 角色 seed 授权补齐；凭据纪律硬约束 + 配置占位化已落地（`git grep` 明文归零）；**2026-09-09：云上 Nacos 2.3.2 部署 + UMS/gateway Nacos 接入闭环——注册实例 UP、`lb://` 转发冒烟 8/8 通过**；⬜ 待办：RabbitMQ/MinIO/Prom/Grafana 迁云 + §五 a) 口令轮换 + workspace 模块（阶段 5）；UMS 收尾项在 §6.1 待办池） |
+| 当前阶段  | **阶段 5：workspace 工作空间 —— 模块已实现并实机冒烟 28/28（2026-09-16，未合并）**；阶段 4 已收口：**PR #5（`f84ffd2`）已合入 master**（路由按 §8.3 收窄 + TraceGlobalFilter + charset + JWT 常量下沉，复跑冒烟 9/9）；**云上 Nacos 2.3.2 已部署（healthy，8848/9848 1:1 端口，自报 39.106.110.214:8848）+ UMS/gateway Nacos 接入代码完成、全量 BUILD SUCCESS（路由已改 `lb://insight-engine-ums`）**，**P2-2/P2-3 注册与 lb:// 转发验证通过（冒烟 8/8，2026-09-09 安全组放行后）**；遗留 🔴 云凭据明文已进 master 历史（§五，闸门已失守，待口令轮换止血） |
+| 当前里程碑 | M5：workspace 工作空间                  |
+| 当前任务  | **workspace 模块（阶段 5，兑现 BE-20260908-02）——2026-09-16 实现完成并实机冒烟通过**：11 个端点（组织 2 + 空间 5 + 成员 4）全部落地，`mvn -DskipTests package` 全量 **BUILD SUCCESS**；**实机冒烟 28/28**（UMS 7101 + workspace 7102，云 PG/Redis，经 SSH 隧道绕开安全组）：空间创建/更新/分页、成员自动挂 ws_admin/添加/改角色/移除、**切换空间换签（旧 token 立即 401-2001）**、`/auth/me` 返回新空间、删除保护 1003、删后成员接口 404、非法编码 1001；**另经网关 :7000 复验** workspace 三条前缀路由 200、未接入前缀 404、无 token 401-2001。同时：安全会话实现下沉 starter-redis（`CacheKeyConstants` 统一 Redis 键契约）、`/auth/me` 工作空间语义修正为「当前空间」、**云端库补齐角色授权增量 seed（`ie_role_permission`=143）**。**下一步：收尾提交走 PR；Nacos `lb://` 实机复验需安全组放行 8848/9848 或改用 `docker-compose.cloud.yml`** |
+| 整体完成度 | 约 46%（阶段 1-4 已完成并合入 master（gateway 冒烟 9/9 + Nacos `lb://` 8/8）；**阶段 5 workspace 模块实现完成并实机冒烟 28/28（2026-09-16）**，未合并；公共层沉淀 CacheKeyConstants + starter-redis 提供登录态/黑名单实现；`/auth/me` 当前空间语义修正；云端库角色授权 seed 补齐 143；⬜ 待办：workspace PR 合并 + `lb://` 复验、RabbitMQ/MinIO/Prom/Grafana 迁云、§五 a) 口令轮换、UMS 收尾项在 §6.1 待办池） |
 
 ---
 
@@ -41,7 +41,7 @@
 | 基础设施（docker-compose/init.sql）             | 🔵 进行中 | 92%  | docker-compose.yml / init.sql / prometheus.yml | compose/init.sql 定义完成；✅ 云服务器（39.106.110.214）PG/Redis 已按 compose 逐项对齐重建完成（卷 + appendonly + unless-stopped），并经 UMS 冒烟实机验证（2026-09-08 8/8 通过）；✅ Nacos 容器迁云完成（2026-09-09：1:1 端口 8848/9848 + 公网 IP 自报 + healthy）；2026-09-09 补齐 init.sql 角色 seed 授权（org_admin/ws_admin/end_user，带 `ON CONFLICT` 可增量重跑）；⬜ 待办：RabbitMQ / MinIO / Prom / Grafana 容器迁云 + 已初始化库执行增量 seed + §五 凭据收敛 |
 | UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能实机验证通过；UMS-1（双身份源收敛）+ UMS-2（refresh 轮换撤销）回归验证通过，PR #2 已合入 master，阶段正式收口；遗留 UMS 收尾优化项转 §6.1 待办池（不阻塞） |
 | gateway 网关                                | 🔵 进行中 | 92%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ TraceGlobalFilter + 常量下沉 | 全链路冒烟 8/8（2026-09-08，云 PG/Redis，UMS 7101 + gateway 7000）；3 修复 + 文档已提交 feature/gateway（fe912aa）；2026-09-09 路由按 §8.3 收窄（`/auth/**`+`/api/v1/user|role|permission/**`）+ TraceGlobalFilter(-200) + 错误响应 charset + JWT Claim 常量下沉 common，**复跑冒烟 9/9 通过**（含 `X-Trace-Id` 单值修复、2007 过期 token、`/doc.html` 白名单、`sk-` 分流）；**PR #5（`f84ffd2`）已合入 master**；✅ Nacos 接入闭环（2026-09-09：路由改 `lb://insight-engine-ums` + `fail-fast:false`；实例 UP、`lb://` 转发冒烟 8/8 通过） |
-| workspace 工作空间                            | ⚪ 未开始 | 0%   |                                                |                                        |
+| workspace 工作空间                            | 🔵 进行中 | 90%  | 组织/空间/成员 11 端点 + 切换空间换签 + 网关路由接入              | 2026-09-16 实现完成、全量编译通过、**实机冒烟 28/28**（含经网关复验）；前端 BE-20260908-02 已可切真联调（FE-SYNC §1 置 ✅）；⬜ 待办：提交走 PR + Nacos `lb://` 实机复验（云 8848/9848 从本机被安全组拦截）；❌ 不含 audit（属 obs 服务，仍在 mock） |
 | model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | kb 知识库                                    | ⚪ 未开始 | 0%   |                                                |                                        |
 | tool 工具市场                                 | ⚪ 未开始 | 0%   |                                                |                                        |
@@ -108,7 +108,18 @@
 - [2026-09-09] ✅ 已决策并实施（云上 Nacos 2.3.2 部署，P2-1）：云服务器（39.106.110.214）`docker run` 启动 `insight-nacos`（MODE=standalone / NACOS_AUTH_ENABLE=false / JVM 256m-128m / 命名卷 nacos_data、nacos_logs / readiness healthcheck / restart unless-stopped，与 docker-compose.yml nacos 服务逐项对齐）。**关键修正：宿主端口由 8850/9850 偏移改为 1:1 8848/9848**——Nacos 2.x 服务端向客户端「自报 ip:port」并据此推导 gRPC 端口（=主端口+1000），偏移映射会使客户端按自报 `ip:9848` 连接失败；`NACOS_SERVER_IP=39.106.110.214` + `JAVA_OPT_EXT=-Dnacos.inetutils.ip-address=39.106.110.214` 强制服务端自报公网 IP，`cluster/nodes` 已确认 `39.106.110.214:8848` UP（grpcReportEnabled）。docker-compose.yml / TD §18.2.3 / PRD / ARCHITECTURE / `.env.example` 同步 1:1 口径
 - [2026-09-09] ✅ 已决策并实施（UMS/gateway 接入 Nacos，P2-2 代码侧）：ums/gateway 各引入 `insight-engine-starter-nacos`；starter-nacos 补 `spring-cloud-starter-loadbalancer`（nacos-discovery 2.x 不再传递引入，`lb://` 必需）；两服务 discovery/config 加 `server-addr: ${NACOS_ADDR:127.0.0.1:8848}` 与 **`fail-fast: false`**（默认 true 会在 Nacos 不可达时阻断启动——实测 UMS 报 `NacosException: Client not connected, current status:STARTING` 后整体关闭）；`spring.config.import-check.enabled: false`；gateway UMS 路由由 `http://localhost:7101` 改 **`lb://insight-engine-ums`**。全量 `mvn -DskipTests package` **BUILD SUCCESS**
 - [2026-09-09] 🟡 阻塞（P2-2 注册实机验证，**已解除**）：本机 → 云 8848/9848（TCP）**不可达**（22/5433/6380 可达）；云主机侧 ufw/firewalld 均 inactive、iptables policy ACCEPT、docker-proxy 正常监听 0.0.0.0:8848/9848 → 判定为**阿里云安全组入方向未放行 8848/9848**（实例 i-2ze6ks9wv7i0fxjkq8c6）。**2026-09-09 控制台放行后解除**：本机 `-DNACOS_ADDR=39.106.110.214:8848` 启 UMS + gateway 复验通过（实例 UP + `lb://` 冒烟 8/8，见 §6.4 / §八）
-- [2026-09-09] ✅ 已更正（云端供应商口径）：此前文档把 39.106.110.214 记为「腾讯云轻量服务器」，实机判定为**阿里云 ECS（cn-beijing，实例 i-2ze6ks9wv7i0fxjkq8c6）**——依据：主机名 `iZ2ze6ks9wv7i0fxjkq8c6Z`（iZ 前缀）、元数据服务 100.100.100.200。历史记录保留原表述，后续统一按「阿里云 ECS」口径
+- [2026-09-09] ✅ 已更正（云端供应商口径）：此前文档把 39.106.110.214 记为「腾讯云轻量服务器」，实机判定为**阿里云 ECS（cn-beijing，实例 i-2ze6kswv7i0fxjkq8c6）**——依据：主机名 `iZ2ze6ks9wv7i0fxjkq8c6Z`（iZ 前缀）、元数据服务 100.100.100.200。历史记录保留原表述，后续统一按「阿里云 ECS」口径
+
+- [2026-09-16] ✅ 已决策并实施（workspace 模块落地，阶段 5，兑现 BE-20260908-02）：新建 `insight-engine-workspace`（端口 7102，模块此前仅 pom 空壳），实现 IF §5 全部 11 个端点（组织创建/详情、空间创建/更新/删除/分页/切换、成员分页/添加/移除/改角色），关键决策：
+  - **空间列表可见范围收敛**：持 `org:write`（组织级管理员及以上）见组织内全部空间；其他用户仅见自己所属空间（按 `ie_member` 反查）。避免普通用户窥见他人空间，且与切换空间的服务端成员关系校验同源；
+  - **创建者自动挂 `ws_admin` 成员**：成员关系既是可见范围也是切换前提，不落成员关系会导致「新建空间自己都看不到、切不过去」；
+  - **删除空间级联逻辑删除其成员关系**（对齐前端确认文案），并**禁止删除当前所处空间**（`1003`），防止当前令牌 `ws_id` 指向已删空间；
+  - **切换空间 = 校验成员关系 → 按目标空间重展开 roles/perms → 重签 access + 轮换 refresh → 覆盖登录态**；旧 access token 立即失效（单会话语义，与 UMS 登录/刷新一致）；
+  - **操作保护**：不允许移除自己、不允许修改自己的空间角色（`1003`）；
+  - **添加/改角色前校验 `roleId` 存在**，防孤儿成员关系（与 §6.1 UMS 同源教训）。
+- [2026-09-16] ✅ 已决策并实施（安全会话实现下沉 starter-redis + Redis 键契约入 common）：workspace 需要「登录态校验 / 登出黑名单」才能保证切换空间与踢人在全平台一致生效，而原实现只在 UMS 内部（`RedisTokenSessionService` / `RedisTokenBlacklistService` / `TokenDigestUtil`）。→ ① 新增 `common.constant.CacheKeyConstants` 作为 `ie:auth:*` 键的**跨服务唯一契约**（与 `JwtClaimConstants` 同模式，UMS `AuthConstants` 改为引用它）；② 两个 Redis 实现 + `TokenDigestUtil` 下沉到 **starter-redis/starter-security** 并由 `RedisAutoConfiguration` 以 `@ConditionalOnMissingBean` 装配（starter-security 仍保持对 Redis 零依赖的设计不变）；③ 删除 UMS 内的重复实现。**目的：避免「A 服务写 key、B 服务查不到」的静默失效与多处字面量漂移**
+- [2026-09-16] ✅ 已决策并修正（`/auth/me` 当前工作空间语义）：`workspaceId`/`workspaceName` 改以 JWT `ws_id` 为准（无 `ws_id` 时回退「成员关系中最早的空间」）。原实现固定返回最早所属空间，导致 workspace 切换空间后 `ensureMe()` 仍显示旧空间，**实现与 IF §3.5/§5.5 语义不符**；已写入 IF §3.5 并登记 FE-SYNC §2
+- [2026-09-16] ✅ 已核实并补执行（云端库角色授权增量 seed）：实测云端 `ie_role_permission` 只有 role 1(48)/4(15)，**role 2/3/5 的授权从未增量执行**（BE-20260908-03 的「落地提醒」未落实）——这正是「`ws_admin` 成员 Tab 403/2006」与「切换空间后新 token 全 403」的直接成因（非代码缺陷）。→ 执行 init.sql §6 三条幂等 INSERT 后为 1:48 / 2:46 / 3:27 / 4:15 / 5:7 = **143**（与 DB.md 一致）。**教训：seed 变更必须同时执行到已初始化库，否则代码正确也会表现为权限缺失**
 
 ---
 
@@ -140,6 +151,9 @@
 - [2026-09-09] 坑：**`lb://` 路由缺 LoadBalancer 依赖**——`spring-cloud-starter-alibaba-nacos-discovery` 不传递引入 `spring-cloud-loadbalancer`，网关 `lb://` URI 会因无负载均衡器不可用 → 规避：显式引 `spring-cloud-starter-loadbalancer`（已放 starter-nacos 统一提供）
 - [2026-09-09] 协作/判定沉淀：远程中间件「连不上」的排查链路 = ① 本机到目标端口 TCP 可达性（`Test-NetConnection`）→ ② 云主机侧（ss 监听 / docker-proxy / ufw / firewalld / iptables policy）→ ③ 云安全组入方向。**主机全放行 ≠ 公网可达**，安全组与主机防火墙是两层，勿只查一层就下结论
 
+- [2026-09-16] 坑：**本机 → 云主机 5433/6380/8848 全部不可达（22 可达）**，服务启动后登录一律 500（`Unable to connect to Redis`）→ 排查链路复用 §四既有沉淀（本机 TCP → 云主机 `ss`/docker-proxy → 主机防火墙 → 云安全组）：云上容器均 `Up 6 days` 且 `0.0.0.0:5433/6380/8848` 正常监听，本机 `Test-NetConnection` 对三端口全 False、仅 22 True → 判定为**安全组已收敛（或本机出口 IP 变化）** → 临时用 **SSH 隧道**（paramiko `direct-tcpip`，本地 5433/6380 → 云 `127.0.0.1` 同端口）完成冒烟，服务侧用命令行覆盖 `--spring.datasource.url/--spring.data.redis.host` 指到 `127.0.0.1`，**不改受版本控制的配置**。验证后已停进程、关隧道
+- [2026-09-16] 坑：**代码正确但权限为空** —— 切换空间后新 token 调 workspace 接口全 403/2006，一度怀疑 roles/perms 查询写错；实际是**云端库 `ie_role_permission` 缺 role 2/3/5 的增量 seed**（`ws_admin` 一条授权都没有）。定位方法：看 MyBatis SQL 日志中权限查询 `Total: 0` + 直接查库 `group by role_id` 核对 → 规避：**凡 seed/授权变更，必须同步对已初始化库执行增量 SQL**，否则表现为「权限缺失」而非「代码报错」，极难反查
+- [2026-09-16] 坑：**PowerShell 5.1 读取「UTF-8 无 BOM」脚本时中文乱码**，导致引号配对错乱、脚本语法报错（`Unexpected token`）→ 规避：冒烟/临时脚本一律用**纯 ASCII**（或在 PS 中以 `-Encoding UTF8` 且带 BOM 写入）。与 §四 2026-08-25「勿凭控制台乱码判定文件损坏」同源问题的另一面：**写入侧也要注意编码**
 - [2026-09-16] 协作教训（并发编辑同一分支）：本仓库 `feature/docs-sync-security` 工作区被**两场对话并行编辑**——`LEARNING.md` 出现另一场对话的「Nacos 客户端负载均衡」大段笔记及后续 4 行改动，且**长期未提交**，与本对话改动混在同一工作区。规避：收尾提交前必须 `git diff` 辨别归属，**只提交本对话产物、勿把他人进行中的改动一并提交**；建议大文件（LEARNING）各写各章节并及时提交，避免同一文件长期脏区叠加导致提交边界模糊
 
 ---
@@ -163,7 +177,7 @@
   - 修复清单（分层）：
     - a) 🔴 **口令轮换（治本）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令；**未完成前本项不闭环**。
     - b) ✅ **配置外置（2026-09-09 已完成）**：`docker-compose.yml` 5 处口令 + `ums/application.yml` 4 处（PG/Redis 地址与口令）全部改占位符；新增 `.env.example`（入库模板）/`.env`（真实值，不入库）/`application-local.example.yml` + `application-local.yml`（Spring 侧注入）；`.gitignore` 补 `!.env.example` 例外（原 `.env.*` 会把模板一起忽略）。**关键：Spring 不自动读 `.env`，应用侧须走 `application-local.yml` 或环境变量（TD §18.2.6 / DEVGUIDE P19）**。
-    - c) **安全组收敛**：5433/6380 等仅放行固定来源 IP，不对 `0.0.0.0/0` 开放。
+    - c) **安全组收敛**：5433/6380 等仅放行固定来源 IP，不对 `0.0.0.0/0` 开放。**2026-09-16 实测状态**：本机出口 IP 到 5433/6380/8848 均不可达、仅 22 可达 → 收敛方向正确（同时消解了本条「若对公网放开则可用已知口令拖库」的影响面）；学习期需连库时改用 **SSH 隧道**（本地端口 → 云 `127.0.0.1`），不再依赖放开公网端口。
     - d) **存量清理**：文档占位化已完成（2026-09-09 两批）；`docker-compose.yml` 占位化随 b) 完成；历史改写（filter-repo）破坏性大，口令轮换后可不做。
     - e) **规范补缺（2026-09-09 第二批，已完成）**：事前硬约束落地——`AGENTS.md` **铁律 5：凭据纪律** + `DEVGUIDE.md` **P19 场景约束：配置与凭据** + **P17 修正**（对齐范围改为「结构」，凭据值一律占位符）。**作用只是「防止再次发生」，不能替代 a) 轮换止血**；b) 代码侧占位化已于同日第三批完成。
 
@@ -217,7 +231,8 @@
 - [ ] `ie_message."references"`、`ie_audit_log."before"/"after"` 双引号关键字列名 → 改 `refs`/`before_data`/`after_data`（conv/obs 模块对应阶段，同步 PRD/DB）
 - [ ] `ie_agent_invocation` 补 `status`/`error_msg` 列（agent 阶段，对齐 `ie_tool_invocation`）
 - [x] 权限编码二级/三级混用统一规范（`kb:read` vs `model:vendor:write`）——**2026-09-09 完成**：统一规则「`资源路径:动作`，最后一段固定为动作」，写入 IF §6.7（前端按最后一个 `:` 切分或用权限树 `resource` 字段分组，禁用 `startsWith` 前缀匹配）；现有编码零改动，已答复前端 BE-20260909-06
-- [ ] `WorkspaceMapper` 直查 `ie_workspace` 改走 Feign（workspace 服务落地后，TD §3.2 服务边界）
+- [ ] `WorkspaceMapper` 直查 `ie_workspace` 改走 Feign（workspace 服务落地后，TD §3.2 服务边界）——**workspace 已于 2026-09-16 落地，该项仍未做**：`/auth/me` 的 `workspaceName` 目前仍由 UMS 直查 `ie_workspace`（同库只读），需与下一项一并收口
+- [ ] `UserRefMapper` 直查 `ie_user`（workspace 侧按邮箱定位已注册用户，IF §5.6 添加成员）同样属 MVP 临时直查；与上一项一起抽象为 `insight-engine-api` Feign 契约（TD §3.2）
 - [ ] DataScope 行级数据权限拦截器（TD §7.5）——多租户/V1.0 前必须完成，覆盖全部业务列表查询
 
 ### 6.4 gateway / Nacos / 部署阶段（🟡）
@@ -229,6 +244,8 @@
 - [x] **gateway 复跑冒烟 9/9**（2026-09-09，云 PG/Redis + UMS 7101 + gateway 7000）：登录 200 / 转发 `user/page` 200 / 无 token 401-2001 / 坏 token 401-2001 / **过期 token 401-2007** / **`/doc.html` 200** / **`sk-` 401-2001** / end_user 403-2006 / `/api/v1/nonexistent` 404（路由收窄生效）；全部响应 `Content-Type: application/json;charset=UTF-8`，六类错误/转发路径 `X-Trace-Id` 均为单值（修复见 §三 2026-09-09）
 - [ ] 🟡 未匹配路由（`/api/v1/xxx` 无路由）不进入 GlobalFilter 链 → 404 响应无 `X-Trace-Id`、body 为 Spring 默认错误格式（非 IF §2 `Result`）；如需前端统一处理，需改用 WebFilter 或补 WebFlux 错误处理器（2026-09-09 复跑冒烟发现，不阻塞联调）
 - [x] **gateway 路由按 TD §8.3 细分**（2026-09-09 完成）：`/api/v1/**` 全量 fallback 已收窄为 `/auth/**` + `/api/v1/user|role|permission/**` → ums（含 `/doc.html`/`/webjars/**`/`/v3/api-docs/**` 文档路径），其余 `/api/v1/xxx` 网关层直接 404 不误转 UMS；后续服务接入按 P18 同批新增专属前缀
+- [x] **gateway 新增 workspace 路由**（2026-09-16 完成，P18 同批核对）：`/api/v1/org/**,/api/v1/workspace/**,/api/v1/member/**` → `lb://insight-engine-workspace`（与 UMS 前缀无交集，IF §5 章节一一对应）；同步更新 TD §8.3 路由表；AuthGlobalFilter 白名单无需变更（workspace 无公开端点）、globalcors 仍为 `/**`。**谓词/前缀转发已经网关实机复验**（`/api/v1/org/1`、`/api/v1/workspace/page`、`/api/v1/member/page` 均 200，未接入前缀 404，无 token 401-2001）
+- [ ] 🟡 **workspace 路由的 `lb://` 服务发现未实机复验**（2026-09-16）：本机到云 Nacos 8848/9848 被安全组拦截（§五 c），网关复验时临时以 `--spring.config.additional-location` 把两条 `lb://` 覆盖为直连 `127.0.0.1:7101/7102`（**不改受版本控制配置**）。→ 待安全组放行或改为 SSH 隧道/`docker-compose.cloud.yml` 后补一次 `lb://` 转发冒烟
 - [ ] 🟢 **Nginx 入口层接入（生产向，部署阶段）**：托管前端 `dist` + `location /api/` 反代网关集群（静态上游，方案 A）+ 透传 `X-Forwarded-For/Proto`；接入后前端入口由 `:7000` 改为 **443 同源**（顺带消除跨域，`globalcors` 转生产白名单）。补齐后形成「Nginx（服务端 LB）→ Gateway（客户端 LB）→ 服务」两层 LB 链路；学习笔记见 LEARNING「负载均衡 LB」篇附二
 - [x] **云上 Nacos 部署 + UMS/gateway 接入代码**（2026-09-09，P2-1/P2-2 代码侧完成）：容器 healthy、端口 1:1（8848/9848）、自报公网 IP；ums/gateway 已接 starter-nacos + loadbalancer + `fail-fast:false`；gateway 路由已改 `lb://insight-engine-ums`；全量编译 BUILD SUCCESS
 - [x] **注册实机验证（P2-2/P2-3，2026-09-09 完成）**：安全组放行后本机 `-DNACOS_ADDR=39.106.110.214:8848` 启 UMS + gateway → Nacos 两实例 UP（172.18.128.1:7101/7000 healthy）→ gateway `lb://insight-engine-ums` 转发全链路冒烟 **8/8 通过**：login/me/user/page/role/list 200（code=0）、无/坏 token 401-2001、错口令 401-2002、`/doc.html` 200
@@ -266,14 +283,16 @@
 
 ## 七、下一步计划（Top 3）
 
-1. **§五 口令轮换（唯一止血手段）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档占位化 + **规范补缺（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 代码侧配置占位化（§五 b）均已完成**——**未轮换前该项不闭环**
-2. **workspace 模块启动（阶段 5，下一步主线）**：模块空壳 → 建表核对 → 接口实现 → 联调（兑现 BE-20260908-02）；网关路由按 P18 同批加 `/api/v1/org|workspace|member/**` 专属前缀（**Nacos 已接入：workspace 直接注册并用 `lb://insight-engine-workspace`，无需再先直连**）；§6.1 高价值 UMS 收尾项择机独立处理
-3. **Nacos 接入闭环（P2 完成 2026-09-09）**：容器部署 → 代码接入 → 注册实例 UP → `lb://` 转发冒烟 8/8 全通过（§6.4）；⬜ 其余中间件迁云（RabbitMQ/MinIO/Prom/Grafana）留待后续，RabbitMQ/MinIO 可正常偏移映射、Nacos 类自报端口服务除外
+1. **workspace 收尾（阶段 5 主线，最优先）**：代码已实现并实机冒烟 28/28 → ① 提交走 PR（`feature/workspace`，按 GitHub Flow，不直推 master）；② 通知前端按 FE-SYNC §1 切真联调（`workspace,member` 移出 mock 清单；同时改 `POST /api/v1/member` → `/api/v1/member/invite`），闭环 BE-20260908-02；③ 补一次 Nacos `lb://` 转发冒烟（需安全组放行 8848/9848 或走 SSH 隧道，见 §6.4）
+2. **§五 口令轮换（唯一止血手段，部署前必办）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档占位化 + **规范补缺（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 代码侧配置占位化（§五 b）均已完成**——**未轮换前该项不闭环**
+3. **下一模块 / 技术债择机处理**：① 阶段 6 model 模型网关（或按前端诉求优先级调整）；② §6.1 UMS 高价值收尾（phone 唯一索引 / roleId 前置校验 / 异常友好映射等）；③ 中间件迁云（RabbitMQ/MinIO/Prom/Grafana）与 §6.3 Feign 契约化（UMS↔workspace 直查收口）
 
 ---
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-16
+- 内容：**阶段 5 workspace 模块实现 + 实机冒烟 28/28 + 公共层沉淀（兑现 BE-20260908-02）**—— ① **开工四必读**后确认任务=workspace 模块（PROGRESS §七 Top2 / FE-SYNC §1 / 前端 BE-ISSUES 2 条未闭环 / IF §5）；② **模块实现**：`insight-engine-workspace`（7102）11 端点（组织 2 / 空间 5 / 成员 4）+ 切换空间换签；网关按 P18 新增 `/api/v1/org|workspace|member/**` → `lb://insight-engine-workspace`（同批更新 TD §8.3，白名单/CORS 无需变更）；③ **公共层沉淀**：新增 `common.constant.CacheKeyConstants`（`ie:auth:*` 单一口径），`TokenDigestUtil` + 登录态/黑名单 Redis 实现下沉 `starter-security`/`starter-redis` 并自动装配，删除 UMS 内重复实现（跨服务会话一致，避免键漂移静默失效）；④ **UMS 修正**：`/auth/me` 的 `workspaceId` 改取 JWT `ws_id`（切换空间后 `ensureMe()` 才能反映新空间）；⑤ **环境侧**：本机到云 5433/6380/8848 被安全组拦截（22 可达）→ **SSH 隧道 + 命令行覆盖**完成冒烟（不改受版本控制配置，验毕即停）；**云端库补执行角色授权增量 seed**（`ie_role_permission` 1:48/2:46/3:27/4:15/5:7=143，此前 role 2/3/5 缺失，是「ws_admin 权限为空」的根因）；⑥ **证据**：`mvn -DskipTests package` 全量 **BUILD SUCCESS**；**workspace 冒烟 28/28**（创建/更新/分页/成员 CRUD/切换换签/旧 token 401-2001/`/auth/me` 新空间/删除保护 1003/删后 404/校验 1001，错误态 traceId 已留档 FE-SYNC §1）+ **经网关复验**三条前缀路由 200、未接入前缀 404、无 token 401-2001；⑦ **冒烟数据已清理**（本会话新建的 smoke 用户/空间及成员关系已删，库内仅保留种子与既有数据）；⑧ **未完成**：提交走 PR、Nacos `lb://` 实机复验（受安全组限制）、audit（属 obs）仍 mock；⑨ **待清理提示**：`d:/CodexProject/.ssh_run.py` 含明文 root 口令（已 gitignore，建议用后删除），本机 `%TEMP%` 残留本次临时脚本（隧道/冒烟脚本）建议清理。**下一步：workspace 收尾提交走 PR + 前端接口复测（§七 Top1）**
 - 日期：2026-09-16
 - 内容：阶段 4→5 交接体检 + 文档完整度收口（收尾三件套）—— ① **体检结论**：阶段 1-4 已完成并入 master（`f84ffd2`）、整体 ~43%；gateway Nacos 接入闭环（实例 UP + `lb://` 冒烟 8/8）；云端 PG/Redis/Nacos healthy、磁盘/swap 已加固；下一步 workspace（阶段 5，兑现 BE-20260908-02）。② **文档完整度修正**：4 处「Nacos 接入后改 lb://」过期前瞻改为现状（`TD §8.3` 注 / `ARCHITECTURE` 路由规则 / `PROGRESS §七 Top2` / `gateway/pom.xml` 注释）；`FE-SYNC` §1 gateway 证据列补 `lb://` 冒烟 8/8（契约无变化，§2 不加条目）。③ **发现并登记**：另一场对话的「Nacos 客户端负载均衡」实测漏洞清单（P0-1 注册 IP 落虚拟网卡 / P0-2 公网 Nacos 未鉴权可投毒 / P1-1 `NACOS_ADDR` 注入路径 / P1-2 compose 漂移 / P2-1 gateway 自注册）原先只落在 `LEARNING.md`，已登记进 **§五「云上 Nacos 安全加固」**（保证开工四必读可见）；`LEARNING` §八 P2-2/P2-3 标记已修。④ **提交**：`fa9c8c6`（LEARNING 笔记/口径）+ `6af1c75`（Nacos 接入 14 files）已推送 `feature/docs-sync-security`（远程 = `6af1c75`）。⑤ **编译证据**：`mvn -DskipTests -pl :insight-engine-gateway -am package` → **BUILD SUCCESS**（5.5s，2026-09-16）；本轮冒烟复用 2026-09-09 `lb://` 8/8（无新代码逻辑）。⑥ **未决**：`LEARNING.md` 存在另一并行对话的 4 行未提交改动（「Nacos 配置逐行拆解」+ P1-1 结案），保留其归属待其自行收尾；§五 口令轮换与 P0-1/P0-2 加固仍为部署前必办。**下一步：新开对话进 workspace 模块（阶段 5）**
 - 日期：2026-09-09

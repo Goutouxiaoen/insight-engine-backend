@@ -21,7 +21,8 @@ import com.insightengine.ums.mapper.RoleMapper;
 import com.insightengine.ums.mapper.UserMapper;
 import com.insightengine.ums.mapper.WorkspaceMapper;
 import com.insightengine.ums.service.AuthService;
-import com.insightengine.ums.util.TokenDigestUtil;
+import com.insightengine.starter.security.util.TokenDigestUtil;
+import com.insightengine.starter.web.context.UserContext;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -293,10 +294,18 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * 组装用户信息（含角色与工作空间）。
+     *
+     * <p>工作空间语义（2026-09-16 修正）：{@code workspaceId} 表示<b>当前工作空间</b>，以 JWT 载荷
+     * 的 {@code ws_id} 为准；仅当令牌不含 {@code ws_id}（组织级管理员）时回退到「成员关系中最早的空间」。
+     * 此前固定取默认空间，会导致 workspace {@code /workspace/switch} 换签后 {@code /auth/me}
+     * 仍返回旧空间，前端 {@code ensureMe()} 无法反映切换结果（IF §3.5 / §5.5 联动）。</p>
      */
     private UserInfoVO buildUserInfo(User user) {
         List<String> roles = roleMapper.selectRoleCodesByUserId(user.getId());
-        Long workspaceId = roleMapper.selectDefaultWorkspaceIdByUserId(user.getId());
+        Long workspaceId = UserContext.getWorkspaceId();
+        if (workspaceId == null) {
+            workspaceId = roleMapper.selectDefaultWorkspaceIdByUserId(user.getId());
+        }
         return buildUserInfo(user, roles, workspaceId);
     }
 

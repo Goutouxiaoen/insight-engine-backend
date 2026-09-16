@@ -1,4 +1,4 @@
-package com.insightengine.ums.util;
+package com.insightengine.starter.security.util;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -7,8 +7,10 @@ import java.security.NoSuchAlgorithmException;
 /**
  * Token 摘要工具。
  *
- * <p>登录态缓存与黑名单均要求「只存 SHA-256 摘要、不落明文 token」，
- * 避免 Redis 被拖库时直接泄露可用 token（TD §6.1 / ADR-10）。</p>
+ * <p>登录态缓存（{@code ie:auth:token:*}）与登出黑名单（{@code ie:auth:blacklist:*}）
+ * 均要求「只存 SHA-256 摘要、不落明文 token」，避免 Redis 被拖库时直接泄露可用 token
+ * （TD §6.1 / ADR-10）。写入方（UMS 登录/刷新）与校验方（各服务的登录态、黑名单实现）
+ * 必须使用同一算法，故下沉到 starter-security 单点提供。</p>
  *
  * <p>用 JDK 自带 {@link MessageDigest} 计算摘要，避免为单个哈希函数引入额外依赖
  * （项目 BOM 未引入 hutool-crypto）。</p>

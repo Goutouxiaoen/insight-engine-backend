@@ -13,8 +13,12 @@
     <!--
       insight-engine-workspace：工作空间与组织服务
       职责（PRD §12.1 / IF §5，宿主端口 7102）：
-        组织、工作空间、成员管理、数据权限。
-      当前状态：阶段 1 仅建骨架，完整实现见阶段 5。
+        组织、工作空间、成员管理（数据权限的容器与归属边界）。
+      依赖说明：starter-web（统一响应/异常/TraceID/上下文）
+                starter-security（JWT 签发校验 + Security 过滤链 + 方法级权限；切换空间需重签 JWT）
+                starter-mybatis（MP + 逻辑删除 + 审计填充）
+                starter-redis（登录态/黑名单 Redis 实现；切换空间需覆盖登录态与 refresh 会话）
+                postgresql（主库驱动）
     -->
     <artifactId>insight-engine-workspace</artifactId>
     <packaging>jar</packaging>
@@ -27,5 +31,59 @@
             <groupId>com.insightengine</groupId>
             <artifactId>insight-engine-starter-web</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-mybatis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-redis</artifactId>
+        </dependency>
+        <!-- Nacos 注册中心/配置中心（服务注册名 insight-engine-workspace，网关以 lb:// 寻址） -->
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-nacos</artifactId>
+        </dependency>
+        <!-- PostgreSQL 驱动（版本由 Spring Boot BOM 管理） -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Lombok（编译期注解处理） -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Knife4j 在线接口文档（OpenAPI3，版本由 BOM 锁定 4.5.0，TD §2.1） -->
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 打成可执行 jar（spring-boot-maven-plugin） -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.insightengine.workspace.WorkspaceApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

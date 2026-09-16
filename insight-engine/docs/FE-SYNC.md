@@ -34,8 +34,8 @@
 | 模块 | 接口前缀 | 状态 | 前端可联调 | 证据（curl + traceId + 日期） | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | UMS 认证 | `/auth/**`、`/api/v1/user\|role\|permission/**` | ✅ 已就绪 | 是 | 2026-09-08 全链路冒烟 8/8（登录/me/refresh 轮换/logout 撤销/401/403/2006），见 PROGRESS §六 6.4 | 前端 P1/P2 已真联调；register 已修复 |
-| gateway 网关 | 前端统一入口 `:7000` | ✅ 已就绪（冒烟级） | 是 | **2026-09-09 Nacos `lb://` 冒烟 8/8**（gateway 经 Nacos 服务发现转发 UMS，寻址方式对前端无感）：login/me/user/page/role/list 200（code=0）/ 无 token 401-2001 / 坏 token 401-2001 / 错口令 401-2002 / `/doc.html` 200；另有同日直连冒烟 9/9（登录/转发/2001/2001/2007/`/doc.html`/sk-2001/2006/404，`X-Trace-Id` 单值） | 路由已按 TD §8.3 收窄（user/role/permission 专属前缀）；TraceGlobalFilter(-200)、错误响应 charset=UTF-8、JWT Claim 常量下沉 common 已落地；Nacos 云容器已部署（39.106.110.214:8848，1:1 端口）+ gateway/UMS 接入代码完成（`fail-fast:false`、路由改 `lb://insight-engine-ums`），**注册实机验证通过（2026-09-09：Nacos 实例 UP、`lb://` 转发冒烟 8/8）**。**PR #5（`f84ffd2`）已合入 master** |
-| workspace 工作空间 | `/api/v1/org\|workspace\|member/**` | ⚪ 未开始 | 否（mock） | — | 模块空壳（仅 pom.xml）；前端 BE-20260908-02 跟踪 |
+| gateway 网关 | 前端统一入口 `:7000` | ✅ 已就绪（冒烟级） | 是 | **2026-09-09 Nacos `lb://` 冒烟 8/8**（gateway 经 Nacos 服务发现转发 UMS，寻址方式对前端无感）：login/me/user/page/role/list 200（code=0）/ 无 token 401-2001 / 坏 token 401-2001 / 错口令 401-2002 / `/doc.html` 200；另有同日直连冒烟 9/9（登录/转发/2001/2001/2007/`/doc.html`/sk-2001/2006/404，`X-Trace-Id` 单值） | 路由已按 TD §8.3 收窄（user/role/permission 专属前缀）；TraceGlobalFilter(-200)、错误响应 charset=UTF-8、JWT Claim 常量下沉 common 已落地；Nacos 云容器已部署（39.106.110.214:8848，1:1 端口）+ gateway/UMS 接入代码完成（`fail-fast:false`、路由改 `lb://insight-engine-ums`），**注册实机验证通过（2026-09-09：Nacos 实例 UP、`lb://` 转发冒烟 8/8）**。**PR #5（`f84ffd2`）已合入 master**；**2026-09-16 新增 workspace 路由**：`/api/v1/org\|workspace\|member/**` → `lb://insight-engine-workspace` |
+| workspace 工作空间 | `/api/v1/org\|workspace\|member/**` | ✅ 已就绪 | **是**（可从 mock 清单移除） | **2026-09-16 实机冒烟 28/28**（UMS 7101 + workspace 7102，云 PG/Redis）：登录 200 → 组织详情 200（`traceId=null` 成功态，错误态如 `929767985c9b43d291e5110f5e22f663`）→ 空间创建 200（id=3）/ 更新 200 / 分页 200（名与配额更新生效）→ 成员自动挂 ws_admin、重复邀请 1001（`traceId=0aec7d43efbd4bcd82427ab4c0eedf91`）/ 添加 200 / 改角色 200 / 移除 200 → 非成员切换 403-2006 / 移除后不可见 → 切换空间 200（新 token）→ **旧 token 立即 401-2001** → `/auth/me` 新 token 返回 `wsId=3 wsName=Smoke WS v2` → 删除当前空间 403-1003（`traceId=929767985c9b43d291e5110f5e22f663`）/ 删除目标空间 200 / 删后成员接口 404-1004（`traceId=7c27a17e77984dbbbaf2d2f6f0698244`）/ 非法编码 1001（`traceId=032ddde1ca00448c9b375195676f86fc`）；**另经网关 :7000 复验**：`/api/v1/org/1`、`/api/v1/workspace/page`、`/api/v1/member/page` 转 workspace 均 200（`X-Trace-Id` 单值），未接入前缀 `/api/v1/kb/x` 网关 404，无 token 401-2001 | 组织/空间/成员 11 个端点；`/auth/me` 工作空间语义修正为「当前空间（JWT ws_id）」；**新增 `DELETE /api/v1/workspace/{id}`**；⚠️ 添加成员路径为 `/api/v1/member/invite`（前端当前请求 `/api/v1/member`，需同步，见 §2） |
 | model 模型网关 | `/api/v1/model/**` | ⚪ 未开始 | 否（mock） | — | 阶段 6 |
 | kb 知识库 | `/api/v1/kb/**` | ⚪ 未开始 | 否（mock） | — | 上传 + 状态轮询 |
 | tool 工具市场 | `/api/v1/tool/**` | ⚪ 未开始 | 否（mock） | — | JSON Schema |
@@ -56,6 +56,10 @@
 - `[2026-09-09] SSE 新增 `heartbeat` 事件` → 每 15s、`data={"ts":<epochMillis>}`、不可关闭 → 前端可据此调整读超时 → 已同步 IF §10（Agent 调用 SSE 事件表）。
 - `[2026-09-09] 网关响应头 `X-Trace-Id` 保证单值` → 所有命中路由（含错误响应）均回写**唯一** `X-Trace-Id`，前端可直接读取用于报障定位；**未匹配路由**（如路径拼写错误、未接入的服务前缀）由网关直接 404，响应**不带** `X-Trace-Id` 且为 Spring 默认错误体（无 `code` 字段）→ 前端对未知路径按 HTTP 404 兜底，勿依赖 `code`。
 - `[2026-09-09] SSE 心跳升为通用约定（IF §2.6）` → 新增 **IF §2.6「SSE 流式通用约定」**作为心跳单一事实源：**所有 `stream=true` 接口均含 `heartbeat`（15s / 不可关闭 / `data={"ts":<epochMillis>}`）**；§7.5 / §8.3 / §10.3 / §12.4 / §13.6 统一改为引用 §2.6，其中 **§12.4 括号枚举已补上 `heartbeat`**（原枚举遗漏，最易误导）→ 前端 `sse.ts` 读超时保护按「任意事件即重置」统一实现，无需按端点差异化 → 已同步 IF §2.6/§7.5/§8.3/§10.3/§12.4/§13.6。
+- `[2026-09-16] 新增删除空间端点 DELETE /api/v1/workspace/{id}` → workspace 模块交付时补充的删除能力（权限码 `ws:delete` 已在权限字典中）。语义：逻辑删除空间**及其全部成员关系**；**不允许删除当前所处空间**（`1003`，提示先切换）。前端「删除」按钮可直接对接 → 已同步 IF §5.3。
+- `[2026-09-16] 添加成员路径以 IF 为准：POST /api/v1/member/invite` → IF §5.6 定义为 `/api/v1/member/invite`，而前端 `api/member.ts` 当前请求 `POST /api/v1/member`（旧 mock 口径）。后端按 IF 实现（`/invite`），**请前端把该调用改为 `/api/v1/member/invite`**（请求体 `{workspaceId, email, roleId}` 不变）。未注册邮箱 / 重复加入仍返回 `1001`（与 mock 一致）。
+- `[2026-09-16] GET /auth/me 的 workspaceId / workspaceName 语义明确为「当前工作空间」（以 JWT ws_id 为准）` → **切换空间后 `ensureMe()` 会返回新空间**（此前实现固定返回成员关系中最早的空间，切换后不刷新，属实现与语义不符，已修正）；令牌无 `ws_id`（组织级管理员）时回退最早所属空间 → 已同步 IF §3.5。
+- `[2026-09-16] 空间列表可见范围收敛` → `GET /api/v1/workspace/page` 对**组织级管理员及以上（持 `org:write`）**返回组织内全部空间；其他用户**仅返回自己所属空间**（按 `ie_member` 反查）。前端无需改动（管理员视角不变）；普通用户「空间切换」列表即为其可切换范围，与服务端切换校验同源 → 已同步 IF §5.4。
 
 ---
 
@@ -69,14 +73,17 @@
 - **已同步**：IF §6.7、DB.md 种子表说明。
 - **证据**：权限字典 ws 组 = read/create/write/delete（init.sql §5，2026-09-09 代码核对）。
 
-### BE-20260908-02 · workspace/member/audit 交付 → 🔵 处理中（已排期）
-- **结论**：workspace 模块尚未开工（阶段 5）。交付后在本条回填「就绪 + curl 证据」，前端届时按 FE-P3 步骤 0→5 复测并移除 mock。
-- **排期**：环境/基础设施收口后进入 workspace 模块开发。
+### BE-20260908-02 · workspace/member/audit 交付 → ✅ 已交付（workspace / member 就绪；audit 属 obs，未交付）
+- **结论**：workspace 模块已实现并**实机冒烟通过**（2026-09-16），`/api/v1/org|workspace|member/**` 全部就绪，前端可按 FE-P3 步骤 0→5 复测并**从 mock 清单移除 `workspace,member`**。
+- **证据**：见本文件 §1 workspace 行（冒烟 28/28 + 经网关复验）；代码位置 `insight-engine-modules/insight-engine-workspace`（11 端点 / 端口 7102）。
+- **需前端同步两处**：① 添加成员改调 `POST /api/v1/member/invite`（§2）；② 新增删除空间 `DELETE /api/v1/workspace/{id}` 已可用。
+- **未交付**：**audit（审计）属 obs 服务**，本轮未实现，前端审计 Tab 需继续 mock（待 obs 阶段）。
+- **前置数据**：云端库 `ie_role_permission` 增量 seed 已执行（2026-09-16，见 BE-20260908-03），`ws_admin` 成员管理权限已生效。
 
-### BE-20260908-03 · 角色 seed 缺授权 → ✅ 已修复
+### BE-20260908-03 · 角色 seed 缺授权 → ✅ 已修复（云端已执行增量 seed）
 - **结论**：已补齐 `org_admin`(46) / `ws_admin`(27) / `end_user`(7) 授权（init.sql §6）。`ws_admin` 含成员管理（`member:read/create/update/delete`），成员 Tab 不再走 2006 降级。
 - **证据**：init.sql 三条授权（带 `ON CONFLICT DO NOTHING` 可增量重跑）；DB.md 种子表 `ie_role_permission=143`（2026-09-09）。
-- **落地提醒**：云端已初始化库需执行这三条增量 INSERT 才生效（未重建库场景）。
+- **落地状态（2026-09-16 更新）**：实测云端库此前**只有 role 1/4 授权**（成员 Tab 与空间级权限 403 的直接成因）；已执行这三条增量 INSERT，现 `ie_role_permission` = 1:48 / 2:46 / 3:27 / 4:15 / 5:7 = **143**（与 DB.md 一致）。
 
 ### BE-20260909-04 · SSE 心跳 → ✅ 已答复（契约已定，实现随 conv/agent）
 - **结论**：事件名 `heartbeat`，周期 **15s**，`data = {"ts":<epochMillis>}`，**不可关闭**；已写入 IF §10 SSE 事件表。实现随 conv/agent 流式模块落地。
