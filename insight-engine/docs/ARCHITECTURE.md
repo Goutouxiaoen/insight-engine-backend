@@ -100,7 +100,7 @@ flowchart TB
         PG["✅ PostgreSQL+PGVector<br/>业务库 :5433"]
         RD["✅ Redis 7<br/>缓存/会话/黑名单 :6380"]
         MQ["⚪ RabbitMQ 3.13<br/>异步任务 :5673"]
-        NACOS["🔨 Nacos<br/>注册/配置 :8850"]
+        NACOS["🔨 Nacos<br/>注册/配置 :8848（1:1）"]
         MINIO["⚪ MinIO<br/>对象存储 :9010"]
         OBS_M["⚪ Prometheus/Grafana<br/>监控 :9091/:3001"]
     end
@@ -332,7 +332,7 @@ flowchart TD
 | 位置 | `insight-engine-modules/insight-engine-gateway` |
 | 关键类 | `AuthGlobalFilter`（全局认证过滤器）、`GatewayJwtParser`、`GatewaySecurityProperties` |
 | 技术特性 | WebFlux（响应式，非 Spring MVC） |
-| 路由规则 | 当前把所有 `/auth/**`、`/api/v1/**`、文档路径转发到 `http://localhost:7101`（UMS 直连）；Nacos 接入后改 `lb://insight-engine-ums` |
+| 路由规则 | 按服务专属前缀转发（TD §8.3 收窄后）：`/auth/**` + `/api/v1/user\|role\|permission/**` + 文档路径 → `lb://insight-engine-ums`（经 Nacos 服务发现，2026-09-09 接入；其余 `/api/v1/xxx` 网关层 404） |
 | 依赖 | common（Result/ErrorCode/Constants） |
 
 ### 5.2 ✅ UMS（用户权限服务）—— 已实现，最完整

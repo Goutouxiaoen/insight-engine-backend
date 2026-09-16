@@ -2,7 +2,7 @@
 # Gateway 网关配置
 # 端口 7000（PRD §9.2）。响应式网关（Spring Cloud Gateway），统一入口。
 # 认证模型（2026-09-03 定案）：网关校验 JWT/API Key 后下发明文头，业务服务默认自校验。
-# 路由目标当前为 UMS 直连（localhost:7101），Nacos 接入后改 lb://insight-engine-ums。
+# 路由目标：经 Nacos 服务发现 lb://insight-engine-ums（2026-09-09 接入注册中心）。
 # =============================================================================
 server:
   port: 7000
@@ -11,13 +11,26 @@ spring:
   application:
     name: insight-engine-gateway
   cloud:
+    # Nacos 注册中心/配置中心（地址走 NACOS_ADDR 环境变量注入，见 .env.example）
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        # Nacos 不可达时只告警、不阻断启动（该属性默认 true，会导致服务直接起不来）
+        fail-fast: false
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        # 配置中心暂未启用（配置仍落在各服务 application.yml），关闭 import 强制校验，
+        # 否则 Spring Cloud 2023 会因缺少 spring.config.import=nacos: 而启动失败。
+        import-check:
+          enabled: false
     gateway:
       # 路由表（TD §8.3 / P18）：按服务专属前缀细分，禁止 /api/v1/** 全量 fallback。
       # 当前仅 UMS 单服务：/auth/** 与 /api/v1/user|role|permission/** 转 UMS；
       # 其余 /api/v1/xxx（kb/workspace/org/member 等后续服务）在网关层即 404，不误转 UMS。
       routes:
         - id: insight-engine-ums
-          uri: http://localhost:7101
+          # 经 Nacos 服务发现负载均衡（2026-09-09 接入，原为 http://localhost:7101 直连）
+          uri: lb://insight-engine-ums
           predicates:
             - Path=/auth/**,/api/v1/user/**,/api/v1/role/**,/api/v1/permission/**,/doc.html,/webjars/**,/v3/api-docs/**,/swagger-resources/**,/favicon.ico
       # 全局跨域（TD §8.3：MVP 放开，生产收敛为白名单）

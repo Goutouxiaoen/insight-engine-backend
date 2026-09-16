@@ -13,6 +13,19 @@ server:
 spring:
   application:
     name: insight-engine-ums
+  cloud:
+    # Nacos 注册中心/配置中心（地址走 NACOS_ADDR 环境变量注入，见 .env.example）
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        # Nacos 不可达时只告警、不阻断启动（该属性默认 true，会导致服务直接起不来）
+        fail-fast: false
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        # 配置中心暂未启用（配置仍落在 application.yml），关闭 import 强制校验，
+        # 否则 Spring Cloud 2023 会因缺少 spring.config.import=nacos: 而启动失败。
+        import-check:
+          enabled: false
   datasource:
     url: jdbc:postgresql://${INSIGHT_PG_HOST}:${INSIGHT_PG_PORT}/${INSIGHT_PG_DB}
     username: ${INSIGHT_PG_USERNAME}

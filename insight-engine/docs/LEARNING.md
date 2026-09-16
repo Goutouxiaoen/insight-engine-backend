@@ -907,6 +907,108 @@ spring:
 
 ---
 
+## Nacos 配置逐行拆解：`discovery` / `config` 两段到底在配什么
+
+- 学于：2026-09-16
+- 配置位置：`insight-engine-ums/src/main/resources/application.yml:17-28`；`insight-engine-gateway/src/main/resources/application.yml:14-25`（**两份完全同款**）
+- 关联：`application-local.example.yml:27-33`（本地覆盖写法）、`starter-nacos/pom.xml:31-46`（引入 discovery + config + loadbalancer）
+- 来源：SCA 2023.0.1.0 / Nacos 2.3.2；PROGRESS §三 2026-09-09（`fail-fast: false` 的由来）
+
+### 0. 先建立结构感：这是**两扇互不相干的门**
+
+```yaml
+spring.cloud.nacos.discovery.*   # 注册中心：我把自己报到哪 / 去哪查别人
+spring.cloud.nacos.config.*      # 配置中心：去哪拉远程配置（本项目未启用）
+```
+
+**两段各有自己的 `server-addr`，不会互相继承**——这是最常见的误解（只配了 discovery，以为 config 也跟着指过去了；实际 config 会退回自己的默认值 `127.0.0.1:8848`，云上必错）。
+
+### 1. `server-addr: ${NACOS_ADDR:127.0.0.1:8848}` —— 一个占位符，两个知识点
+
+```yaml
+server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+#            └─变量名─┘ └──────默认值──────┘
+```
+
+- **语法**：`${变量名:默认值}`。**只有第一个冒号是分隔符**，所以默认值里的 `127.0.0.1:8848` 里的冒号不算——这是这个写法唯一容易看错的地方。
+- **解析优先级**：`NACOS_ADDR` 有值 → 用它；没值 → 用默认值 `127.0.0.1:8848`（本机）。
+- **`NACOS_ADDR` 从哪来？不止环境变量**：Spring 的 `Environment` 会把「JVM 系统属性（`-DNACOS_ADDR=...`）」「操作系统环境变量」「命令行参数」都作为属性源，占位符对三者一视同仁。本项目实测就是这么连云的——PROGRESS §三 2026-09-09 的启动命令为 `-DNACOS_ADDR=39.106.110.214:8848`（**注意这是系统属性，不是环境变量**，所以当时按"环境变量"去查会查不到，是排查方向找错了；详见 LB 篇 P1-1）。
+- **为什么要写占位符而不是直接写死**：默认值保证本机开发零配置即可跑；上线/连云只需注入一个变量，代码与 yml 都不用改。
+
+### 2. `discovery.fail-fast: false` —— 注册失败时"不阻断启动"
+
+| | 默认值 | 含义 |
+| --- | --- | --- |
+| `spring.cloud.nacos.discovery.fail-fast` | `true` | 启动时**连不上 Nacos / 注册失败** → 抛异常，**应用直接起不来** |
+| 本项目设为 | `false` | 只打告警日志、继续启动；后台心跳会持续重试注册 |
+
+**为什么改**（真实报错，不是推测）：`NacosException: Client not connected, current status:STARTING` —— 默认 `true` 时 Nacos 不可达会让 UMS/gateway **整体关闭**（PROGRESS §三 2026-09-09）。
+
+> ⚠️ **它把故障从"显式崩溃"换成了"静默没注册"，这是要付代价的**：
+> 服务进程活着、端口在听、日志一片正常，但 **Nacos 名单里没有它** → 网关 `lb://insight-engine-ums` 找不到实例 → 503。
+> 判定服务健康**必须看 Nacos 名单**（`curl ".../v1/ns/instance/list?serviceName=..."`），不能用"进程在不在"当判据——与本文件 LB 篇「踩坑 4：`enabled` / `healthy` / 进程活着 是三件事」互为正反面。
+> 生产建议：`fail-fast: false` + **名单告警**（实例数掉 0 就报警），两者配套才算完整。
+
+### 3. `config.import-check.enabled: false` —— 关掉"配置中心必须 import"的强校验
+
+**背景（Spring Cloud 的两次机制变更，面试常问）**：
+
+```
+老机制（Bootstrap 阶段，2021 之前）：
+  引入 nacos-config 依赖 + bootstrap.yml 里写 spring.cloud.nacos.config.*
+  → 框架自动去拉远程配置（无需声明）
+
+新机制（ConfigData API，Spring Cloud 2021+ / 本项目 2023.0.x）：
+  bootstrap 阶段被废弃，配置加载统一走 spring.config.import
+  → 必须显式写 spring.config.import: nacos:xxx.yml 才会拉远程配置
+  → 于是出现一种"静默错误"：依赖在、属性也配了，但就是没拉远程配置，你还以为生效了
+```
+
+SCA 为防这个静默错误，**默认开启**了一道检查：`spring.cloud.nacos.config.import-check.enabled=true` 时，若 classpath 上有 nacos-config 但**没有** `spring.config.import=nacos:`，**启动直接报错**提示你补 import（这就是注释里"否则 Spring Cloud 2023 会因缺少 `spring.config.import=nacos:` 而启动失败"的准确含义）。
+
+**本项目的选择**：`false` → 跳过该检查，**允许"有依赖但不拉远程配置"**。因为当前配置全部落在各自的 `application.yml`，配置中心尚未启用。
+
+**将来启用配置中心的三步（照这个顺序做，别只做一半）**：
+
+1. yml 加 `spring.config.import: nacos:insight-engine-ums.yml`（想"Nacos 挂了也能启动"就写 `optional:nacos:...`）；
+2. `import-check.enabled` 可删掉（恢复默认 true）或保持 false，**但不能再出现"没有 import 又删了检查"的组合**；
+3. 需要动态刷新的 Bean 加 `@RefreshScope`（**全仓库目前 0 处**，属待学习清单）。
+
+**自查现在到底用没用配置中心**（两条都应无输出）：
+
+```bash
+git grep -n "spring.config.import"        # 无输出 → 没拉任何远程配置
+git grep -n "@RefreshScope\|@NacosValue"  # 无输出 → 没有动态刷新
+```
+
+### 4. 顺带：`spring.application.name` 和 Nacos 的绑定关系
+
+`spring.application.name: insight-engine-ums`（`:14-15`）不只是日志名，它同时决定三件事：
+
+| 用途 | 体现 |
+| --- | --- |
+| 注册到 Nacos 的**服务名** | 网关 `uri: lb://insight-engine-ums` 就是按它命中 |
+| 服务实例的**分组/命名** | `DEFAULT_GROUP` 下的 `insight-engine-ums` |
+| 将来配置中心的 **dataId 前缀** | `insight-engine-ums.yml`（约定：`${spring.application.name}.${file-extension}`） |
+
+> **改名的代价**：一改名，① Nacos 名单里的服务名、② 网关路由 `lb://` 的 uri、③ 将来配置的 dataId **三处都得同步**，漏一处就是"服务在注册但网关 503"。
+
+### 面试可能追问
+
+- **Q1：`discovery.server-addr` 配了，`config.server-addr` 能不能不配？** 答：能省但会错——两者是独立的配置项/独立客户端，不配就走各自的默认值 `127.0.0.1:8848`；云上会出现"注册成功但配置拉不到（或反之）"的诡异现象。
+- **Q2：`fail-fast: false` 是更健壮还是更危险？** 答：它是**可用性 vs 可观测性**的取舍。好处是 Nacos 抖动不再阻断发布；代价是"没注册上"变成静默故障，必须配**名单告警**补回来。答出"代价+补偿"才算说透。
+- **Q3：为什么 Spring Cloud 2023 会因为缺少 `spring.config.import` 启动失败？** 答：Bootstrap 阶段废弃后配置改走 ConfigData API，必须显式 import 才会拉远程配置；框架为防"以为生效其实没拉"的静默错误，默认加了这道强校验。
+- **Q4：你们项目用配置中心了吗？** 答（**照实说**）：没有。只启用了注册中心；`config.*` 两行是预留（`config.server-addr` 当前无消费方），依据是整个仓库搜不到 `spring.config.import` 与 `@RefreshScope`。
+
+### 踩坑提醒
+
+1. **坑：以为配了 `discovery` 就等于配好了 Nacos。** `config` 是另一扇门，各有各的 `server-addr`。
+2. **坑：把 `fail-fast: false` 当无脑加分项。** 它会让"注册失败"从崩溃变成静默；排查时先看 Nacos 名单，再看进程。
+3. **坑：将来启用配置中心时"只删了 import-check、没加 import"。** 正确组合只有两种：`有 import` 或 `无 import + 检查关`。
+4. **坑：被 `${NACOS_ADDR:127.0.0.1:8848}` 的"有默认值"安抚。** 默认值是**本机**——换机器/换终端/重开 IDEA 就会静默连本机 Nacos，表现为"代码没动却 503"（LB 篇 P1-1 就是这个坑的实例）。
+
+---
+
 ## Web 安全基础：日志注入、越权面与白名单校验
 
 - 学于：2026-08-26

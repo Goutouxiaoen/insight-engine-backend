@@ -19,7 +19,7 @@
       认证模型（2026-09-03 定案，见 PROGRESS §三）：网关校验 JWT 后下发明文头
             （X-User-Id/X-Tenant-Id/X-Workspace-Id/X-Roles），业务服务默认自校验 JWT，
             需信任网关头时通过 insight.web.trust-gateway-headers=true 开启。
-      路由目标当前直连 localhost:7101（UMS），Nacos 注册中心接入后改 lb://insight-engine-ums。
+      路由目标：经 Nacos 服务发现负载均衡 lb://insight-engine-ums（2026-09-09 接入，原为 http://localhost:7101 直连）。
     -->
     <artifactId>insight-engine-gateway</artifactId>
     <packaging>jar</packaging>
@@ -32,6 +32,11 @@
         <dependency>
             <groupId>com.insightengine</groupId>
             <artifactId>insight-engine-common</artifactId>
+        </dependency>
+        <!-- Nacos 注册中心/配置中心：lb://insight-engine-ums 服务发现必需（2026-09-09 接入） -->
+        <dependency>
+            <groupId>com.insightengine</groupId>
+            <artifactId>insight-engine-starter-nacos</artifactId>
         </dependency>
         <!-- Spring Cloud Gateway（响应式网关，含 WebFlux） -->
         <dependency>

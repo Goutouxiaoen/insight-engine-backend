@@ -20,10 +20,10 @@
 
 | 项     | 值                                  |
 | ----- | ---------------------------------- |
-| 当前阶段  | 阶段 4：gateway 网关 —— **PR #5（`f84ffd2`）已合入 master**（路由按 §8.3 收窄 + TraceGlobalFilter + charset + JWT 常量下沉，复跑冒烟 9/9）；遗留 🔴 云凭据明文已进 master 历史（§五，闸门已失守，待口令轮换止血） |
+| 当前阶段  | 阶段 4：gateway 网关 —— **PR #5（`f84ffd2`）已合入 master**（路由按 §8.3 收窄 + TraceGlobalFilter + charset + JWT 常量下沉，复跑冒烟 9/9）；**云上 Nacos 2.3.2 已部署（healthy，8848/9848 1:1 端口，自报 39.106.110.214:8848）+ UMS/gateway Nacos 接入代码完成、全量 BUILD SUCCESS（路由已改 `lb://insight-engine-ums`）**，**P2-2/P2-3 注册与 lb:// 转发验证通过（冒烟 8/8，2026-09-09 安全组放行后）**；遗留 🔴 云凭据明文已进 master 历史（§五，闸门已失守，待口令轮换止血） |
 | 当前里程碑 | M4：gateway 网关                       |
-| 当前任务  | gateway 阶段收口完成（PR #5 已合 master）→ **下一步：workspace 模块启动（阶段 5，兑现 BE-20260908-02）**；云上 Nacos 需云 SSH 凭据，凭据到手再做（§六 6.4 / §七 Top2）。**2026-09-09 三批已完成**：① 文档口令明文改占位引用 + §五 闸门失守修正；② 凭据纪律硬约束（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 文档口径统一（P1~P19、真相源 11 份）；③ 代码侧配置占位化（compose 6 处 + ums yml 4 处改 `${VAR}`，新增 `.env.example` / `application-local.example.yml` 模板，`git grep` 明文归零） |
-| 整体完成度 | 约 40%（阶段 1-4 已完成并全部合入 master；gateway 路由收窄 + TraceFilter/charset/JWT 常量已合入，冒烟 9/9；init.sql 角色 seed 授权补齐；凭据纪律硬约束 + 配置占位化已落地（`git grep` 明文归零）；⬜ 待办：云上 Nacos/RabbitMQ/MinIO 迁云 + §五 a) 口令轮换 + workspace 模块（阶段 5）；UMS 收尾项在 §6.1 待办池） |
+| 当前任务  | **云上 Nacos 部署 + UMS/gateway Nacos 接入（2026-09-09，P2）**：Nacos 2.3.2 容器已部署（healthy，`8848/9848` 1:1 端口修正，`NACOS_SERVER_IP` 强制自报 `39.106.110.214:8848`）；UMS/gateway 代码已接入（starter-nacos + loadbalancer + `fail-fast:false` + 路由改 `lb://insight-engine-ums`），全量 `mvn -DskipTests package` **BUILD SUCCESS**；✅ **注册实机验证通过（2026-09-09 安全组放行后）**：UMS/gateway 注册 Nacos 实例 UP（172.18.128.1:7101/7000 healthy），gateway `lb://insight-engine-ums` 转发冒烟 8/8（login/me/user/page/role/list 200、无/坏 token 401-2001、错口令 401-2002、`/doc.html` 200）。此前已完成：P1 运维加固（云盘扩容 vda3→49.8G、swap 2G + swappiness=0）实机复核通过 + 凭据纪律/占位化批次（2026-09-09）。**下一步：workspace 模块启动（阶段 5，兑现 BE-20260908-02）** |
+| 整体完成度 | 约 43%（阶段 1-4 已完成并全部合入 master；gateway 路由收窄 + TraceFilter/charset/JWT 常量已合入，冒烟 9/9；init.sql 角色 seed 授权补齐；凭据纪律硬约束 + 配置占位化已落地（`git grep` 明文归零）；**2026-09-09：云上 Nacos 2.3.2 部署 + UMS/gateway Nacos 接入闭环——注册实例 UP、`lb://` 转发冒烟 8/8 通过**；⬜ 待办：RabbitMQ/MinIO/Prom/Grafana 迁云 + §五 a) 口令轮换 + workspace 模块（阶段 5）；UMS 收尾项在 §6.1 待办池） |
 
 ---
 
@@ -35,12 +35,12 @@
 | ----------------------------------------- | ----- | ---- | ---------------------------------------------- | -------------------------------------- |
 | 产品/技术/接口文档                                | ✅ 完成  | 100% | PRD/TD/IF                                      | 已定稿                                    |
 | 协作指导文档                                    | ✅ 完成  | 100% | DEVGUIDE.md                                    | 已定稿                                    |
-| 环境准备（JDK/Maven/Docker/Node）               | 🔵 进行中 | 95%  | 本机 JDK21.0.10/Maven3.9.9/Node24.13.0 + 云服务器 Docker（39.106.110.214） | ✅ 云端 PG/Redis 已部署并经 UMS 全链路冒烟实机验证可用（2026-09-08）；2026-09-09 复核本机 JDK/Maven/Node 正常、`docker` 命令不存在（本机不承载中间件）；⬜ 待办：云上补充 Nacos 容器（§七 Top2 前置） |
+| 环境准备（JDK/Maven/Docker/Node）               | 🔵 进行中 | 97%  | 本机 JDK21.0.10/Maven3.9.9/Node24.13.0 + 云服务器 Docker（39.106.110.214） | ✅ 云端 PG/Redis 已部署并经 UMS 全链路冒烟实机验证可用（2026-09-08）；✅ 云上 Nacos 2.3.2 容器已部署（2026-09-09，healthy）；2026-09-09 复核本机 JDK/Maven/Node 正常、`docker` 命令不存在（本机不承载中间件） |
 | Git 仓库初始化                                 | ✅ 完成  | 100% | .gitignore + GitHub 工作流（PR/分支）                 | master 主干 + GitHub Flow；PR #1/#2/#3 均已合入 master；远程现含 master + feature/ums-security-fix + feature/gateway 分支 |
 | 工程骨架（父POM/BOM/common/api/starter/modules） | ✅ 完成  | 100% | 父POM/BOM/common/api/8个starter/12个模块占位          | `mvn clean install -DskipTests` 全量编译通过 |
-| 基础设施（docker-compose/init.sql）             | 🔵 进行中 | 90%  | docker-compose.yml / init.sql / prometheus.yml | compose/init.sql 定义完成；✅ 云服务器（39.106.110.214）PG/Redis 已按 compose 逐项对齐重建完成（卷 + appendonly + unless-stopped），并经 UMS 冒烟实机验证（2026-09-08 8/8 通过）；2026-09-09 补齐 init.sql 角色 seed 授权（org_admin/ws_admin/end_user，带 `ON CONFLICT` 可增量重跑）；⬜ 待办：Nacos / RabbitMQ / MinIO / Prom / Grafana 容器迁云（Nacos 为 gateway `lb://` 前置）+ 已初始化库执行增量 seed + §五 凭据收敛 |
+| 基础设施（docker-compose/init.sql）             | 🔵 进行中 | 92%  | docker-compose.yml / init.sql / prometheus.yml | compose/init.sql 定义完成；✅ 云服务器（39.106.110.214）PG/Redis 已按 compose 逐项对齐重建完成（卷 + appendonly + unless-stopped），并经 UMS 冒烟实机验证（2026-09-08 8/8 通过）；✅ Nacos 容器迁云完成（2026-09-09：1:1 端口 8848/9848 + 公网 IP 自报 + healthy）；2026-09-09 补齐 init.sql 角色 seed 授权（org_admin/ws_admin/end_user，带 `ON CONFLICT` 可增量重跑）；⬜ 待办：RabbitMQ / MinIO / Prom / Grafana 容器迁云 + 已初始化库执行增量 seed + §五 凭据收敛 |
 | UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能实机验证通过；UMS-1（双身份源收敛）+ UMS-2（refresh 轮换撤销）回归验证通过，PR #2 已合入 master，阶段正式收口；遗留 UMS 收尾优化项转 §6.1 待办池（不阻塞） |
-| gateway 网关                                | 🔵 进行中 | 90%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ TraceGlobalFilter + 常量下沉 | 全链路冒烟 8/8（2026-09-08，云 PG/Redis，UMS 7101 + gateway 7000）；3 修复 + 文档已提交 feature/gateway（fe912aa）；2026-09-09 路由按 §8.3 收窄（`/auth/**`+`/api/v1/user|role|permission/**`）+ TraceGlobalFilter(-200) + 错误响应 charset + JWT Claim 常量下沉 common，**复跑冒烟 9/9 通过**（含 `X-Trace-Id` 单值修复、2007 过期 token、`/doc.html` 白名单、`sk-` 分流）；**PR #5（`f84ffd2`）已合入 master**；⬜ 待办：接入 Nacos `lb://` |
+| gateway 网关                                | 🔵 进行中 | 92%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ TraceGlobalFilter + 常量下沉 | 全链路冒烟 8/8（2026-09-08，云 PG/Redis，UMS 7101 + gateway 7000）；3 修复 + 文档已提交 feature/gateway（fe912aa）；2026-09-09 路由按 §8.3 收窄（`/auth/**`+`/api/v1/user|role|permission/**`）+ TraceGlobalFilter(-200) + 错误响应 charset + JWT Claim 常量下沉 common，**复跑冒烟 9/9 通过**（含 `X-Trace-Id` 单值修复、2007 过期 token、`/doc.html` 白名单、`sk-` 分流）；**PR #5（`f84ffd2`）已合入 master**；✅ Nacos 接入闭环（2026-09-09：路由改 `lb://insight-engine-ums` + `fail-fast:false`；实例 UP、`lb://` 转发冒烟 8/8 通过） |
 | workspace 工作空间                            | ⚪ 未开始 | 0%   |                                                |                                        |
 | model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | kb 知识库                                    | ⚪ 未开始 | 0%   |                                                |                                        |
@@ -63,13 +63,13 @@
 - [2026-08-25] AI 框架 Spring AI 为主 + LangChain4j 为辅，见 TD ADR-3
 - [2026-08-25] 工作流自研状态机，不引 Flowable，见 TD ADR-4
 - [2026-08-25] ✅ 已决策：RabbitMQ 锁定 `3.13-management`，不复用本机 4.2；宿主端口映射 5673/15673（容器内仍 5672/15672），微服务走内部网络，见 TD ADR-11/ADR-12、TD §18.2
-- [2026-08-25] ✅ 已决策：所有中间件宿主端口统一加偏移（PG 5433/Redis 6380/Nacos 8850/MinIO 9010/Prom 9091/Grafana 3001），避开本机占用，见 TD §18.2.3
+- [2026-08-25] ✅ 已决策：所有中间件宿主端口统一加偏移（PG 5433/Redis 6380/Nacos 8850/MinIO 9010/Prom 9091/Grafana 3001），避开本机占用，见 TD §18.2.3（⚠️ **2026-09-09 修正：Nacos 例外，改 1:1 8848/9848，见本节下方 P2-1 决策**）
 - [2026-08-25] ✅ 已决策：JDK 复用本机 21，编译用 `--release 17` 产出 17 字节码，满足 MVP 的 Java17 目标，免装 JDK17
 - [2026-08-25] ✅ 已决策：工作区根目录 `d:/CodexProject/` 作为「多工程容器」，智擎项目整体收进子目录 `insight-engine/`（项目完全自包含，docs 也移入 `insight-engine/docs/`），便于 IDEA 单独打开工程进行 review；未来 `CodexProject/` 下可并列多个工程
 - [2026-08-25] ✅ 已决策：groupId=`com.insightengine`，版本 `1.0.0-SNAPSHOT`；编译目标 Java 17（`maven.compiler.release=17`）
 - [2026-08-25] ✅ 备注：阶段 1 骨架未涉及入参校验（无 Controller），但 `starter-web` 的 `GlobalExceptionHandler` 已预留 `MethodArgumentNotValidException` / `ConstraintViolationException` 两类校验异常处理，**完整入参校验（@Valid/JSR-303 + 业务规则校验）在阶段 3 UMS 认证服务中落地**（与 `starter-security` 配合）
 - [2026-08-26] ✅ 已决策：分支策略采用 **GitHub Flow**（master 稳定主干 + `feature/xxx` 功能分支），不建 develop/release/hotfix 多分支（Git Flow 对单人 MVP 过重），不按人名建分支（分支应表达"做什么"而非"谁在做"）；阶段 2 已从 master 切出 `feature/infra-docker-compose`
-- [2026-08-26] ✅ 已核实：本项目规划的全部宿主映射端口（PG 5433 / Redis 6380 / RabbitMQ 5673+15673 / Nacos 8850+9850 / MinIO 9010+9011 / Prom 9091 / Grafana 3001）本机**均空闲无冲突**，无需调整 TD §18.2.3 端口表
+- [2026-08-26] ✅ 已核实：本项目规划的全部宿主映射端口（PG 5433 / Redis 6380 / RabbitMQ 5673+15673 / Nacos 8850+9850 / MinIO 9010+9011 / Prom 9091 / Grafana 3001）本机**均空闲无冲突**，无需调整 TD §18.2.3 端口表（⚠️ **2026-09-09 修正：Nacos 除外——2.x 自报地址，宿主须 1:1 8848/9848**）
 - [2026-08-26] ✅ 已决策：镜像拉取走 DaoCloud 加速器（`docker.m.daocloud.io`），以 `docker pull <加速器前缀>/<镜像>` + `docker tag` 回标准名的方式绕过 Docker Hub 直连失败；`docker-compose.yml` 保持标准镜像名（可移植），本机 daemon 不改配置
 - [2026-08-26] ✅ 已决策：本机已有镜像 rabbitmq `4.2-management-alpine`、nacos `v3.1.1`、minio `latest` **均不复用**——版本与 TD 锁定（RabbitMQ 3.13 / Nacos 2.3.2 / MinIO RELEASE.2024）不符，复用会引入不可控版本差异，统一按 TD 拉取锁定版本
 - [2026-08-26] ✅ 已产出：`docs/DB.md` 数据库设计文档（35 表 / 356 字段全注释 / 69 索引 / ER 关系 / 种子数据，与 init.sql 一一对应）；`docs/LEARNING.md` 沉淀「PG 自增主键与序列」笔记（MySQL→PG 对照讲解，含原理/类比/面试点/踩坑）
@@ -105,6 +105,10 @@
 - [2026-09-09] ✅ 已决策并实施（凭据纪律硬约束落地，补规范缺口）：复盘「弱口令明文进 master」根因——**不是 `.gitignore` 漏规则**（`.env` / `.env.*` / `application-local.yml` / `*.secret` 早已就位），而是**事前硬约束从未存在**：P2 第 6 条只约束「不改配置项」、P5 第 4 项属事后 Review、P17 反而要求「与含明文的 compose 逐项对齐」，`AGENTS.md` 至 2026-09-09 才建立且无凭据条款。→ 本次落地：① `AGENTS.md` 新增**铁律 5：凭据纪律**（禁止明文入库 / 占位符 + `.env` 注入 / 新增配置项三件套 / 提交前自检 / 历史泄露按已泄露处理）；② `DEVGUIDE.md` 附录 B 新增 **P19 场景约束：配置与凭据**；③ **修正 P17**——对齐范围明确为「结构（镜像 tag / 容器名 / 端口映射 / 命名卷 / 环境变量名 / 持久化参数）」，**凭据值一律占位符、禁止抄明文**，消除「文档说取 `.env`、compose 写明文」的自相矛盾；④ 附录 B 标题 / 索引 / 正文引用同步为 `P1~P19`；⑤ DEVGUIDE 铁律 3 真相源份数与表格、附录 A 对齐（7 份 → 11 份，补 `ARCHITECTURE.md` / `LEARNING.md`）。**代码侧配置占位化（§五 b）已于同日第三批完成，见下条**
 
 - [2026-09-09] ✅ 已实施（凭据占位化落地，§五 b / §6.4 收口，第三批）：① `docker-compose.yml` 口令 6 处改 `${VAR:?必填提示}`（PG / Redis `--requirepass` + healthcheck `-a` / RabbitMQ / MinIO / Grafana）；② `ums/application.yml` 4 处改 `${INSIGHT_PG_*}` / `${INSIGHT_REDIS_*}`——**不给默认值**，未注入即 fail-fast（避免「忘配 → 静默用空口令连库」）；③ 新增 `.env.example`（入库模板：变量名 + 用途 + 两套注入路径指引）+ `.env`（真实值，已被 gitignore）；④ 新增 `application-local.example.yml`（入库模板）+ `application-local.yml`（真实值，已被 gitignore）——**关键事实：Spring Boot 不会自动读 `.env`**，应用侧只能走 profile 覆盖 / 环境变量，已写入 TD **§18.2.6**；⑤ `.gitignore` 补 `!.env.example`（原 `.env.*` 会把模板一起忽略，模板提不上去）；⑥ 同步 DEVGUIDE **P19**（两套注入路径 / gitignore 例外 / 自检命令只搜已跟踪文件的局限）、TD §18.2.4 应用侧注释、DB §1.1。自检：通用凭据模式 `git grep -niE "(password|passwd|secret|token|apikey)" -- ':!*.md' ':!*.example'` 与公网 IP 扫描均 **无输出**；`git check-ignore` 确认 `.env` / `application-local.yml` 被忽略、两个 `.example` 模板**不被忽略**。**未做：口令轮换（§五 a）——占位化只防「以后泄露」，不能回收已泄露历史**
+- [2026-09-09] ✅ 已决策并实施（云上 Nacos 2.3.2 部署，P2-1）：云服务器（39.106.110.214）`docker run` 启动 `insight-nacos`（MODE=standalone / NACOS_AUTH_ENABLE=false / JVM 256m-128m / 命名卷 nacos_data、nacos_logs / readiness healthcheck / restart unless-stopped，与 docker-compose.yml nacos 服务逐项对齐）。**关键修正：宿主端口由 8850/9850 偏移改为 1:1 8848/9848**——Nacos 2.x 服务端向客户端「自报 ip:port」并据此推导 gRPC 端口（=主端口+1000），偏移映射会使客户端按自报 `ip:9848` 连接失败；`NACOS_SERVER_IP=39.106.110.214` + `JAVA_OPT_EXT=-Dnacos.inetutils.ip-address=39.106.110.214` 强制服务端自报公网 IP，`cluster/nodes` 已确认 `39.106.110.214:8848` UP（grpcReportEnabled）。docker-compose.yml / TD §18.2.3 / PRD / ARCHITECTURE / `.env.example` 同步 1:1 口径
+- [2026-09-09] ✅ 已决策并实施（UMS/gateway 接入 Nacos，P2-2 代码侧）：ums/gateway 各引入 `insight-engine-starter-nacos`；starter-nacos 补 `spring-cloud-starter-loadbalancer`（nacos-discovery 2.x 不再传递引入，`lb://` 必需）；两服务 discovery/config 加 `server-addr: ${NACOS_ADDR:127.0.0.1:8848}` 与 **`fail-fast: false`**（默认 true 会在 Nacos 不可达时阻断启动——实测 UMS 报 `NacosException: Client not connected, current status:STARTING` 后整体关闭）；`spring.config.import-check.enabled: false`；gateway UMS 路由由 `http://localhost:7101` 改 **`lb://insight-engine-ums`**。全量 `mvn -DskipTests package` **BUILD SUCCESS**
+- [2026-09-09] 🟡 阻塞（P2-2 注册实机验证，**已解除**）：本机 → 云 8848/9848（TCP）**不可达**（22/5433/6380 可达）；云主机侧 ufw/firewalld 均 inactive、iptables policy ACCEPT、docker-proxy 正常监听 0.0.0.0:8848/9848 → 判定为**阿里云安全组入方向未放行 8848/9848**（实例 i-2ze6ks9wv7i0fxjkq8c6）。**2026-09-09 控制台放行后解除**：本机 `-DNACOS_ADDR=39.106.110.214:8848` 启 UMS + gateway 复验通过（实例 UP + `lb://` 冒烟 8/8，见 §6.4 / §八）
+- [2026-09-09] ✅ 已更正（云端供应商口径）：此前文档把 39.106.110.214 记为「腾讯云轻量服务器」，实机判定为**阿里云 ECS（cn-beijing，实例 i-2ze6ks9wv7i0fxjkq8c6）**——依据：主机名 `iZ2ze6ks9wv7i0fxjkq8c6Z`（iZ 前缀）、元数据服务 100.100.100.200。历史记录保留原表述，后续统一按「阿里云 ECS」口径
 
 ---
 
@@ -131,6 +135,10 @@
 - [2026-09-09] 坑：网关响应头 `X-Trace-Id` 出现两个值——根因是网关 GlobalFilter 直接 `getResponse().getHeaders().set(...)` 的时机早于 `NettyRoutingFilter` 回写上游响应头，上游 starter-web `TraceFilter` 也回传同名头，被**合并追加**而非覆盖 → 规避：网关回写响应头必须在 `beforeCommit` 回调内 `set`（响应提交前最后一刻覆盖），已验证转发/错误各路径均为单值
 - [2026-09-09] 坑：PowerShell 5.1 向 `curl.exe` 传 `-d '{"k":"v"}'` 时双引号被吞（native 参数传递规则），服务端收到 `{account:...}` → Jackson 报 `Unexpected character ('a')` 500 → 规避：请求体写入临时文件用 `-d "@file"`，勿在 PS 里内联带引号 JSON
 - [2026-09-09] 协作教训（促成铁律 5 / P19）：凭据明文能进 master，根因是**规范缺口**而非工具缺失——`.gitignore` 早已能拦 `.env`，但 `docker-compose.yml` / `ums/application.yml` 本身必须入库，明文写死在文件里就必然被提交；**凡是要入库的配置文件，只能写占位符**。P17 原先「与 compose 逐项对齐」的口径还会反向推动明文扩散（compose 是明文，命令就得抄明文），已修正为「对齐结构、凭据取占位符」
+- [2026-09-09] 坑：**Nacos 2.x 宿主端口偏移映射（8850/9850）会让 gRPC 连不上**——Nacos 2.x 服务端向客户端「自报 ip:port」（容器内主端口），2.x 客户端据此推导 gRPC 端口（=主端口+1000）建长连接，**推导基准是「自报地址」而非客户端填写的 server-addr** → 宿主暴露 9850、自报却是 `:9848` 必失败 → 规避：Nacos 宿主端口与容器内端口 1:1（8848/9848），偏移仅适用于不自报端口的中间件（PG/Redis/RabbitMQ 等）
+- [2026-09-09] 坑：**nacos-discovery/config 的 `fail-fast` 默认 true 会阻断启动**——Nacos 不可达时 UMS 报 `NacosException: Client not connected, current status:STARTING`（注册阶段抛错，端口已起后整体关闭）→ 规避：联调/容错期显式 `spring.cloud.nacos.*.fail-fast: false`（Nacos 未就绪时服务先起），生产再评估恢复 true
+- [2026-09-09] 坑：**`lb://` 路由缺 LoadBalancer 依赖**——`spring-cloud-starter-alibaba-nacos-discovery` 不传递引入 `spring-cloud-loadbalancer`，网关 `lb://` URI 会因无负载均衡器不可用 → 规避：显式引 `spring-cloud-starter-loadbalancer`（已放 starter-nacos 统一提供）
+- [2026-09-09] 协作/判定沉淀：远程中间件「连不上」的排查链路 = ① 本机到目标端口 TCP 可达性（`Test-NetConnection`）→ ② 云主机侧（ss 监听 / docker-proxy / ufw / firewalld / iptables policy）→ ③ 云安全组入方向。**主机全放行 ≠ 公网可达**，安全组与主机防火墙是两层，勿只查一层就下结论
 
 ---
 
@@ -157,6 +165,18 @@
     - d) **存量清理**：文档占位化已完成（2026-09-09 两批）；`docker-compose.yml` 占位化随 b) 完成；历史改写（filter-repo）破坏性大，口令轮换后可不做。
     - e) **规范补缺（2026-09-09 第二批，已完成）**：事前硬约束落地——`AGENTS.md` **铁律 5：凭据纪律** + `DEVGUIDE.md` **P19 场景约束：配置与凭据** + **P17 修正**（对齐范围改为「结构」，凭据值一律占位符）。**作用只是「防止再次发生」，不能替代 a) 轮换止血**；b) 代码侧占位化已于同日第三批完成。
 
+### 云上 Nacos 安全加固（🔴/🟠，2026-09-09 LB 实测发现，2026-09-16 登记）
+
+> 来源：`LEARNING.md`「Nacos 客户端负载均衡」§八 漏洞清单（实测产出，修法详见该节）。原先只落在 LEARNING，为满足「开工四必读只读 PROGRESS/FE-SYNC」的可见性，登记于此。
+
+- [ ] 🔴 **P0-2 公网可达 + 未开鉴权（Nacos 投毒风险）**：`NACOS_AUTH_ENABLE=false` 且 8848/9848 对公网放行 → 无凭据即可读注册名单（读通即写通，可被投毒）。修法：① 开鉴权（`NACOS_AUTH_TOKEN`≥32B base64 + `NACOS_AUTH_IDENTITY_KEY/VALUE`，客户端配 username/password）；② 安全组把 8848/9848 收敛到固定来源 IP；③ 开发期更优：SSH 隧道 `-L 8848:127.0.0.1:8848 -L 9848:127.0.0.1:9848`，yml 保持 `127.0.0.1:8848`（与 §五 a) 口令轮换、c) 安全组收敛同批处理）
+- [ ] 🔴 **P0-1 注册 IP 落在虚拟网卡**：UMS/gateway 注册为 `172.18.128.1`（`vEthernet (Default Switch)`），当前通只因网关与 UMS 同机；**服务上云/进容器即失败**（名单 healthy 但请求 502/超时）。修法：`spring.cloud.nacos.discovery.ip` 显式指定 / `spring.cloud.inetutils.preferred-networks|ignored-interfaces` / 容器 `--network host`——新配置项须按铁律 5 三件套（占位符 + `.env.example` + 文档）
+- [ ] 🟠 **P1-1 `NACOS_ADDR` 注入路径不可追溯**：当前靠启动 shell 临时环境变量（实测 PID 已换过一轮），换终端/IDEA/机器会静默退回 `127.0.0.1:8848` → 表现为「代码没动却 503」。修法：固化进 `application-local.yml`（gitignore）或 IDEA Run Configuration，并把启动方式写进 DEVGUIDE
+- [ ] 🟠 **P1-2 compose 与云上 `docker run` 漂移（P17 复发）**：`docker-compose.yml` nacos 服务缺 `NACOS_SERVER_IP`（云上实配有），用它重建 Nacos → 自报容器网段 IP → 服务发现全挂。修法：出 `docker-compose.cloud.yml` 或在 compose 注释指向权威定义
+- [ ] 🟡 **P2-1 gateway 自身注册进名单**：纯消费方注册只污染名单 + 多心跳负载。修法：`spring.cloud.nacos.discovery.register-enabled: false`（只订阅不注册），或明确「谁会发现网关」
+- [x] 🟡 **P2-2 pom 注释与实况矛盾**：已于 2026-09-16 修正（`gateway/pom.xml` 注释改为 `lb://`）
+- [x] 🟡 **P2-3 PROGRESS 状态过期**：已于 2026-09-09 修正（§一/§6.4/§七 更新为「验证通过」）
+
 ---
 
 ## 六、后续待办与优化池（🟡 建议修 = 后续要完成 / 🟢 可选优化 = 低优先级择机）
@@ -173,6 +193,7 @@
 - [ ] 角色授权/创建：`permissionIds` 先去重 + 校验有效性（`RoleServiceImpl.assignPermissions/create`；`batchInsert` 改 `ON CONFLICT DO NOTHING`），防联合主键冲突与垃圾关联
 - [ ] 删除角色前检查 `ie_member` 引用（`RoleServiceImpl.delete:92-103`）：被引用返回 1003 或级联清理，防用户角色静默丢失 + 孤儿数据
 - [ ] `GlobalExceptionHandler` 补 `DuplicateKeyException`（并发注册/创建/角色唯一冲突 → 1001 友好文案）与 `HttpMessageNotReadableException`（body 解析错误 → 1002），不再一律 500
+- [ ] 🟡 路径参数类型不匹配友好化（2026-09-09 冒烟发现）：`/api/v1/role/page` 等非数字段会命中 `/{id}` 路由并因 Long 解析抛 **500/9999**（正确列表端点为 `role/list`）→ 补 `MethodArgumentTypeMismatchException` 等类型转换异常 → 4xx（1002/1004）友好文案
 - [x] `GlobalExceptionHandler` 补 `NoResourceFoundException` → **404/1004**（2026-09-08）：未映射路径此前被 `Exception` 兜底吞成 500/9999「系统内部错误」（与已修复的 AccessDenied 误报 500 同类病），前端「组织与人员」页误触 workspace/member 未实现接口时暴露此问题
 - [ ] 登录失败计数原子化（`AuthServiceImpl.handleLoginFail` increment+expire 竞态）：改 Lua（INCR+EXPIRE）或 SETNX EX + INCR，防 Redis 抖动导致计数 key 永不过期
 - [ ] 密码复杂度补强制大写：`RegisterRequest`/`UserCreateRequest`/`PasswordUpdateRequest` 正则改 `(?=.*[a-z])(?=.*[A-Z])(?=.*\d)`（当前只要求字母+数字，与注释宣称"含大小写"不符）
@@ -206,7 +227,9 @@
 - [x] **gateway 复跑冒烟 9/9**（2026-09-09，云 PG/Redis + UMS 7101 + gateway 7000）：登录 200 / 转发 `user/page` 200 / 无 token 401-2001 / 坏 token 401-2001 / **过期 token 401-2007** / **`/doc.html` 200** / **`sk-` 401-2001** / end_user 403-2006 / `/api/v1/nonexistent` 404（路由收窄生效）；全部响应 `Content-Type: application/json;charset=UTF-8`，六类错误/转发路径 `X-Trace-Id` 均为单值（修复见 §三 2026-09-09）
 - [ ] 🟡 未匹配路由（`/api/v1/xxx` 无路由）不进入 GlobalFilter 链 → 404 响应无 `X-Trace-Id`、body 为 Spring 默认错误格式（非 IF §2 `Result`）；如需前端统一处理，需改用 WebFilter 或补 WebFlux 错误处理器（2026-09-09 复跑冒烟发现，不阻塞联调）
 - [x] **gateway 路由按 TD §8.3 细分**（2026-09-09 完成）：`/api/v1/**` 全量 fallback 已收窄为 `/auth/**` + `/api/v1/user|role|permission/**` → ums（含 `/doc.html`/`/webjars/**`/`/v3/api-docs/**` 文档路径），其余 `/api/v1/xxx` 网关层直接 404 不误转 UMS；后续服务接入按 P18 同批新增专属前缀
-- [ ] 服务接入 Nacos 注册/配置中心（冒烟期 UMS 路由为直连 localhost:7101，Nacos 接入后改 `lb://insight-engine-ums`）
+- [ ] 🟢 **Nginx 入口层接入（生产向，部署阶段）**：托管前端 `dist` + `location /api/` 反代网关集群（静态上游，方案 A）+ 透传 `X-Forwarded-For/Proto`；接入后前端入口由 `:7000` 改为 **443 同源**（顺带消除跨域，`globalcors` 转生产白名单）。补齐后形成「Nginx（服务端 LB）→ Gateway（客户端 LB）→ 服务」两层 LB 链路；学习笔记见 LEARNING「负载均衡 LB」篇附二
+- [x] **云上 Nacos 部署 + UMS/gateway 接入代码**（2026-09-09，P2-1/P2-2 代码侧完成）：容器 healthy、端口 1:1（8848/9848）、自报公网 IP；ums/gateway 已接 starter-nacos + loadbalancer + `fail-fast:false`；gateway 路由已改 `lb://insight-engine-ums`；全量编译 BUILD SUCCESS
+- [x] **注册实机验证（P2-2/P2-3，2026-09-09 完成）**：安全组放行后本机 `-DNACOS_ADDR=39.106.110.214:8848` 启 UMS + gateway → Nacos 两实例 UP（172.18.128.1:7101/7000 healthy）→ gateway `lb://insight-engine-ums` 转发全链路冒烟 **8/8 通过**：login/me/user/page/role/list 200（code=0）、无/坏 token 401-2001、错口令 401-2002、`/doc.html` 200
 - [ ] 中间件与应用密码差异化 + 明文占位化：**占位化部分 2026-09-09 已完成**（`docker-compose.yml` 5 处 + Grafana 1 处 + `ums/application.yml` 4 处全部改 `${VAR}`；新增 `.env.example`/`.env`/`application-local.example.yml`/`application-local.yml`；`git grep` 明文归零）；**「差异化」（各中间件/应用改用不同强随机口令）仍待随 §五 a) 轮换一并做**。注意 **Spring 不自动读 `.env`**，应用侧注入见 TD §18.2.6。**PR #5 已合入 master，明文已进主干历史，须先轮换口令，详见 §五 2026-09-09 修正**
 - [ ] 🟡 铁律 5 自检残留两处「有意保留的明文」待收口（2026-09-09 自检发现，**非本轮占位化范围**）：① `init.sql:999` 种子管理员注释含明文口令（`admin@example.com`，BCrypt hash 已入库，前端 P1 登录即用此账号）；② `gateway/application.yml:37` / `ums/application.yml:46` 的 JWT 本地开发默认值（含 `change-me`，prod profile fail-fast 拦截）。二者均为「本地开发便利」的有意妥协；收口方向：种子账号改「首次登录强制改密」或由部署方注入，JWT 去默认值改强制注入（需同步 `.env.example` + 本地启动说明）
 - [ ] 引入 Flyway schema 迁移（替代一次性 init.sql）
@@ -242,13 +265,17 @@
 ## 七、下一步计划（Top 3）
 
 1. **§五 口令轮换（唯一止血手段）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档占位化 + **规范补缺（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 代码侧配置占位化（§五 b）均已完成**——**未轮换前该项不闭环**
-2. **workspace 模块启动（阶段 5，下一步主线）**：模块空壳 → 建表核对 → 接口实现 → 联调（兑现 BE-20260908-02）；网关路由按 P18 同批加 `/api/v1/org|workspace|member/**` 专属前缀（先直连 `localhost:7102`，Nacos 接入后改 `lb://`）；§6.1 高价值 UMS 收尾项择机独立处理
-3. **云上补 Nacos 容器 + 路由改 `lb://insight-engine-ums`**：**需云服务器 SSH 凭据（未提供前暂缓）**；RabbitMQ/MinIO/Prom/Grafana 迁云同理
+2. **workspace 模块启动（阶段 5，下一步主线）**：模块空壳 → 建表核对 → 接口实现 → 联调（兑现 BE-20260908-02）；网关路由按 P18 同批加 `/api/v1/org|workspace|member/**` 专属前缀（**Nacos 已接入：workspace 直接注册并用 `lb://insight-engine-workspace`，无需再先直连**）；§6.1 高价值 UMS 收尾项择机独立处理
+3. **Nacos 接入闭环（P2 完成 2026-09-09）**：容器部署 → 代码接入 → 注册实例 UP → `lb://` 转发冒烟 8/8 全通过（§6.4）；⬜ 其余中间件迁云（RabbitMQ/MinIO/Prom/Grafana）留待后续，RabbitMQ/MinIO 可正常偏移映射、Nacos 类自报端口服务除外
 
 ---
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-09
+- 内容：Nacos 注册实机验证通过（P2-2/P2-3 闭环，2026-09-09 安全组放行后）—— ① 前置：用户在阿里云控制台放行安全组 8848/9848（连通性复测 True）；② 本机以 `-DNACOS_ADDR=39.106.110.214:8848` 启 UMS（7101，profile local 连云库）+ gateway（7000），日志确认 `insight-engine-ums 172.18.128.1:7101` / `insight-engine-gateway 172.18.128.1:7000` register finished，Nacos API 实例列表 healthy（服务目录 count=2）；③ **冒烟 8/8（经 gateway `lb://` 到 UMS）**：login/me/user/page/role/list 200（code=0）、无 token 401-2001、坏 token 401-2001、错口令 401-2002、`/doc.html` 200；④ 注册实例 IP 为本机网卡 172.18.128.1（两服务同机互达即符合预期；跨机/容器部署需配注册为可达 IP，见 LEARNING）；⑤ 附带发现 🟡：`/api/v1/role/page` 这类非数字段会落入 `role/{id}` 路径参数 Long 解析抛 500/9999（正确列表端点为 role/list，正常），记 §6.1；⑥ 回填 PROGRESS §一/§6.4/§七/§八、FE-SYNC gateway 行。**下一步：workspace 模块（§七 Top2）**
+- 日期：2026-09-09
+- 内容：云上 Nacos 部署 + UMS/gateway Nacos 接入（P2）+ 文档端口口径订正 —— ① **云端现状复核**：PG/Redis 已迁云；P1 运维加固此前已完成（磁盘 vda3 已扩至 49.8G / 40G 可用；swap 2G 生效、swappiness=0）；② **P2-1 Nacos 部署**：`insight-nacos`（2.3.2 standalone）healthy；宿主端口由 8850/9850 偏移改 **1:1 8848/9848**（Nacos 2.x 自报 ip:port、客户端据此推 gRPC +1000，偏移必失败），`NACOS_SERVER_IP` 强制自报公网 IP 已在 `cluster/nodes` 确认；③ **P2-2 代码侧**：ums/gateway 接入 starter-nacos + loadbalancer + `fail-fast:false`，gateway 路由改 `lb://insight-engine-ums`，全量编译 BUILD SUCCESS；④ **阻塞**：本机 → 云 8848/9848 被阿里云安全组入方向拦截（主机侧 ufw/firewalld inactive、iptables ACCEPT、docker-proxy 监听正常，22/5433/6380 可达）→ 需控制台放行后验证注册与 `lb://` 转发（P2-3 冒烟）；⑤ **订正**：TD §18.2.3 / PRD / ARCHITECTURE / LEARNING 端口口径统一 1:1；云端供应商更正为**阿里云 ECS**（此前误记腾讯云轻量）；⑥ 未做：口令轮换（§五 a）、RabbitMQ/MinIO/Prom/Grafana 迁云、workspace 模块（阶段 5）。**下一步：安全组放行后复验 Nacos（§七 Top3）或启动 workspace（§七 Top2）**
 - 日期：2026-09-09
 - 内容：凭据占位化落地 + 本轮收尾（§五 b / §6.4 收口，第三批）——① `docker-compose.yml` 6 处口令改 `${VAR:?必填提示}`（PG / Redis `--requirepass` + healthcheck `-a` / RabbitMQ / MinIO / Grafana）；② `ums/application.yml` 4 处改 `${INSIGHT_PG_*}` / `${INSIGHT_REDIS_*}`——**不给默认值**，未注入即 fail-fast（避免「忘配 → 静默用空口令连库」）；③ 新增 `.env.example`（入库模板：变量名 + 用途 + 两套注入路径指引）+ `.env`（真实值，已被 gitignore）；④ 新增 `application-local.example.yml`（入库模板）+ `application-local.yml`（真实值，已被 gitignore）——**关键事实：Spring Boot 不会自动读 `.env`**，应用侧只能走 profile 覆盖 / 环境变量，已写入 TD **§18.2.6**；⑤ `.gitignore` 补 `!.env.example`（原 `.env.*` 会把模板一起忽略，模板提不上去）；⑥ 同步 DEVGUIDE **P19**、TD §18.2.4、DB §1.1、PROGRESS §一/§五/§6.4/§七；⑦ 自检：通用凭据模式 `git grep -niE "(password|passwd|secret|token|apikey)" -- ':!*.md' ':!*.example'` 与公网 IP 扫描均**无输出**；`git check-ignore` 确认 `.env` / `application-local.yml` 被忽略、两个 `.example` 模板**不被忽略**。**未做：口令轮换（§五 a）——占位化只防「以后泄露」，不能回收已泄露历史。下一步：workspace 模块（阶段 5）。**
 - 日期：2026-09-09

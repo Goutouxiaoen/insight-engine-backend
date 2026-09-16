@@ -2514,7 +2514,7 @@ CREATE TABLE ie_audit_log (
 | postgres | pgvector/pgvector:pg15 | 5433（容器内 5432） |
 | redis | redis:7-alpine | 6380（容器内 6379） |
 | rabbitmq | rabbitmq:3.13-management | **5673 / 15673**（容器内 5672/15672） |
-| nacos | nacos/nacos-server:v2.3.2 | 8850 / 9850（容器内 8848/9848） |
+| nacos | nacos/nacos-server:v2.3.2 | 8848 / 9848（1:1，Nacos 2.x 自报地址，不能加偏移，见 TD §18.2.3） |
 | minio | minio/minio | 9010 / 9011（容器内 9000/9001） |
 | prometheus | prom/prometheus | 9091（容器内 9090） |
 | grafana | grafana/grafana | 3001（容器内 3000） |

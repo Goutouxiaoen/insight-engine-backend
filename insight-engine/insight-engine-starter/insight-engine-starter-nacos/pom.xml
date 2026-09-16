@@ -38,5 +38,11 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
         </dependency>
+        <!-- 客户端负载均衡：lb://service-name 解析必需（网关路由 / RestTemplate / WebClient）。
+             Spring Cloud Alibaba 2023.0.1.0 的 nacos-discovery 不再传递引入，需显式声明。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
     </dependencies>
 </project>

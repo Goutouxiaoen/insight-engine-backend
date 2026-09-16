@@ -24,3 +24,11 @@ spring:
       host: 127.0.0.1
       port: 6380
       password: change-me-redis-strong-random
+  cloud:
+    # Nacos 地址：本机跑容器 → 127.0.0.1:8848；连云服务器 → 云 IP:8848
+    # （Nacos 2.x 自报端口并据此推导 gRPC 端口，宿主机需 1:1 映射 8848/9848）
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+      config:
+        server-addr: 127.0.0.1:8848
