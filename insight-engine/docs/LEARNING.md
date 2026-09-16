@@ -22,17 +22,18 @@
 - [x] Maven 多模块工程与依赖管理（2026-08-25）
 - [x] Java 包级元数据：package-info.java / 包级注解（2026-08-25）
 - [x] Web 安全基础：日志注入 / 越权面 / 白名单校验（2026-08-26）
+- [x] CSRF vs SSRF：两种「借力打力」的伪造类攻击（2026-09-10，承接「无状态 JWT 关 CSRF」篇；含**本项目 SSRF 风险面实测**：已实现出站入口 0 个，但 4 个「表字段+接口契约已定稿、模块未开工」的完全可控入口（内置 `http_get` / 模型 `base_url` / 工具调试 `config.url` / Webhook 回调）且**全仓零防护代码**——PRD §12.8.5 与 §16.3 仅为纸面 allowlist 规划；附 SSRF 七层防御与 DNS rebinding / 302 绕过要点）
 - [x] Git 提交/拉取标准动作与冲突规避（2026-08-26）
 - [x] PostgreSQL 自增主键与序列（BIGSERIAL / sequence / nextval / setval）（2026-08-26）
-- [x] Spring Boot 启动流程主线 + 缓存预热钩子（降维记忆版：`run()` 六步骨架 / 三个钩子钉位 / Tomcat 端口开启时点）（2026-09-03）
+- [x] Spring Boot 启动流程 + 预热钩子该挂哪一拍（2026-09-03；**2026-09-10 重写**：删掉「开饭店/买菜」类比、压缩 265→约 130 行，改用本项目真实场景「UMS 预热权限缓存 + `lb://` 已能打进来」串主线；新增三件事三时点表、预热代码模板、fail-fast vs fail-soft 取舍表；**并纠正一处不严谨结论**——注册中心注册发生在 `refresh()` 末拍，早于 `CommandLineRunner`，故"Runner 期间流量进不来"在本项目不成立）
 - [x] Spring Boot 自动装配机制（AutoConfiguration.imports）（2026-08-26；2026-09-03 标注它在 `run()` 的哪一步）
 - [x] Spring Security + JWT 认证：无状态 vs 黑名单/登录态（登出/改密/禁用三种失效）+ 关 CSRF 原因 + @PreAuthorize 原理（2026-08-26；2026-09-02 修复「写而不读」断链）
-- [x] RBAC vs ABAC + 权限进 JWT 的权衡（2026-08-26）
+- [x] RBAC vs ABAC + 权限进 JWT 的权衡（2026-08-26；**2026-09-10 现状核查与纠偏**：分清「设计意图 vs 代码现状」——功能权限 RBAC 已落地（`@PreAuthorize`），`scope` 数据范围**零消费方**（只写 `RoleServiceImpl:68` / 只回显 `:141`；`RoleMapper` 只查 `r.code`；JWT 无 scope claim；无 `DataScopeInterceptor`）；并补两处诚实口径与越权面证据 `UserServiceImpl:58-72` 无 tenant/workspace 过滤）
 - [x] JWT 密钥管理与 fail-fast 校验（2026-08-27；2026-09-02 实战修复复盘）
-- [x] 微服务身份传递的信任边界（双身份源问题）——含架构现实（gateway 未落地 / UMS 7101 直连）、**无网关 & 有网关断点级调用栈**（精确到文件:行号）、剥头与 HMAC 签名、三种形态对照表、断点自查清单（2026-08-27；2026-09-02 UMS-1 方案 A 落地复盘；2026-09-03 大幅增强链路图与逐行定位）
+- [x] 微服务身份传递的信任边界（双身份源问题）——**无网关 & 有网关断点级调用栈**（精确到文件:行号）、剥头与 HMAC 签名、三态对照表、断点自查清单（2026-08-27；2026-09-02 UMS-1 方案 A 落地复盘；2026-09-03 大幅增强链路图与逐行定位；**2026-09-11 review 修订**：① 架构现实更新——**gateway 早已落地**（`AuthGlobalFilter` 剥头 `:162-166` / 重建 `:173-190`，白名单分支也剥头 `:93-97`），UMS 侧开关仍关（JWT 单源）；② 重写「盒子」类比——补 ThreadLocal 盒子在哪 + `set/get/clear` 三动作 + **业务侧三处真实消费者**（含审计兜底 `SYSTEM_USER_ID=0`）；③ 修正 5 处行号错误；④ 指出 `@ConditionalOnMissingBean` 与返回类型不一致的写法陷阱）
 - [x] Refresh Token 安全：为什么必须轮换 + 一次性 jti 机制（2026-09-02，UMS-2）
 - [x] Nacos 服务注册与配置中心（2026-08-26，配置中心待学）
-- [x] 微服务间通信：Nacos 服务发现（查号台）vs 传输网络（电话线）两层拆解（2026-08-26；**2026-09-03 补录索引 + 修订**：纠偏「容器 IP 是否可达」的绝对化结论、补 **Nacos 2.x 双端口 8848/9848**、修正容器网段非 172.17、补混合部署坑）
+- [x] 微服务间通信：Nacos 服务发现（查号台）vs 传输网络（电话线）两层拆解（2026-08-26；**2026-09-03 补录索引 + 修订**：纠偏「容器 IP 是否可达」的绝对化结论、补 **Nacos 2.x 双端口 8848/9848**、修正容器网段非 172.17、补混合部署坑；**2026-09-09 再修订：Nacos 2.x 宿主端口必须 1:1（服务端自报 ip:port、客户端据此推导 gRPC 端口），8850/9850 偏移映射会致 gRPC 连不上**）
 - [x] Redis 三件事：登录失败锁定 + Token 黑名单 + 登录态缓存（防暴力破解 & 主动登出/踢人）（2026-08-26；2026-09-02 登录态缓存链路已接通；2026-09-03 补「单槽」模型、白/黑名单失效模式、数据类型选型与 TTL 粒度限制）
 - [x] MDC 日志上下文 + TraceFilter：%X{traceId} 全链路日志串联（2026-09-02）
 - [x] ThreadLocal 线程隔离与 remove 防串号（UserContext / MDC / SecurityContextHolder 共同底层）（2026-09-02）
@@ -43,6 +44,7 @@
 - [x] Spring Boot starter 设计：依赖单向 + 条件装配 + ObjectProvider 可选装配（common 零框架依赖 / AutoConfiguration.imports / @ConditionalOnXxx）
 - [x] Spring Cloud Gateway 核心原理：跟着一条请求走网关（Route/Predicate/Filter、GlobalFilter vs GatewayFilter、首配命中与路由吞并、lb:// 与 NettyRoutingFilter、WebFlux 选型）
 - [x] Docker 运维命令地图：容器生命周期命令（pull/run/ps/logs/exec/stop/start/rm）+ Linux 配套语法（重定向/管道/heredoc/systemctl）+ compose 命令对照 + `run` 参数↔compose 字段映射（2026-09-08，含实战复盘：`docker run` 漏挂数据卷导致数据零持久化）
+- [x] 负载均衡 LB —— 客户端 LB vs 服务端 LB、`lb://` 八步解析链、Spring Cloud LoadBalancer 策略与缓存、健康实例摘除、Ribbon 为何退场（**2026-09-09 含本地代码 + 云服务器实测对照**：从 Nacos HTTP API 原样取出实例名单并实证 5s/15s/30s 三参数；`lb://` 转发实测通（200 + X-Trace-Id）；活体复现"进程一停 → 名单清空"；依赖版本从 fat jar 反查实证；**另登记 2 个 P0 漏洞**：注册 IP 落在 `vEthernet (Default Switch)` 虚拟网卡（本机假通过、跨机必炸）、公网 Nacos 未开鉴权导致 **LB 名单可被未授权写入 = 流量劫持**）
 
 **待学习**：
 
@@ -62,7 +64,7 @@
 
 - [ ] Nacos 注册中心 —— 服务注册/注销、心跳与健康检查、临时实例（ephemeral）vs 持久实例、保护阈值（项目：Gateway 路由 `lb://insight-engine-ums`，UMS 注册）
 - [ ] Nacos 配置中心 —— Namespace / Group / DataId 三层模型、`@RefreshScope` 动态刷新、配置优先级、规则外置（项目：TD §13.1 Sentinel 规则经 Nacos 下发）
-- [ ] 负载均衡 LB —— 客户端负载均衡原理、`lb://` 如何把服务名解析成实例列表、Spring Cloud LoadBalancer 的轮询/随机/权重与自定义策略、健康实例摘除；客户端 LB vs 服务端 LB（Nginx）、Ribbon 为何退场（项目：TD §8.3 全部路由 `uri: lb://...`）
+- [ ] 负载均衡 LB（补漏项）—— ① 多实例轮询实测（现单实例，无从验证）；② 自定义策略 / 按 Nacos `weight` 与 metadata 做权重·灰度（SCL 默认**不读** Nacos 权重）；③ 确认本项目实际生效的是 `RoundRobinLoadBalancer` 还是 `NacosLoadBalancer`（核心原理 + 云上实测已沉淀，见「负载均衡 LB」篇第八节）
 - [ ] 限流 —— 四种算法（固定窗口/滑动窗口/漏桶/令牌桶）；Sentinel 流控模式（直接/关联/链路）与流控效果（快速失败/Warm Up/排队等待）；QPS vs 并发线程数阈值（项目：TD §13.1 三层限流——网关 IP/接口、服务 租户+模型/用户）
 - [ ] 熔断降级 —— 熔断器三态（Closed/Open/Half-Open）、慢调用比例/异常比例/异常数三种策略、熔断与重试的叠加风险、fallback 兜底（项目：TD §8.2 OpenFeign 熔断、§8.4 模型调用熔断 + 指数退避）
 - [ ] Sentinel 落地 —— `@SentinelResource` 的 `blockHandler` vs `fallback`、规则持久化到 Nacos、网关适配与自定义限流响应（项目：TD §8.3 `RateLimitGlobalFilter`，PROGRESS §6.4 待实现）
@@ -94,13 +96,13 @@
 
 **轨道 H：运维与部署（本次新增）**
 
-- [ ] 云盘三层模型与在线扩容 —— 块设备 → 分区（MBR/GPT）→ 文件系统（ext4/xfs）；`lsblk` 判断、`growpart` 扩分区、`resize2fs`/`xfs_growfs` 扩文件系统；为什么云厂商升配后 OS 里还要再扩一次（项目：云盘已 50GB，分区仍 29.8GB）
+- [ ] 云盘三层模型与在线扩容 —— 块设备 → 分区（MBR/GPT）→ 文件系统（ext4/xfs）；`lsblk` 判断、`growpart` 扩分区、`resize2fs`/`xfs_growfs` 扩文件系统；为什么云厂商升配后 OS 里还要再扩一次（项目：已完成——vda 50G，vda3 分区已扩至 49.8G 挂载 /，`df -h` 40G 可用；2026-09-09 复核）
 - [ ] Linux 内存口径 —— `free` 的 `used` vs `available`、`buff/cache` 可回收性、RSS vs VSZ vs PSS、为什么排查内存看 `available`（项目：4GB 跑 7 中间件 + 2 JVM）
-- [ ] swap 机制 —— swapfile vs swap 分区、`vm.swappiness`、为何不能替代内存扩容、OOM Killer 的 `oom_score` 与排查（项目：当前无 swap，建议 2GB + swappiness=10）
+- [ ] swap 机制 —— swapfile vs swap 分区、`vm.swappiness`、为何不能替代内存扩容、OOM Killer 的 `oom_score` 与排查（项目：已完成——/swapfile 2G 生效并写入 /etc/fstab；2026-09-09 复核）
 - [ ] 容器资源限制与 JVM —— `--memory` / `--cpus`、compose `deploy.resources`、cgroup v2、`UseContainerSupport` / `MaxRAMPercentage`（项目：Nacos 256m、UMS 512m、Gateway 256m）
 - [ ] Docker 磁盘与日志治理 —— `docker system df`、镜像/卷清理、`json-file` 日志轮转（max-size / max-file）（项目：镜像 670MB、卷 102MB）
 - [ ] Docker 网络与镜像 —— 默认 bridge vs 自定义 bridge（为何默认不支持容器名 DNS）、Dockerfile 分层与构建优化、registry mirror vs 私有仓库
-- [ ] 端口暴露面收敛 —— 云安全组 / ufw / iptables 三层优先级、只监听内网地址、SSH 隧道替代公网暴露（项目：PG 5433、Redis 6380 待收敛）
+- [ ] 端口暴露面收敛 —— 云安全组 / ufw / iptables 三层优先级、只监听内网地址、SSH 隧道替代公网暴露（项目：2026-09-09 新增 Nacos 8848/9848 云安全组放行需求，附 Nacos 2.x 端口必须 1:1 暴露的例外知识；PG 5433、Redis 6380 待收敛）
 - [ ] 凭据治理 —— 弱口令轮换 SOP、`.env` / secrets 注入、避免明文进 git（项目弱口令涉及 PG/Redis/RabbitMQ/MinIO，**文档中勿复述口令本体**）
 - [ ] SSH 加固 —— 密钥登录 → 关 `PermitRootLogin` / `PasswordAuthentication` → 改端口 → fail2ban；如何避免把自己锁在外面
 
@@ -441,7 +443,7 @@ spring:
     port: 5673         # 走宿主映射端口
 ```
 
-- 同理，所有中间件宿主端口统一加偏移：PG 5433、Redis 6380、Nacos 8850/9850、MinIO 9010/9011、Prom 9091、Grafana 3001（TD §18.2.3），容器内端口全部保持不变。
+- 同理，除 Nacos 外所有中间件宿主端口统一加偏移：PG 5433、Redis 6380、MinIO 9010/9011、Prom 9091、Grafana 3001（TD §18.2.3），容器内端口全部保持不变。**Nacos 例外（2026-09-09 修正）：2.x 自报 ip:port、客户端据此推导 gRPC 端口，宿主必须 1:1（8848/9848），不加偏移。**
 
 - 版本锁定 3.13 的理由：项目环境隔离 + 可复现；RabbitMQ 4.0 有 breaking changes（移除 classic mirroring 等 deprecated 特性），不引入不确定性；本项目只用基础交换机/队列/死信，3.13 足够。
 
@@ -817,21 +819,21 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_ADDR:127.0.0.1:8850}   # 本地连宿主映射端口 8850
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}   # 本地连 Nacos 主端口（宿主 1:1，勿偏移）
 ```
 
 - ⚠️ **Nacos 2.x 是「双端口」——本项目最容易踩的一个坑**：Nacos 2.x 客户端除了 HTTP 主端口，还要用 **gRPC** 端口通信，两者**必须同时可达**，且 gRPC 端口 = 主端口 **+1000**：
 
   | 端口 | 用途 | 容器内 | 宿主映射（本项目） |
   | --- | --- | --- | --- |
-  | 主端口 | HTTP（控制台 + 注册/配置 API） | 8848 | **8850** |
-  | gRPC | 客户端 2.x 长连接（偏移 +1000） | **9848** | **9850** |
+  | 主端口 | HTTP（控制台 + 注册/配置 API） | 8848 | **8848（1:1）** |
+  | gRPC | 客户端 2.x 长连接（主端口 +1000） | **9848** | **9848（1:1）** |
 
-  这就是 `docker-compose.yml` 里必须同时映射 `8850:8848` 和 `9850:9848` 的原因——**只映射 8850 是不够的**，服务会报 gRPC 连接失败/注册超时。
+   ⚠️ **2026-09-09 实测修正（推翻早期「8850/9850 偏移可行」结论）**：Nacos 2.x 服务端会向客户端**自报成员地址 `ip:port`**（`NACOS_SERVER_IP` / `-Dnacos.inetutils.ip-address=` 可强制公网 IP），2.x 客户端**据此**推导 gRPC 端口（=自报主端口+1000）建长连接——**推导基准是「自报地址」而非你填的 server-addr**。因此宿主映射必须与容器内端口 **1:1（8848/9848）**：若用 8850/9850 偏移，客户端去连自报的 `:9848`，实际却暴露在 9850 → gRPC 必失败（本项目早前「连不上」= 偏移结构性不可用 + 云安全组未放行两层叠加）。
   
-  - 本地开发（IDE 直连）：`server-addr: 127.0.0.1:8850`，客户端会自动推导并去连 `127.0.0.1:9850`，所以**两个宿主端口都得映射出来**。
-  - 容器内（微服务也打进 compose）：走 `nacos:8848` / `nacos:9848`，用内部网络，不经过宿主端口。
-  - 记忆锚点：**8848/9848 差 1000，宿主侧 8850/9850 也差 1000。**
+  - 远程/本机进程直连容器内 Nacos：`server-addr: <可达IP>:8848`（本机容器场景 `127.0.0.1:8848`、云上容器 `39.106.110.214:8848`），**8848 与 9848 两个宿主端口都须可达**（云上需安全组放行）。
+  - 容器内（微服务也打进同一 compose 网络）：走 `nacos:8848` / `nacos:9848`，用内部网络，不经过宿主端口。
+  - 记忆锚点（2026-09-09 修正）：**Nacos 2.x 会自报地址、客户端按其推导 gRPC 端口，所以宿主端口必须 1:1，不能像 RabbitMQ/PG 那样加偏移**；8848/9848 差 1000 是 1:1 下的恒等式。
 
 - 服务调用（OpenFeign，只写服务名不写 IP）：
 
@@ -882,10 +884,10 @@ spring:
 
 ### 踩坑提醒
 
-1. **坑：本地跑时 NACOS_ADDR 配成容器内端口（8848）而不是宿主映射端口（8850）**
+1. **坑：NACOS_ADDR 端口写错或宿主偏移映射 → 注册连不上 / gRPC 失败（2026-09-09 修正）**
    
    - 现象：服务启动报"连接 Nacos 超时"，注册不上去。
-   - 规避：本地直连 Nacos 用 `localhost + 宿主映射端口（8850）`；只有容器里的服务才用 `服务名 nacos + 容器内端口（8848）`。和 RabbitMQ 一个道理。
+   - 规避（2026-09-09 修正）：Nacos 2.x 宿主端口必须 1:1（8848/9848），`NACOS_ADDR` 一律写主端口 `:8848`（本机容器 `127.0.0.1:8848`、云上容器 `公网IP:8848`），**勿用 8850/9850 偏移**；只有同一 compose 网络里的容器才用 `服务名 nacos:8848`。
 
 2. **坑：容器化后没指定注册 IP，注册成容器内网 IP，导致服务互调失败**
    
@@ -900,7 +902,7 @@ spring:
 4. **坑：混合部署（中间件在容器、微服务在宿主机 IDE 跑）时地址用错**
    
    - 现象：Nacos 控制台能看到实例，但服务互调超时；或本地服务连不上 Nacos。
-   - 根因：本地进程**不在 Docker 网络里**，所以① 连 Nacos 必须用 `localhost:8850`（不是 `nacos:8848`）；② 调容器里的其他微服务时，拿到的却是容器内网 IP，`172.x` 从宿主机不可达。
+   - 根因：本地进程**不在 Docker 网络里**，所以① 连 Nacos 必须用宿主映射端口（1:1 时即 `localhost:8848`，云上为 `公网IP:8848`，**勿用 8850/9850 偏移**）；② 调容器里的其他微服务时，拿到的却是容器内网 IP，`172.x` 从宿主机不可达。
    - 规避：**开发期就让所有微服务都跑在宿主机**，彼此用 `localhost:端口` 互通，Nacos 注册的也就都是 `127.0.0.1`，天然一致；容器里只跑中间件。等阶段 3+ 业务服务统一容器化后，再整体切到内部网络寻址。
 
 ---
@@ -2435,251 +2437,185 @@ try (Cursor<byte[]> cursor = redisTemplate.getConnectionFactory()
 
 ---
 
-## Spring Boot 启动流程主线 + 缓存预热钩子（降维记忆版）
+## Spring Boot 启动流程 + 预热钩子该挂哪一拍（2026-09-10 重写版）
 
-- 学于：2026-09-03
-- 关联模块：`UmsApplication` + 4 个 starter 的 `AutoConfiguration.imports` + `SecurityAutoConfiguration.jwtUtil`（fail-fast 真实锚点）
-- 来源：TD §3.1、SpringBoot 源码 `SpringApplication.run()`
+- 学于：2026-09-03；**2026-09-10 重写**（删掉「开饭店/买菜」类比，改用本项目真实链路；并纠正一处不严谨结论，见第 3 节）
+- 关联模块：`UmsApplication`、各 starter 的 `META-INF/spring/...AutoConfiguration.imports`、`SecurityAutoConfiguration.jwtUtil()`（fail-fast 真实锚点）
+- 来源：TD §3.1、`SpringApplication.run()` 源码
 
-> 目标：**只记主线骨架，不背冷门扩展点**。本章回答两个问题：① Spring Boot 启动到底干了啥；② 三种缓存预热钩子分别钉在哪一步、为什么时机不一样。
->
-> **与下一章的关系**：本章是**时间轴（启动流程）**，下一章是这条时间轴上的**一个横切机制（自动装配）**。先有骨架，再挂细节。
+> 全文只回答两件事：① 启动按什么顺序发生；② 我要「预热缓存」该挂在哪一拍。
+> 判断标准只有一句：**这件事做完之前，请求能不能打进来？**
 
-### 0. 先背这张表（全章内容都从它展开）
+### 0. 动机：先说清本项目会怎么踩，再讲原理
 
-| 顺序 | 阶段                              | 发生了什么              | 钩子                              | 服务开门没？      |
-| --- | ------------------------------- | ------------------ | ------------------------------- | ----------- |
-| —   | `new SpringApplication()`       | 收集扩展类、推断应用类型       | —                               | ❌ 还没开始      |
-| 1   | `prepareEnvironment()`          | 加载 yml / 环境变量 / 命令行参数 | —                               | ❌           |
-| 2   | `createApplicationContext()`    | 容器对象诞生（空的）         | —                               | ❌           |
-| 3   | `refresh(context)`              | **造 Bean、依赖注入**    | **`@PostConstruct`**            | ❌           |
-| 4   | `callRunners()`                 | 执行 Runner          | **`CommandLineRunner`**         | ❌（精确说明见第 5 节） |
-| 5   | `publishApplicationReadyEvent()` | 发布就绪事件             | **`@EventListener(ReadyEvent)`** | ✅ 开了        |
-| 6   | `return context`                | 启动完成               | —                               | ✅           |
+UMS 要把「角色 → 权限」预热进 Redis（`@PreAuthorize` 每次鉴权都读它）。假设预热耗时 8 秒：
 
-> **记忆锚点只有三个字：开门没？** —— 预热必须赶在"开门"之前做完。
+- 若预热写在 `ApplicationReadyEvent`（"服务已就绪"之后）→ 这 8 秒里 UMS **早已注册进 Nacos**，网关 `uri: lb://insight-engine-ums` 会把 `/api/v1/permission/**` 正常轮询打进来；
+- 缓存还没热 → 每个请求回源 PG → 发布瞬间数据库被压满 → 现象是「刚发完版，接口集体超时」。
 
-### 1. 降维：一行代码拆两步
+所以「预热挂哪一拍」不是代码风格问题，**是启动瞬间雪崩不雪崩的问题**。
 
-你写项目日常只有一行：
+**全篇记忆骨架：三件事，三个时点，千万别混**（展开见第 3 节）：
+
+| 时点 | 发生什么 | 谁能打进来 |
+| --- | --- | --- |
+| ① 端口监听 | Tomcat/Netty 的 socket 开始 accept | 知道 `ip:port` 的调用方能连（同机 curl、硬编码地址） |
+| ② 进 Nacos 名单 | 注册中心里有这条实例（注册即 `healthy=true`） | **网关走 `lb://` 就能选到你 = 真实流量** |
+| ③ Readiness 就绪 | 状态变 `ACCEPTING_TRAFFIC` | K8s Service / 探针开始导流（**本项目没上 K8s → 这层是空的**） |
+
+> **本项目的"流量开关"是 ②，不是 ③。** 记住这句，第 2、3 节的结论全由它推出。
+
+### 1. 主线：`run()` 六步（右列是本项目对应物）
+
+| 阶段 | 一句话干什么 | 本项目对应 |
+| --- | --- | --- |
+| 0 `new SpringApplication()` | 备料：推断应用类型 + 记住主类（`@ComponentScan` 的起点）。**不干活** | gateway → `REACTIVE`(Netty)；UMS → `SERVLET`(Tomcat 7101) |
+| 1 `prepareEnvironment()` | 读 yml / 环境变量 / 命令行参数进 `Environment` | `NACOS_ADDR`、`INSIGHT_PG_*` 到这里才可用 |
+| 2 `createApplicationContext()` | 建一个**空**容器 | — |
+| 3 `refresh(context)` | 造 Bean + 依赖注入（内部 ⑤ 自动装配 / ⑪ `@PostConstruct` / ⑫ 端口监听+注册） | 4 个 starter 的自动装配全在这一步 |
+| 4 `callRunners()` | 所有 Bean 就绪后跑 `Runner` | **预热该挂这里（本项目当前没挂）** |
+| 5 `publishApplicationReadyEvent()` | 宣告就绪（Readiness → `ACCEPTING_TRAFFIC`） | 只适合打日志 / 发通知 / 埋点 |
+| 6 `return context` | 启动完成 | — |
+
+压成两行看"备料 / 干活"的分界（懂了就够）：
 
 ```java
-SpringApplication.run(UmsApplication.class, args);
+SpringApplication app = new SpringApplication(UmsApplication.class); // 0 备料
+app.run(args);                                                       // 1~6 干活
 ```
 
-拆成两步：
+### 2. 三个钩子：一张表定胜负
 
-```java
-SpringApplication app = new SpringApplication(UmsApplication.class);  // ① 备料
-app.run(args);                                                        // ② 下锅
+| 钩子 | 钉在哪 | 此刻 `RedisTemplate`/`Mapper` 可用吗 | 此刻谁能打进来 | 结论 |
+| --- | --- | --- | --- | --- |
+| `@PostConstruct` | `refresh()` ⑪，**单个 Bean** 造完 | ⚠️ 看运气：Bean 创建顺序不定，依赖可能还没建 → NPE | 不能 | ❌ 不能做全局预热（每个 Bean 触发一次，语义也不对） |
+| `CommandLineRunner` / `ApplicationRunner` | `callRunners()`（`refresh()` 已全部结束） | ✅ 全部就绪 | 端口已监听、**可能已注册进 Nacos**（见第 3 节） | ✅ **本项目首选** |
+| `@EventListener(ApplicationReadyEvent.class)` | `publishApplicationReadyEvent()` | ✅ | 已宣告就绪 | ⚠️ 只做轻动作，别放耗时预热 |
+
+时序只记这一行：
+
+```
+@PostConstruct   →   CommandLineRunner   →   ApplicationReadyEvent
+  （最早，单 Bean）      （首选，全部就绪）          （最晚，已对外就绪）
 ```
 
-### 2. ① new SpringApplication() —— 只买菜，不下锅
-
-**只干三件事，一件"活"都不干**：
-
-1. **推断应用类型**（`deduceWebApplicationType()`）：看 classpath 里有没有 `DispatcherServlet` / `DispatcherHandler`，判定是 **SERVLET**（普通 Web）/ **REACTIVE**（WebFlux）/ **NONE**（非 Web）。**这决定了第 2 步创建哪种容器。**
-2. **收集扩展类**：把 `ApplicationContextInitializer`、`ApplicationListener` 从 `spring.factories` 读出来存进集合，留着 `run()` 时调用。
-3. **记录主类**：记住启动类是哪个——后面 `@ComponentScan` 要以**它的包**为扫描起点。
-
-> **不创建容器、不读 yml、不造 Bean、不连 Redis 数据库。**
->
-> 👉 记忆：**new = 买菜备菜，还没下锅。**（`ApplicationContextInitializer`、`ApplicationListener` 属于"备好的配菜"，**面试不追问扩展点就直接忽略**）
-
-### 3. ② run() 的 6 步骨架（删掉所有无关代码）
+本项目将来该写的预热（**幂等 + 失败不阻断**）：
 
 ```java
-public ConfigurableApplicationContext run(String... args) {
-    // 1. 准备环境：系统变量、命令行参数、application.yml 全部加载进 Environment
-    ConfigurableEnvironment environment = prepareEnvironment();
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class PermissionCacheWarmer implements CommandLineRunner {   // ← 钉在 callRunners()
+    private final PermissionCacheService permissionCacheService;
 
-    // 2. 创建 IOC 容器（此时是空的，一个 Bean 都没有）
-    ConfigurableApplicationContext context = createApplicationContext();
-    context.setEnvironment(environment);
-
-    // 3. 【核心】容器刷新：读配置类 → 造 Bean → 依赖注入
-    refresh(context);
-    //    ★ 自动装配在这一步的前半段（第 ⑤ 子步，见下一章）
-    //    ★ @PostConstruct 在这一步的后半段（第 ⑪ 子步，每个 Bean 造完就触发）
-
-    // 4. refresh 全部结束，执行 Runner
-    callRunners(context, args);
-    //    ★ CommandLineRunner / ApplicationRunner 在这里
-
-    // 5. 发布就绪事件（同时把 Readiness 状态改为 ACCEPTING_TRAFFIC）
-    publishApplicationReadyEvent(context);
-    //    ★ @EventListener(ApplicationReadyEvent.class) 在这里
-
-    // 6. 返回容器，启动完成
-    return context;
+    @Override
+    public void run(String... args) {
+        try {
+            int n = permissionCacheService.warmUp();   // 必须幂等：重启/重试都不该出错
+            log.info("[warmup] 权限缓存预热完成，{} 条", n);
+        } catch (Exception e) {
+            log.error("[warmup] 预热失败，服务继续启动，靠回源兜底", e);   // 不抛 = fail-soft
+        }
+    }
 }
 ```
 
-> 就这 6 步。三个预热钩子**全部钉死在上面注释的位置**。
+**顺带把「启动期逻辑」的取舍一次记住**（这才是最该带走的东西）：
 
-### 4. 三个钩子分别在哪、为什么时机不一样
+| | 校验型（`jwtUtil` 密钥 fail-fast） | 预热型（缓存预热） |
+| --- | --- | --- |
+| 失败时怎么办 | **抛异常、拒绝启动**（带弱密钥上线的代价 > 起不来的代价） | **只告警**，靠"缓存未命中回源"兜底 |
+| 位置要求 | 越早越好，必须早于端口监听 | 越"全就绪"越好，且要不雪崩 |
+| 本项目 | `SecurityAutoConfiguration.jwtUtil()`（已有） | 待补（见第 5 节） |
 
-#### ① `@PostConstruct` —— 第 3 步 refresh 内部
+### 3. 精确时点：三件事分三拍（含纠偏 + 自查方法）
 
-- **触发时机**：**当前这一个 Bean** 实例化 + 依赖注入完成后立刻执行。
-- **坑**：只代表**这一个 Bean 造完了**，别的 Bean 可能还没开始造。
-- **后果**：在这个方法里用 `RedisTemplate` / `Mapper`，而它们还没被创建 → **空指针**。
-- **附带问题**：每个 Bean 都会执行一次，语义上也不适合做"全局一次性"的事。
-- **结论**：❌ **不能做全局缓存预热**。
-
-#### ② `CommandLineRunner` / `ApplicationRunner` —— 第 4 步 callRunners()
-
-- **触发时机**：`refresh()` **全部结束**，`RedisTemplate`、`Mapper`、所有业务 Bean **全部就绪**。
-- **关键**：此时外部流量还没打进来（精确说明见下节）。
-- **结论**：✅ **业务首选的缓存预热时机**——东西全备好了，客人还没进门。
-
-#### ③ `@EventListener(ApplicationReadyEvent.class)` —— 第 5 步
-
-- **触发时机**：Runner 跑完之后，服务**已对外宣告就绪**。
-- **坑**：预热逻辑慢的话，用户请求已经进来、缓存还没做好 → **直接打穿数据库**。
-- **结论**：⚠️ 只适合"发通知、打日志、注册到服务发现"这类动作，**不适合重预热**。
-
-#### 时序一句话（牢牢记住）
+`refresh()` 里只关心这几拍：
 
 ```
-@PostConstruct  →  CommandLineRunner  →  ApplicationReadyEvent
-   （早）                                       （晚）
+refresh()
+ ⑤ invokeBeanFactoryPostProcessors()    ← 自动装配在这（读 imports、注册 BeanDefinition）
+ ⑪ finishBeanFactoryInitialization()    ← 造所有单例 Bean，@PostConstruct 在这
+ ⑫ finishRefresh()
+     ├─ webServer.start()                ← 【① 端口开始监听】
+     ├─ 发布 WebServerInitializedEvent   ← 【② 注册中心在这注册】AbstractAutoServiceRegistration 监听此事件
+     └─ 发布 ContextRefreshedEvent
+（refresh 结束）
+ 4 callRunners()                          ← 预热首选位
+ 5 publishApplicationReadyEvent()         ← 【③ Readiness → ACCEPTING_TRAFFIC】
 ```
 
-### 5. 面试加分：Tomcat 端口到底哪一步开的（纠偏）
+⚠️ **纠偏（第一版写得不严谨，这里更正）**：不能笼统说「`CommandLineRunner` 时服务还没接收请求」。准确说法：
 
-第 4 节说"CommandLineRunner 时服务还没接收请求"，这是**面试标准答法**；严格讲有细节，被追问时要能补上。
+| | ① 端口监听 | ② 进 Nacos 名单 | ③ Readiness 就绪 |
+| --- | --- | --- | --- |
+| 相对 `callRunners()` | 更早（⑫ 内） | **更早（⑫ 内，紧跟端口监听）** | 更晚（第 5 步） |
+| 后果 | socket 可连 | **网关 `lb://` 已能选到你** | K8s 才开始导流 |
 
-`refresh(context)` 内部其实有 12 个子步骤，关键是这三个：
+> 依据：Spring Cloud Commons 的 `AbstractAutoServiceRegistration` 实现 `ApplicationListener<WebServerInitializedEvent>`，注册动作就发生在 `finishRefresh()` 那一拍。**所以真实窗口比"标准答法"更小**：本项目不上 K8s，没有 Readiness 这层保护，Runner 期间网关是真能打进来的。**这条务必用下面的方法自己验一次。**
 
+三条应对（按推荐度）：
+
+1. 预热是毫秒级 → 直接放 Runner，窗口可忽略（**推荐，别过度设计**）；
+2. 预热必须"注册前完成" → `spring.cloud.nacos.discovery.register-enabled: false`，预热完再手动注册（代价大，仅预热很慢时用）；
+3. 最常用 → **Runner 预热 + 未命中回源 + 回源加锁/单飞**，让窗口期最多慢一点、不雪崩（接「缓存穿透/击穿」篇）。
+
+**自查（1 分钟）**：一边循环看 Nacos 名单，一边看启动日志，比较"名单出现"与"预热完成"的先后：
+
+```bash
+while true; do date +%T; curl -s "http://<nacos>:8848/nacos/v1/ns/instance/list?serviceName=insight-engine-ums" | grep -o '"ip":"[^"]*"'; sleep 1; done
 ```
-refresh() 内部（简化）:
-  ⑤ invokeBeanFactoryPostProcessors()  ← 【自动装配在这】读 imports、注册 BeanDefinition
-  ⑥ registerBeanPostProcessors()
-  ⑨ onRefresh()                        ← 创建 WebServer 对象（Tomcat 实例，还没监听端口）
-  ⑪ finishBeanFactoryInitialization()  ← 【@PostConstruct 在这】实例化所有单例 Bean
-  ⑫ finishRefresh()
-       ├─ webServer.start()            ← 【端口真正开始监听】
-       └─ 发布 ContextRefreshedEvent
-```
 
-**所以精确版本是**：
+**面试分层答**：先给标准版——"`CommandLineRunner` 时所有 Bean 就绪、服务还没宣告就绪，是预热首选"；被追问再补——"严格讲端口监听和注册中心注册都在 `refresh()` 末拍就发生了，Readiness 要等 `ApplicationReadyEvent` 才变 `ACCEPTING_TRAFFIC`，所以真正稳妥要么靠 K8s readiness 探针，要么靠回源兜底"。
 
-| 时点                            | Tomcat 端口状态                    |
-| ----------------------------- | ------------------------------ |
-| `@PostConstruct`（第 ⑪ 步）        | 还没监听（WebServer 对象都还没建）          |
-| `CommandLineRunner`（第 4 步）     | **端口已经监听**（socket 能收连接了）        |
-| `ApplicationReadyEvent`（第 5 步） | 端口监听 **+ 已对外宣告就绪**             |
+### 4. 与下一章（自动装配）的关系：一条推论就够
 
-**那为什么仍然推荐 `CommandLineRunner` 做预热？** 因为**"端口能收连接" ≠ "流量会打进来"**：
+自动装配钉在 `refresh()` 的 **⑤**（`BeanFactoryPostProcessor` 的语义：造 Bean 之前先加工 Bean 的定义），`@PostConstruct` 在 **⑪**：
 
-- Spring Boot 在发布 `ApplicationReadyEvent` 的**同时**，把 Readiness 状态改成 `ACCEPTING_TRAFFIC`；
-- K8s 的 readinessProbe、服务注册中心 / 负载均衡看的是这个状态，**在此之前不会把流量导过来**；
-- 所以 `callRunners()` 阶段外部流量**实际上进不来**——这正是预热的窗口。
+> **⑤ 早于 ⑪** → 所以 starter 里注册的 Bean（例如 `jwtUtil`），在你业务 Bean 的 `@PostConstruct` 里可以放心注入。
 
-> **面试怎么答**：先给标准版（"CommandLineRunner 时服务还没接收请求，预热首选"）；被追问再补精确版（"严格讲 `finishRefresh` 阶段端口就开始监听了，但 Readiness 要等 `ApplicationReadyEvent` 才变为 `ACCEPTING_TRAFFIC`，K8s 在此之前不导流，所以 `callRunners` 仍是最佳窗口"）。**能说出后半段的，是读过源码的。**
+### 5. 我在项目里怎么用的（两个真实锚点）
 
-### 6. 与下一章「自动装配」的关系（两章串起来）
+**锚点一：当前没有任何预热。** 全仓库搜不到 `@PostConstruct` / `CommandLineRunner` / `ApplicationReadyEvent`（可自行 grep 复核）——**这是待补能力**。将来做权限/角色缓存预热时，按第 2 节写 `CommandLineRunner` + fail-soft。
 
-| 章节   | 讲的是什么                 | 在时间轴上的位置                     |
-| ---- | ---------------------- | ---------------------------- |
-| 本章   | **启动流程主线**（一条时间轴）      | 全程 6 步                       |
-| 下一章  | **自动装配**（时间轴上的一个横切机制） | 钉在 `refresh()` 的**第 ⑤ 子步** |
-
-**自动装配为什么在第 ⑤ 子步？**
-
-`@EnableAutoConfiguration` → `@Import(AutoConfigurationImportSelector.class)`；而 `AutoConfigurationImportSelector` 是个 `DeferredImportSelector`，由 `ConfigurationClassPostProcessor`（一个 `BeanFactoryPostProcessor`）处理——**`BeanFactoryPostProcessor` 的语义就是"在所有 Bean 实例化之前，先加工 Bean 的定义"**。
-
-由此得到一条**很有用的推论**：
-
-> **自动装配（第 ⑤ 子步）早于 `@PostConstruct`（第 ⑪ 子步）。**
-> 所以 starter 的 `imports` 文件里登记的 Bean，**在你自己业务 Bean 的 `@PostConstruct` 执行时已经全部注册完了**——starter 的 Bean 可以放心注入。
-
-### 7. 大白话故事版：开饭店
-
-| 步骤                              | 饭店在干嘛                                                     | 对应代码                     |
-| ------------------------------- | --------------------------------------------------------- | ------------------------ |
-| `new SpringApplication()`       | 去菜市场采购，食材工具全买回来放厨房。**没做饭、没开门**                            | 收集扩展类 + 推断应用类型           |
-| ① `prepareEnvironment()`        | 看菜谱，yml / 命令行参数全部读完。**还没做菜**                              | 加载配置                     |
-| ② `createApplicationContext()`  | 租好包间（容器诞生），房间是空的                                          | 创建容器                     |
-| ③ `refresh()`                   | **厨师开始炒菜（造 Bean）**                                        | 核心                       |
-| ↳ 第 ⑤ 子步                        | 先按《人才登记表》把外聘师傅（starter 配置类）请进来                            | 自动装配                     |
-| ↳ 第 ⑪ 子步 `@PostConstruct`       | 第一道菜出锅。**只这一道好了，别的还没下锅，不能开席**                             | 单 Bean 就绪                |
-| ↳ 第 ⑫ 子步                        | 包间门打开（Tomcat 端口监听），但**招牌灯还没开**                            | 端口监听                     |
-| ④ `callRunners()`               | ✅ **全部菜齐了，但招牌灯没开、客人不知道能进**。赶紧把预制菜（DB 数据）摆上前台货架（Redis） | **`CommandLineRunner`（预热首选）** |
-| ⑤ `ApplicationReadyEvent`       | **招牌灯亮，正式营业**。这里才摆货 → 客人已进门、货架是空的 → 冲后厨（DB）            | 服务就绪                     |
-
-> 对照表：**菜 = Bean｜货架 = Redis 缓存｜客人 = 用户请求｜招牌灯 = Readiness 就绪状态**
-
-### 8. 我在项目里怎么用的（真实锚点）
-
-**锚点一：项目里目前没有任何缓存预热**
-
-全仓库搜不到 `@PostConstruct` / `CommandLineRunner` / `ApplicationReadyEvent`——**这是待补的能力**。将来做权限缓存、角色缓存预热时，按本章结论优先选 `CommandLineRunner`。
-
-**锚点二：项目里有一个"启动期就失败"的真实例子**
-
-`SecurityAutoConfiguration.jwtUtil()` 在 `@Bean` 方法里做 fail-fast 校验：
+**锚点二：`SecurityAutoConfiguration.jwtUtil()` 是"校验型"的标准样本**（它是 `@Bean` 方法，钉在 `refresh()` 的 Bean 实例化阶段）。摘掉异常文案后的骨架：
 
 ```java
 @Bean
 @ConditionalOnMissingBean(JwtUtil.class)
 public JwtUtil jwtUtil(SecurityProperties properties, Environment environment) {
     String secret = properties.getJwtSecret();
-    if (secret == null || secret.isBlank()) {
-        throw new IllegalStateException("insight.security.jwt-secret 未配置，拒绝启动。...");
-    }
-    if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
-        throw new IllegalStateException("insight.security.jwt-secret 长度不足 32 字节，拒绝启动");
-    }
+    if (secret == null || secret.isBlank())      throw new IllegalStateException("... 拒绝启动");
+    if (secret.getBytes(StandardCharsets.UTF_8).length < 32) throw new IllegalStateException("... 拒绝启动");
     ...
 }
 ```
 
-**它钉在时间轴的哪里？** —— **第 3 步 `refresh()` 的 Bean 实例化阶段**（`@Bean` 方法被调用时）。
+两个推论正好解释它为什么有效（也是「选位置」的通用判断法）：
 
-这解释了为什么它效果这么好：
+- **早于端口监听（⑫）** → 配置有问题时**根本开不了门**，绝不会带着弱密钥对外服务；
+- **晚于 `prepareEnvironment()`（第 1 步）** → 所以方法里能读到 `Environment`（代码用 `environment.getActiveProfiles()` 判断 prod）。
 
-- 它**早于** Tomcat 端口监听（第 ⑫ 子步）→ 配置有问题，服务**根本开不了门**，绝不会带着弱密钥对外提供服务；
-- 它**晚于** `prepareEnvironment()`（第 1 步）→ 所以方法里能读到 `Environment`（代码里正是用 `environment.getActiveProfiles()` 判断 prod 环境）。
+> 总纲：**安全底线 fail-fast（拒绝启动），性能预热 fail-soft（告警 + 回源）**。
 
-> **这就是"选对钩子"的价值**：校验放对位置，既能拿到该拿的东西，又能赶在开门前把问题拦住。
+### 6. 面试模板（背这一段）
 
-### 9. 面试极简回答模板（脑子里只存这套）
+> Spring Boot 入口是 `SpringApplication.run()`：先 `prepareEnvironment()` 读 yml 和命令行参数，再创建 IOC 容器，然后 `refresh()` 刷新容器、实例化所有 Bean。`@PostConstruct` 在 Bean 实例化阶段执行，但它只代表单个 Bean 完成、别的 Bean 可能还没造好，会 NPE，不适合全局预热。`refresh()` 全部结束后执行 `CommandLineRunner`：所有 Bean 已就绪、服务还没宣告就绪，是缓存预热首选，把 DB 数据加载进 Redis，避免流量进来打穿数据库。之后 `ApplicationReadyEvent` 表示服务完全就绪，只适合打日志、发通知这类轻动作。
 
-> Spring Boot 入口是 `SpringApplication.run()`，内部拆成几个大阶段：先准备环境，加载 yml 和命令行参数；再创建 IOC 容器；然后执行 `refresh()` 刷新容器、实例化所有 Bean。**`@PostConstruct` 就在 Bean 实例化阶段执行，但它只代表单个 Bean 完成，别的 Bean 可能还没造好，会空指针，不适合全局缓存预热。**
-> `refresh()` 全部完成后执行 `CommandLineRunner`，**此时所有 Bean 已经就绪，但服务还没对外宣告就绪、流量还没进来**，适合做缓存预热，把数据库数据加载进 Redis。
-> Runner 之后触发 `ApplicationReadyEvent`，代表服务完全就绪；此时再预热，耗时长的话会有请求打穿缓存的风险。
+- **Q1 为什么不用 `@PostConstruct` 预热？** 答：它只是"当前这个 Bean"初始化完成，`RedisTemplate`/`Mapper` 可能还没创建 → NPE；且每个 Bean 都会触发一次，不是"全局一次性"。
+- **Q2 `CommandLineRunner` 和 `ApplicationReadyEvent` 怎么选？** 答：优先 Runner（全就绪、尚未宣告就绪）；`ApplicationReadyEvent` 时已就绪，预热慢会被请求打穿。**加分**：端口监听与注册中心注册其实都在 `refresh()` 末拍就发生了，所以真正稳妥的是 Runner 预热 + 回源兜底（或 K8s readiness 探针）。
 
-### 10. 必背 2 个反问（高频）
+### 7. 可以先不记（避免大脑过载）
 
-**Q1：为什么不用 `@PostConstruct` 做缓存预热？**
+`ApplicationContextInitializer`、`ApplicationStartingEvent` / `ApplicationEnvironmentPreparedEvent` / `ApplicationPreparedEvent` / `ContextRefreshedEvent`、`ConfigFileApplicationListener`、`SpringApplicationRunListeners` 的七个回调——**面试不问"Spring Boot 扩展点"就完全不用背**。
 
-答：它只是**当前 Bean** 初始化完成，`RedisTemplate`、`Mapper` 这些依赖可能还没创建 → 空指针。而且每个 Bean 都会触发一次，语义上也不适合做"全局一次性"的事。
+必须记住的只有 5 条：
 
-**Q2：`CommandLineRunner` 和 `ApplicationReadyEvent` 选哪个？**
-
-答：优先 `CommandLineRunner`。它执行时所有 Bean 就绪，但 Readiness 状态还没变成 `ACCEPTING_TRAFFIC`，K8s / 注册中心不会导流，预热完流量才进来。`ApplicationReadyEvent` 时服务已宣告就绪，预热耗时长会有请求打穿缓存的风险。
-
-### 11. 可以先不记（避免大脑过载）
-
-❌ 暂时屏蔽：
-
-- `ApplicationContextInitializer`
-- `ApplicationStartingEvent` / `ApplicationEnvironmentPreparedEvent` / `ApplicationPreparedEvent` / `ContextRefreshedEvent`
-- `ConfigFileApplicationListener`
-- `SpringApplicationRunListeners` 的七个回调
-
-> 这些是底层扩展组件，**面试不问"Spring Boot 扩展点"完全不用背**。
-
-✅ 必须记住的只有 6 条：
-
-1. `new SpringApplication()`：备料，不干活（顺带推断应用类型）
-2. `run()` 六步骨架
-3. `refresh()` 内：**第 ⑤ 子步 = 自动装配；第 ⑪ 子步 = `@PostConstruct`；第 ⑫ 子步 = 端口监听**
-4. `callRunners()` = `CommandLineRunner`（**预热首选**）
-5. `ApplicationReadyEvent` = 服务就绪、可接客
-6. 顺序：`@PostConstruct` < `CommandLineRunner` < `ApplicationReadyEvent`
+1. `new SpringApplication()` = 备料（推断 Web 类型 + 记主类），不干活；
+2. `run()` 六步：环境 → 容器 → `refresh` → `Runner` → 就绪事件 → 返回容器；
+3. `refresh()` 内三拍：**⑤ 自动装配 / ⑪ `@PostConstruct` / ⑫ 端口监听 + 注册中心注册**；
+4. 预热挂 `callRunners()`；校验型 fail-fast 挂 Bean 实例化阶段；
+5. 时序：`@PostConstruct` < `CommandLineRunner` < `ApplicationReadyEvent`。
 
 ---
 
@@ -2691,7 +2627,7 @@ public JwtUtil jwtUtil(SecurityProperties properties, Environment environment) {
 
 > 目标：彻底搞懂「starter 引进来为什么 Bean 就自动生效了」。核心就一个词——**自动装配（Auto-Configuration）**。
 
-**📍 本章在时间轴上的位置**（承上启下，先读上一章「启动流程主线」）：
+**📍 本章在时间轴上的位置**（承上启下，先读上一章「Spring Boot 启动流程 + 预热钩子该挂哪一拍」）：
 
 ```
 run() 六步骨架
@@ -3244,13 +3180,37 @@ if (sessionService != null && !sessionService.isActive(payload.getUserId(), toke
 | 典型场景 | 功能权限（能不能进这个页面）          | 数据权限（能看哪几行数据）   |
 | 表结构  | user/role/permission 三张 | 需属性+规则引擎        |
 
-#### 2. 项目用的是哪种？
+#### 2. 项目用的是哪种？（**先把「设计意图」和「代码现状」分开——这两句不矛盾，但极易读混**）
 
-**RBAC 为主 + 角色上带 scope 数据范围属性**（向 ABAC 过渡的中间形态）。
+**设计意图**：RBAC 为主 + 角色上带 `scope` 数据范围属性（向 ABAC 过渡的中间形态）。
+**代码现状（2026-09-10 逐行核查）**：**只有 RBAC 功能权限真正跑通**；`scope` 字段建好了、能写、能回显，但**零消费方**——没有任何代码读它去过滤数据。
 
-看 `Role` 实体的 `scope` 字段：`ALL/ORG/WS/SELF`（全局/组织/工作空间/本人），它就是「数据范围」属性——决定这个角色能看哪些数据。`RoleMapper.selectRoleCodesByUserId()` 的注释也写明「具体数据范围在 ABAC 拦截器阶段再按 scope 收敛」。
+`Role` 实体确实有 `scope`：
 
-> 面试亮点：**「我们采用 RBAC 做功能权限，角色上挂 scope 数据范围字段，为后续 ABAC 数据权限留了扩展点」**——这句话比单纯说「我们用了 RBAC」高级得多。
+```java
+40:41:insight-engine-modules/insight-engine-ums/src/main/java/com/insightengine/ums/entity/Role.java
+    /** 数据范围：ALL/ORG/WS/SELF */
+    private String scope;
+```
+
+**`scope` 全仓库「读写」清单**（判断"到底用上没用上"的唯一标准）：
+
+| 环节 | 位置 | 性质 |
+| --- | --- | --- |
+| 建列 | `init.sql:169` `scope VARCHAR(16)`（可空、**无默认值**）+ `:183` 注释「ABAC 数据行级过滤依据」 | 定义 |
+| 种子数据 | `init.sql:1012-1017` 五个角色分别写 `ALL / ORG / WS / WS / SELF` | 写入 |
+| 入参校验 | `dto/request/RoleCreateRequest.java:31` `@Pattern(regexp = "^(ALL\|ORG\|WS\|SELF)$")` | 校验（**无枚举类**：全仓库 `*Scope*.java` 为 0 个） |
+| 创建角色落库 | `RoleServiceImpl.java:68` `role.setScope(request.getScope())` | 写入 |
+| 角色详情回显 | `RoleServiceImpl.java:141` `vo.setScope(role.getScope())` | 读取（**仅回显给前端，不参与任何判断**） |
+| 登录查角色 | `RoleMapper.java:25-32` `SELECT r.code ...` | **不查 scope**；注释 `:22-23` 写明「具体数据范围在 ABAC 拦截器阶段再按 scope 收敛」← **未来时** |
+| 登录查权限 | `PermissionMapper.java:25-35` `SELECT DISTINCT p.code ...` | **不查 `p.scope`**（`Permission.scope` 连写入都没有，纯死字段） |
+| JWT 载荷 | `JwtClaimConstants.java:20-38` → `type / tenant_id / ws_id / roles / perms` | **无 scope claim** |
+| 数据过滤 | 无 | ❌ **零消费方**：`DataScopeInterceptor` / `TenantLineHandler` / `@DataPermission` 全仓库无实现；`MybatisAutoConfiguration.java:62-71` 只注册了分页拦截器 |
+
+> **结论一句话**：`RoleMapper` 注释里那句「留给 ABAC 拦截器阶段收敛」是**真的**——scope 是**预留扩展点**，不是"已生效的数据范围"。
+> 两句话的关系是 **设计 vs 现状**，不打架；但**用现在时描述未来的能力**（如"决定这个角色能看哪些数据"）就会被读成"已经实现了"，这是上一版笔记的问题所在。
+
+> 面试亮点（**务必配一句实话**）：**「我们采用 RBAC 做功能权限，角色上挂 `scope` 数据范围字段，为后续 ABAC 数据权限留了扩展点」**——比只说"我们用了 RBAC"高级。**被追问「那数据权限实现了吗」时必须答：还没实现**，并说出真实后果（见下方 ⚠️ 现状）。**把"预留"说成"已具备"，是最容易在面试里翻车的地方。**
 
 **「角色上带 scope」详解（功能权限 vs 数据权限）**
 
@@ -3261,27 +3221,38 @@ if (sessionService != null && !sessionService.isActive(payload.getUserId(), toke
 | **功能权限** | 你能不能「点这个按钮」 | 能不能进用户管理页         |
 | **数据权限** | 你能「看到哪几行数据」 | 进了用户页，看所有人还是只看本部门 |
 
-- **RBAC**（角色→权限表 `ie_role_permission`）管**功能权限**：`member:read`、`role:write` 这些「能不能做某操作」。
-- **scope** 管**数据权限**：这个角色能「看到哪个范围的数据」。
+- **RBAC**（角色→权限表 `ie_role_permission`）管**功能权限**：`member:read`、`role:write` 这些「能不能做某操作」。→ **本项目已落地**：`@PreAuthorize("hasAuthority('member:read')")` 全项目生效（见第 4 节链路）。
+- **scope** 定位是管**数据权限**：这个角色能「看到哪个范围的数据」。→ **本项目仅预留字段，未落地**（见上一小节核查表）。
 
-scope 四个取值：
+scope 取值约定（注释 + 校验正则 + 种子数据三处一致，但**没有枚举类**）：
 
-| scope 值 | 含义      | 谁用          |
+| scope 值 | 含义      | 设计归属        |
 | ------- | ------- | ----------- |
 | `ALL`   | 全平台数据   | super_admin |
 | `ORG`   | 本组织数据   | org_admin   |
 | `WS`    | 本工作空间数据 | ws_admin    |
 | `SELF`  | 只有自己的数据 | 普通成员        |
 
-举例：同一个「用户列表」接口，三个人 scope 不同，看到的数据范围不同：
+**目标行为（按设计，同一个「用户列表」接口三种 scope 应看到三种数据范围）**：
 
 - 小明（super_admin，scope=ALL）→ 看到全公司 1000 个用户
 - 小红（org_admin，scope=ORG）→ 只看到本部门 50 个用户
 - 小刚（普通成员，scope=SELF）→ 只能看到自己 1 个
 
-> **三个人用同一个接口、同一套功能权限（都有 `member:read`），但因为 scope 不同，看到的数据范围不同。** 这就是「角色上带 scope」：scope 是贴在角色上的「数据范围标签」，决定这个角色能看多宽的数据。
+> ⚠️ **现状（今天真跑一遍会怎样）**：**三个人都会看到全库用户**——因为唯一的门槛是功能权限 `hasAuthority('member:read')`，**与 scope 无关**。
+>
+> 证据：`UserServiceImpl.java:58-72` 的分页查询只有 keyword 条件和 `orderByDesc(id)`，**没有任何 `tenant_id` / `workspace_id` / `created_by` 条件**，也没有拦截器兜底：
+>
+> ```java
+> 59:65:insight-engine-modules/insight-engine-ums/src/main/java/com/insightengine/ums/service/impl/UserServiceImpl.java
+> LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+> if (StringUtils.hasText(query.getKeyword())) { ... like 昵称/邮箱 ... }
+> wrapper.orderByDesc(User::getId);
+> ```
+>
+> 所以"数据权限"这条线目前是**敞口**的：凡是被授予 `member:read` 的角色（种子数据里 `ws_admin` 就带它），都能列出全库用户。这不是"留了扩展点"这种无害状态，而是**待还的技术债 + 越权面**（对应 `PROGRESS.md:207` 那条 `DataScope 行级数据权限拦截器` 待办）。
 
-为什么说「RBAC 向 ABAC 过渡」？纯 RBAC 只管「能不能做」（功能），不管「看多少」（数据）；纯 ABAC 完全按属性动态算「能看哪些数据」；项目是 RBAC 管功能 + scope 字段管数据范围的结合。MVP 阶段 scope 字段先建好存着，真正按 scope 过滤数据的逻辑留给后续数据权限拦截器做。
+**为什么说「RBAC 向 ABAC 过渡」？** 纯 RBAC 只管「能不能做」（功能），不管「看多少」（数据）；纯 ABAC 完全按属性动态算「能看哪些数据」；本项目是 **RBAC 管功能（已实现）+ scope 字段管数据范围（仅预留表结构）** 的结合。设计上，数据行级过滤将由 MyBatis 拦截器按 `UserContext` 的 `workspaceId` + 角色的 `scope` 动态追加 WHERE 条件（TD §7.5 的 `DataScopeInterceptor` 规划）——**该类目前不存在**。
 
 #### 3. 权限进 JWT 的三个权衡（核心难点）
 
@@ -3401,7 +3372,7 @@ JOIN ie_role_permission rp ...
 
 - **Q1：RBAC 和 ABAC 的区别？你们用的哪种？**
   
-  - 答：RBAC 按角色授权（粗粒度、管理简单），ABAC 按属性动态授权（细粒度、灵活复杂）。我们采用 **RBAC 为主**做功能权限，同时角色上挂 `scope`（ALL/ORG/WS/SELF）数据范围字段，为后续 ABAC 数据权限留了扩展点。
+  - 答：RBAC 按角色授权（粗粒度、管理简单），ABAC 按属性动态授权（细粒度、灵活复杂）。我们采用 **RBAC 为主**做功能权限（`@PreAuthorize` + `ie_role_permission`，**已落地**），同时角色上挂 `scope`（ALL/ORG/WS/SELF）数据范围字段，为后续 ABAC 数据权限留了扩展点（**当前该字段只写不读，行级过滤拦截器尚未实现**——被追问时就这么答，别把"预留"讲成"已具备"）。
 
 - **Q2：为什么把权限写进 JWT，而不是每次请求查数据库？**
   
@@ -3434,7 +3405,13 @@ JOIN ie_role_permission rp ...
 3. **坑：JWT 里既存角色又存权限，导致 token 过大**
    
    - 现象：`roles` + `perms` 两个 claim 都很长，HTTP 头膨胀。
-   - 规避：MVP 阶段两者都存（roles 供数据范围、perms 供方法级权限）；若体积成问题，优先砍 `perms`（改成服务端缓存角色→权限映射），`roles` 保留做数据范围判断。
+   - 规避：MVP 阶段两者都存（roles 供前端展示/未来数据范围、perms 供方法级权限）；若体积成问题，优先砍 `perms`（改成服务端缓存角色→权限映射），`roles` 保留。
+   - ⚠️ **注意别把 roles 当数据权限依据**：数据范围将来靠的是**角色上的 `scope`**（且 `scope` 目前既不在 JWT 里、也没有任何消费方，见第 2 节）——"JWT 里有 roles" ≠ "数据权限生效了"。
+
+4. **坑：把"预留字段"当成"已实现能力"（本次实测发现的写法级坑）**
+   
+   - 现象：文档/口头都说"我们角色上带 scope 做数据范围"，但代码里 scope 只写不读，用户列表实际返回全库数据——**自己先信了，面试被追问就答不上来**。
+   - 规避：判断一个能力"有没有"只看三件事：**① 有没有读取消费方（拦截器/WHERE 条件）② 有没有对应类（`DataScopeInterceptor`）③ 有没有测试/验收项（`PRD` 验收清单未打勾）**。三者皆无为"未实现"，就该按"预留设计 + 待办"表述（本文件此前的错误正是如此，已于 2026-09-10 修订）。
 
 ---
 
@@ -3687,6 +3664,94 @@ public Result<?> page(...) {
 
 ---
 
+## CSRF vs SSRF：两种「借力打力」的伪造类攻击（含本项目 SSRF 风险面清单）
+
+- 学于：2026-09-10（承接上一篇「无状态 JWT 为什么关 CSRF」）
+- 关联模块：暂无出站调用代码；**规划中的 4 个入口**：`insight-engine-tool`（HTTP 工具）、`insight-engine-model`（厂商 `base_url`）、`insight-engine-notify`（Webhook）、内置工具 `http_get`
+- 来源：OWASP Top 10（A01 访问控制失效 / A10 SSRF）、PRD §12.8.5 / §16.3、TD §16
+
+> 目标：搞清 CSRF 和 SSRF「像在哪、差在哪」，并回答一个更实用的问题——**本项目现在有没有 SSRF 面**。
+
+### 0. 先纠一个容易记混的名字
+
+两个都叫「XX-站/服务端 请求伪造」，都以 `S` 开头，所以容易记串。区别只在**借的是谁的手**：
+
+| | CSRF（Cross-Site Request Forgery，跨站请求伪造） | SSRF（Server-Side Request Forgery，服务端请求伪造） |
+| --- | --- | --- |
+| **借什么** | 借**受害者的浏览器** + 浏览器**自动携带的凭证** | 借**服务器自己的网络位置与出站权限** |
+| 谁发出最终请求 | **用户浏览器**（受害者自己） | **服务器**（后端代码） |
+| 攻击者要做的 | 诱你点开/加载一个恶意页面 | 在正常业务参数里**塞一个地址** |
+| 服务端被骗成什么 | 以为「是用户本人发起的请求」 | 变成「替攻击者访问内网」的代理人 |
+| 典型后果 | 以你的身份转账/改密/加管理员 | 探测内网、读云元数据拿凭证、打内部服务（Redis/PG/Nacos 控制台） |
+| 主要防御 | CSRF Token / `SameSite` Cookie / **不用 Cookie 认证** | **出站地址校验**（解析后判 IP + allowlist）、禁跟随重定向、网络隔离 |
+
+> 一句记忆：**CSRF 借「你的浏览器 + 你的凭证」；SSRF 借「服务器的手 + 服务器的网络位置」。**
+
+### 1. 为什么这两个老被放一起讲（三个真实联系）
+
+1. **共同本质：混淆代理人（confused deputy）**——让一个**本来有权限的实体**（浏览器 / 服务器）去执行**攻击者想做的事**，攻击者自己不需要有权限。
+2. **都是「输入不可信」的变体**：CSRF 不可信的输入是**跨站的请求本身**；SSRF 不可信的输入是**请求里那个 URL**。
+3. **能组合成攻击链**：用 SSRF 打到内网某个服务（如内部管理接口、无鉴权的运维端口），再用 CSRF 借管理员的浏览器去操作它 → 危害被放大。
+
+**但它们正交**（这条最该记住）：
+
+> **关掉 CSRF 防护 ≠ 没有 SSRF 风险。** 关 CSRF 的理由是「JWT 放请求头、浏览器不自动带凭证」；而 SSRF 跟"凭证怎么带"毫无关系——**只要后端会按用户给的地址发请求，SSRF 面就存在**，与 CSRF 开或关无关。
+
+### 2. SSRF 的判定标准（一句话，比背定义有用）
+
+> **后端会不会「拿着请求里传来的 URL / host / IP 去发起网络请求」？** 会 → 有 SSRF 面；目标地址来自**配置或常量** → 不是 SSRF。
+
+推论（本项目直接可用）：
+- 网关转发到 `lb://insight-engine-ums`（`gateway/src/main/resources/application.yml:30-35`）→ 目标是静态配置，**不是** SSRF；
+- UMS 连 PG/Redis/Nacos → 地址全部走环境变量 → **不是** SSRF；
+- 「用户在表单里填一个 URL，服务端去访问」→ **是** SSRF。
+
+### 3. 本项目 SSRF 风险面清单（2026-09-10 实测）
+
+**先说结论：已实现代码里 SSRF 面 = 0 个；但「表字段 + 接口契约」已定稿、模块还没开工的高危入口有 4 个；且全仓库没有任何一行 SSRF 防护代码。**
+
+| # | 入口 | 用户可控程度 | 现状 | 级别 |
+| --- | --- | --- | --- | --- |
+| 1 | 内置工具 `http_get`「发起 HTTP GET 请求」（`init.sql:1131`；工具注册接口 `IF.md:1105-1136` 的 `config.url`） | **完全可控**（用户自填 URL/Method/Headers） | `insight-engine-tool` 只有 pom，无源码 | 🔴 高 |
+| 2 | 模型厂商 `base_url`（表字段 `init.sql:238`；接口 `IF.md:482-492` 的请求体 `baseUrl`） | **完全可控**（创建厂商时填写） | `insight-engine-model` 只有 pom，无源码 | 🔴 高 |
+| 3 | 工具调试 `POST /api/v1/tool/{id}/test`（`IF.md`；落库 `ie_tool.config`） | **完全可控** | tool 模块无源码 | 🔴 高 |
+| 4 | 通知渠道 Webhook（`init.sql:862` `ie_notification_channel.config`，如钉钉机器人 URL；`IF.md:1497-1508`） | **完全可控** | `insight-engine-notify` 只有 pom，无源码 | 🔴 高 |
+| — | 网关静态路由 / Feign（服务名走 Nacos）/ MinIO 预签名（服务端生成） | 不可控 | — | ⚪ 无 |
+
+**防护现状（这就是那个"漏洞"）**：`SSRF` 全仓 **0 命中**；无 `InetAddress.isSiteLocalAddress` 校验、无内网黑名单、无域名 allowlist、无 `setFollowRedirects(false)`、无出站超时。唯一的口径是 PRD 里两行**纸面规划**：
+
+- `PRD.md:1610`：「HTTP 工具：禁止内网段（10.x / 192.168.x / 127.x），需配置 allowlist」
+- `PRD.md:2471`：「内网域名 allowlist（工具调用）」
+
+> ⚠️ **风险的时间点**：现在"没有洞"，是因为调用还没写。危险在于 **tool/model/notify 是阶段 6/8 的活，一旦开工，第一行出站调用就是可利用的 SSRF**（且这 4 个入口都是"用户自填 URL"的设计，属于默认高危）。
+> 处置建议（不改代码，仅登记）：**把「出站地址校验」作为这 4 个模块的开工前置项**，与出站调用在**同一次提交**里落地——对齐本项目已有的"新增能力与防线同步"纪律（如 P18 三处同步）。这条与 `PRD.md:2584` 里「数据外泄 = 高」那条风控是同一批债务。
+
+### 4. SSRF 防御的正确层次（面试按这个顺序说）
+
+1. **协议/端口白名单**：只允许 `http/https`，禁 `file:// / gopher:// / dict://`（这些能读本地文件或打非 HTTP 服务）；端口也收敛（如只允许 80/443）。
+2. **目标 allowlist（默认拒绝）**：域名/网段白名单，尤其"用户配置的工具 URL"必须走审核制的 allowlist。
+3. **解析后校验 IP（关键，别只查域名）**：把域名 **解析成 IP 后**再判断是否内网/保留地址，并且**用解析出的那个 IP 去连接**——否则 DNS rebinding 会让"检查时是公网、连接时变内网"。
+4. **禁止或手工处理重定向**：`302` 到 `http://127.0.0.1/` 是经典绕过，每次跳转都要重新校验。
+5. **显式拦截云元数据地址**：云主机上 `169.254.169.254` 这类地址是拿临时凭证的捷径（腾讯云 CVM 走 `metadata.tencentyun.com`），必须单独拦。
+6. **网络层兜底**：容器/主机出网限制（只放通必要目标）、内网服务加鉴权、Redis/PG 不暴露公网——**纵深防御，因为应用层校验总可能被绕过**。
+7. **超时 + 响应大小限制**：防 SSRF 被当成内网端口扫描器（靠响应时间/大小侧信道探测）。
+
+### 面试可能追问
+
+- **Q1：SSRF 是什么？和 CSRF 什么关系？** 答：SSRF 是让服务端按攻击者给的地址发请求，借的是服务器的网络位置；CSRF 是借用户浏览器自动携带的凭证。两者都是"混淆代理人"，但攻击面正交——**关 `csrf.disable()` 不影响 SSRF**，只要后端有用户可控的出站目标就存在。
+- **Q2：为什么"域名黑名单"防御不够？** 答：三类绕过——① URL 解析歧义（`http://127.0.0.1@evil.com`、十进制 `2130706433`、`0x7f.1`、`[::ffff:127.0.0.1]`）；② 302 跳转；③ DNS rebinding。正解是**标准化 URL → 解析 IP → 判 IP → 用该 IP 连接 → 禁跳转**。
+- **Q3：云上 SSRF 最严重的后果？** 答：读云元数据服务拿临时凭证/实例信息，进而横向到对象存储或控制面（AWS/GCP 是 `169.254.169.254`，腾讯云 CVM 是 `metadata.tencentyun.com`）——这等价于"用服务器的身份登进云账号"。
+- **Q4：我们项目有 SSRF 吗？** 答（**照着说，别吹**）：已实现代码里没有，因为网关路由目标是静态 `lb://`、UMS 只连配置注入的 PG/Redis/Nacos；但**已规划 4 个高危入口**（内置 `http_get`、模型 `base_url`、工具调试、Webhook 回调）且**目前零防护代码**，所以把"出站地址校验"定为这几个模块的开工前置项。
+
+### 踩坑提醒
+
+1. **坑：以为"关了 CSRF 就安全了"。** 两件事不相关；`csrf.disable()` 的理由只是"凭证不自动携带"。
+2. **坑：只在 Controller 入口校验一次 URL。** 302 跳转 / DNS rebinding 都能绕过——校验必须发生在**真正建立连接前**，且每次跳转重新校验。
+3. **坑：用正则判断内网。** `127.0.0.1` 有十几种等价写法（十进制/八进制/`@`/IPv6 映射）；必须**解析成 IP** 后用 `InetAddress.isSiteLocalAddress()` / 保留段判断。
+4. **坑：把"HTTP 工具/自定义 Webhook"当成普通业务功能直接上线。** 这类"用户自填 URL"的功能**天生就是 SSRF 面**，必须默认拒绝 + allowlist，而不是"先上再补"。
+
+---
+
 ## JWT 密钥管理与 fail-fast 校验
 
 - 学于：2026-08-27
@@ -3792,31 +3857,34 @@ Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默
 ## 微服务身份传递的信任边界（双身份源问题）
 
 - 学于：2026-08-27
-- 关联模块：`UserContextFilter` / `JwtAuthFilter` / `UserContext` / `WebAutoConfiguration`
+- 关联模块：`UserContextFilter` / `JwtAuthFilter` / `UserContext` / `WebAutoConfiguration` / `AuthGlobalFilter`（网关侧）
 - 来源：TD ADR-5
 - 2026-09-03 增强：补「架构现实」+ 无网关/有网关**断点级调用栈** + 剥头与 HMAC 签名
+- **2026-09-11 复核修订**：架构现实已变（**网关早已落地**），原文的"网关不存在/下一章要建"是 2026-09-03 的历史快照；同时修正 5 处行号错误、补上"业务代码长什么样"（原文缺这段是看不懂的主因）
 
 > 目标：搞懂「一个系统里为什么不能有两套身份来源」、请求头身份为什么不可信、以及身份传递的正确边界。
 
-### 第 0 步：先看清架构现实（读链路图前必看）
+### 第 0 步：先看清架构现实（**读链路图前必看；本文含新旧两种状态**）
 
-**查证结果（2026-09-03）——理解本问题的前提：**
+**现状（2026-09-11 复核）：**
 
 | 事实 | 证据 |
 | --- | --- |
-| **网关不存在** | `insight-engine-modules/insight-engine-gateway/` 目录下**只有一个 `pom.xml`，零 Java 代码** |
-| **UMS 直连暴露** | `insight-engine-ums/src/main/resources/application.yml:7` → `server.port: 7101`，浏览器直连 `localhost:7101/doc.html` 即可访问 |
+| **网关已落地并冒烟通过** | `insight-engine-gateway/` 已有 `GatewayApplication` / `AuthGlobalFilter` / `GatewayJwtParser` / `application.yml`；PROGRESS §6.4 记录 2026-09-08 冒烟 8/8、2026-09-09 复跑 9/9 |
+| **网关侧已做「剥头 + 重建」** | `AuthGlobalFilter.java:93-97`（白名单分支也剥头）、`:126`（认证后剥头重建）、`:162-166` / `:173-190`（两个方法本体） |
+| **UMS 仍可直接访问** | `insight-engine-ums/src/main/resources/application.yml:10-11` → `server.port: 7101`，`localhost:7101/doc.html` 仍可直连 |
+| **UMS 默认**不信任**网关头** | `application.yml` 里**没有** `insight.web.trust-gateway-headers` → `WebAutoConfiguration.java:66-74` 的条件不满足 → `UserContextFilter` 不注册 → **身份唯一来源仍是 JWT** |
 
 ```
-设计文档里画的「将来」（TD ADR-5）：
-  浏览器 → 网关(:8080，验 JWT 后加身份头) → UMS(:7101)
+2026-09-03（历史快照，本节原有内容当时成立）：
+  浏览器/Postman ──────直连──────> UMS(:7101)      ← 网关不存在，身份头是客户端自己填的
 
-现在的真实情况：
-  浏览器/Postman ──────────直连──────────> UMS(:7101)
-                （中间没有任何东西）
+2026-09-11（现状）：
+  浏览器 ──> 网关 :7000（验 JWT → 剥掉伪造头 → 用 JWT 真值重建头）──> UMS :7101（仍可绕过网关直连）
+              ↑ 路由 uri: lb://insight-engine-ums（Nacos，2026-09-10 接入）
 ```
 
-**一句话矛盾**：代码是按「将来有网关」写的，但网关现在不存在，所以本该由网关填的身份头，实际上是**客户端自己填的**。
+**结论（时态更新，但方向不变）**：本节要修的**不是**"网关没写"，而是"**服务端无条件信任客户端可控的明文头**"这个代码缺陷——它已于 2026-09-02（UMS-1，方案 A）修复：`UserContextFilter` 改为条件装配、默认关闭，清理职责移交 `JwtAuthFilter`。**网关落地只解决了"谁来写头"，不解决"服务端凭什么叫这个头可信"**——后者要靠剥头 + 网络隔离/HMAC，见第 5 节。
 
 > **由此得出一条重要区分（面试常考）**：
 > - **网关没落地** = 功能没做完（排期问题）
@@ -3824,28 +3892,74 @@ Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默
 >
 > 这是**两个独立问题**。你可以「保安还没招到」的同时「先把登记册锁进抽屉」——后者不依赖前者，必须现在就修。
 
-### 直观类比（先建立直觉）
+### 直观类比：`UserContext` = 一个「每个请求一个」的身份盒子
 
-**`UserContext` = 一个「我是谁」的盒子（ThreadLocal）**
+上一版只说了"盒子可能被不安全的人放东西"，但没说清**盒子在哪、谁放、谁取、什么时候清**，所以看不懂。补齐四件事：
 
-- 业务代码需要知道「当前用户是谁」时，就从盒子里取（`UserContext.getUserId()`），不关心是谁放进去的。
-- 危险在于：**如果盒子里装的身份，是一个「任何人都能自己写」的来源放进去的，那这个盒子就不安全了。**
+**① 盒子在哪？—— 每个线程一个（ThreadLocal）**
+
+`UserContext` 内部就一个 `ThreadLocal<LoginUser>`（`starter-web/context/UserContext.java:22`）。ThreadLocal = **每个线程一块专属储物格**；Tomcat 一个请求占一个线程 → **一个请求 = 一个盒子**。请求结束若不清空，线程回池被下一个请求复用时，**新请求会读到上一个请求留在盒子里的身份**（就是「ThreadLocal 串号」那篇的坑）。
+
+**② 盒子只有三个动作（对应三个静态方法）**
+
+```java
+UserContext.set(loginUser);   // 放：谁解析出身份谁调用    (UserContext.java:27)
+UserContext.getUserId();      // 取：业务代码只读这个      (UserContext.java:45-48)
+UserContext.clear();          // 倒：请求结束 finally 必清 (UserContext.java:73-75)
+```
+
+**③ 谁会往盒子里放东西？（本节的要害）**
+
+| 放东西的人 | 身份从哪来 | 客户端能自己造吗 | 现状（2026-09-11） |
+| --- | --- | --- | --- |
+| `UserContextFilter` | 请求头 `X-User-Id` / `X-Roles` 等（`UserContextFilter.java:53-64`） | **能**：curl 加一行 `X-User-Id: 1` 就行 | **默认不注册**（`WebAutoConfiguration.java:66-74` 条件开关未满足） |
+| `JwtAuthFilter` | `Authorization: Bearer <JWT>`，**用密钥验签后**才取身份（`JwtAuthFilter.java:126`） | 不能：没密钥签不出来 | 生效中，**唯一写入方** |
+
+> **判断标准（比记类比有用）**：**看 `set()` 的数据源是不是"客户端能自己写"的。** 是 → 盒子里的身份不可信；不是（签名认证 / 服务端查库）→ 可信。
+
+**④ 业务代码到底长什么样？（原版缺了这段，是"看不懂"的主因）**
+
+业务侧**从不传 userId 参数**，而是随时从盒子取：
+
+```java
+// ① Controller 取身份（不靠请求参数）
+@GetMapping("/me")
+public Result<UserInfoVO> me() {
+    Long userId = UserContext.getUserId();       // ums/controller/AuthController.java:91
+    return Result.ok(authService.currentUser(userId));
+}
+
+// ② 改密：改的是"盒子里那个人"的密码
+@PutMapping("/password")
+public Result<Void> updatePassword(@Valid @RequestBody PasswordUpdateRequest request) {
+    Long userId = UserContext.getUserId();       // ums/controller/UserController.java:94
+    userService.updatePassword(userId, request);
+    return Result.ok();
+}
+
+// ③ 「谁改了这行数据」也靠它：MyBatis-Plus 自动填充审计字段
+private Long currentOperatorId() {
+    Long userId = UserContext.getUserId();       // starter-mybatis/.../MybatisMetaObjectHandler.java:63
+    return userId == null ? SYSTEM_USER_ID : userId;   // 匿名 → 0（系统），不是 null、更不是伪造身份
+}
+```
+
+**把后果具体化，就知道为什么写入方必须可信**：假如盒子里的身份是伪造的 ——
+① `/auth/me` 会返回**别人的**资料；
+② 改密会**改到别人账号**上；
+③ 审计字段会记成**攻击者指定的那个 userId**（甩锅/栽赃）。
 
 > 一句话记忆：**身份只能有一个可信来源（服务端签名），绝不能信客户端可任意填写的明文。**
 
 ### 核心原理
 
-#### 1. 两套身份来源并存（隐患根源）
+#### 1. 两套身份来源并存（修复前的隐患根源）
 
-系统有两个过滤器都在往 `UserContext` 盒子里塞身份：
+修复前有两个过滤器都往盒子里塞身份（见上表）。**安全问题不在于"有两个"，而在于安全依赖了这个脆弱前提**：
 
-| 过滤器                 | 身份从哪来                     | 客户端能伪造吗   | 执行顺序               |
-| ------------------- | ------------------------- | --------- | ------------------ |
-| `UserContextFilter` | 请求头 `X-User-Id`/`X-Roles` | **能！随便填** | 先（order=HIGHEST+1） |
-| `JwtAuthFilter`     | JWT（服务端签名）                | 不能（没密钥）   | 后                  |
+> `JwtAuthFilter` 后执行，会用 JWT 真身份**覆盖**明文头身份 —— 但"后执行的一定会覆盖先执行的"这条假设，**只要有一个请求不经过后者就失效**（白名单接口就是），而覆盖假设失效时盒子里的脏数据没有任何兜底。
 
-- 正常情况下，`JwtAuthFilter` 后执行，会用「可信的 JWT 身份」覆盖 `UserContextFilter` 塞进去的「明文身份」，所以业务代码读到的通常是对的。
-- 但**安全依赖「后执行的过滤器一定覆盖先执行的」这个脆弱前提**。
+本条已于 2026-09-02 修复（方案 A），现场见下一节的「修复前/修复后」对照。
 
 #### 2. 危险场景：白名单接口
 
@@ -3864,7 +3978,7 @@ Spring Boot 配置三层优先级：**环境变量 > application.yml > 代码默
 
 - `register` 接口目前没读 `UserContext`，所以还没被实际利用，但这是「随时会爆的越权面」——将来任何白名单接口/内部接口读 `UserContext.getUserId()` 立刻中招。
 
-#### 3. 完整调用栈（断点级，无网关现状）
+#### 3. 完整调用栈（断点级；下图为「无网关直连 UMS」路径，网关路径见第 5 节）
 
 请求样例：`GET /auth/me`，带真 JWT，同时被伪造 `X-User-Id: 1`
 
@@ -3885,11 +3999,12 @@ Tomcat 从线程池取出线程 T1 处理本请求
 ├─ [2] UserContextFilter              order = -2147483647 (HIGHEST_PRECEDENCE+1)
 │      starter-web/filter/UserContextFilter.java
 │      ◆ 修复前（漏洞现场）：
-│        :54  getHeader("X-User-Id")      ← 读到伪造的 1
-│        :60  UserContext.set( 1号用户 )   ← 脏数据进盒子
+│        :54    getHeader("X-User-Id")     ← 读到伪造的 1
+│        :59-63 组装 LoginUser（从四个头解析）
+│        :38-41 UserContext.set( 1号用户 )  ← 脏数据进盒子（原文误写 :60）
 │      ◆ 修复后（漏洞面闭合）：
 │        整个 Bean 未注册 → 本层不存在，直接跳到 [3]
-│        原因：WebAutoConfiguration.java:62 的条件注解未满足
+│        原因：WebAutoConfiguration.java:68 的条件注解未满足（原文误写 :62）
 │      ↓
 │
 ├─ [3] FilterChainProxy（Spring Security 总入口）   order = -100
@@ -3946,10 +4061,11 @@ POST /auth/register（permitAll，不需要任何 token）+ 伪造头 X-User-Id:
   → 无人 clear（因为无人 set，正确）
 ```
 
-**目前还没被真正利用的原因**：读 `UserContext` 的三处消费者都在 `anyRequest().authenticated()` 保护下——
+**目前还没被真正利用的原因**：读 `UserContext` 的三处消费者都在 `anyRequest().authenticated()` 保护下（2026-09-11 复核：全仓库仍只有这三处 `UserContext.` 调用）——
 - `ums/controller/AuthController.java:91`（`/auth/me`）
 - `ums/controller/UserController.java:94`（改密码）
-- `starter-mybatis/config/MybatisMetaObjectHandler.java:62`（自动填充 `create_by`/`update_by`）
+- `starter-mybatis/config/MybatisMetaObjectHandler.java:63`（自动填充 `created_by`/`updated_by`；原文误写 :62）
+  - 补一条原文漏掉的关键设计：**取不到身份时兜底为 `SYSTEM_USER_ID = 0`（系统）**（`:33`、`:64`），不是 null（审计字段多为 NOT NULL，填 null 会插入失败），更不会把伪造身份写进审计。所以匿名接口（register/login）写库的 `created_by` 是 `0`。
 
 而 `register` 虽无保护，但它不读 `UserContext`。**所以不是"安全"，是"恰好没撞上"**——任何一个新的白名单/内部接口只要读一次 `UserContext.getUserId()`，当场越权。
 
@@ -3964,9 +4080,11 @@ POST /auth/register（permitAll，不需要任何 token）+ 伪造头 X-User-Id:
   
   UMS 不配开关 → `UserContextFilter` 不生效 → 盒子里只有 `JwtAuthFilter` 塞的「可信身份」。
 
+  > 🔍 **读代码时发现的一个写法细节（2026-09-11 review）**：该方法上的 `@ConditionalOnMissingBean(UserContextFilter.class)`（`WebAutoConfiguration.java:67`）判的是"容器里有没有 **`UserContextFilter` 类型**的 Bean"，而本方法返回的是 `FilterRegistrationBean<UserContextFilter>` —— **两者不是同一个类型**，所以这个条件实际**永远成立（等于没写）**。功能不受影响（真正起作用的是 `@ConditionalOnProperty`），但这是**条件装配的典型写法陷阱**：`@ConditionalOnMissingBean` 应该判"你将要注册的那个类型"，或者干脆去掉。**属观察记录，未改代码**（改动需走配置项/装配变更评审）。
+
 - **方案 B（走 TD ADR-5 明文头方案）**：给网关下发的头加 HMAC 签名 `X-User-Sign` 验签，或 IP 网段校验兜底。
 
-#### 5. 有网关后的完整链路（下一章要写的）
+#### 5. 有网关后的完整链路（**2026-09-11 复核：网关已落地**，图中 `:8080` 是当时规划端口，实际为 `:7000`；转发目标也已从 `http://ums:7101` 变为 `lb://insight-engine-ums`）
 
 ```
 浏览器
@@ -4006,6 +4124,11 @@ POST /auth/register（permitAll，不需要任何 token）+ 伪造头 X-User-Id:
 ```
 
 > **一句话点破**：网关方案里，服务信头的安全性**不是靠"这头是网关写的"这句话保证的**，而是靠「**客户端到不了服务** + **头被剥掉/被签名**」两件事保证。从 UMS 眼里看，**网关写的头和客户端写的头长得一模一样**，它无法区分。
+
+> ✅ **本项目落地情况（2026-09-11 复核，原文说"下一章要写"已过期）**：
+> - 上面"过滤器1 剥头 / 过滤器2 验 JWT / 过滤器3 重建头"**已实现**为 `AuthGlobalFilter`：剥头 `:162-166`、重建 `:173-190`、认证主流程 `:99-127`；
+> - **易漏点原文也踩对了、代码也做对了**：白名单分支**同样剥头**再放行 —— `AuthGlobalFilter.java:93-97` 的注释写明理由："避免伪造头在『业务服务信任网关头』开启时造成越权"。这一点很关键：如果只在"认证通过"分支剥头，那么 `/auth/register` 这类白名单路径会把伪造头原样带给下游；
+> - **但 UMS 侧的开关仍关闭**（`application.yml` 无 `insight.web.trust-gateway-headers`）→ 即使网关头被伪造，`UserContextFilter` 不注册，UMS 身份仍只来自 JWT。**双轨并存的现状是：网关已经写头，服务端先不信。**
 
 ##### 剥头 / 签名——用 HTTP 报文说话
 
@@ -4145,7 +4268,7 @@ if (now - 收到的ts > 60_000) throw ...             // 防"录播重放"
 
 | # | 断点位置 | 修复后预期 |
 | --- | --- | --- |
-| 1 | `starter-web/config/WebAutoConfiguration.java:63` | **启动时不进** ← "Filter 没注册"的直接证据 |
+| 1 | `starter-web/config/WebAutoConfiguration.java:66-68`（方法 + `@ConditionalOnProperty`；原文误写 :63） | **启动时不进** ← "Filter 没注册"的直接证据 |
 | 2 | `starter-web/filter/UserContextFilter.java:54` | **永远不进** ← "漏洞面闭合"的直接证据 |
 | 3 | `starter-web/filter/TraceFilter.java:47` | 会进，读 `X-Trace-Id`（只写日志，不当身份 → 安全） |
 | 4 | `starter-security/filter/JwtAuthFilter.java:75` | 无 `Authorization` 头 → 直接 return，不建身份 |
@@ -4157,15 +4280,17 @@ if (now - 收到的ts > 60_000) throw ...             // 防"录播重放"
 
 想看修复前对比：`git stash` → 重启 → 再打一次，会看到**断点 2 被命中、`UserContext` 里坐着 `1`**；看完 `git stash pop` 恢复。
 
-### 状态总览：三种形态对照
+### 状态总览：三种形态对照（**2026-09-11 更正**：原表把"将来有网关"单列一列，但网关**已经存在**了，只是服务端还没开信任开关）
 
-| | 修复前（现在） | 修复后（现在） | 将来有网关 |
+| | ① 修复前（2026-09-02 之前） | ② 现状（2026-09-11） | ③ 打开 `trust-gateway-headers=true` 之后（**尚未发生**） |
 | --- | --- | --- | --- |
-| 谁能访问 UMS 7101 | 任何人直连 | 任何人直连 | **只有网关可达** |
-| 身份来源 | 请求头（可伪造）+ JWT **两个** | **只有 JWT 一个** | 请求头（网关写的 + 有保护） |
-| `UserContextFilter` | 注册，无条件信头 | **不注册** | 注册，且配套剥头/验签/网段 |
-| `UserContext` 谁写 | 两个 Filter 都写 | 只有 `JwtAuthFilter` | `UserContextFilter` |
-| `UserContext` 谁清 | `UserContextFilter` | **`JwtAuthFilter` finally** | `UserContextFilter` |
+| 谁能访问 UMS 7101 | 任何人直连 | 任何人直连（网关已存在，但 7101 仍可被绕过） | 必须先配套：只有网关可达（网络隔离）**或** HMAC 验签 |
+| 身份来源 | 明文头（可伪造）+ JWT，**两个** | **只有 JWT 一个**（网关下发的头被忽略） | 网关头（前提：网关已剥头 + 隔离/验签） |
+| `UserContextFilter` | 注册，无条件信头 | **不注册**（`WebAutoConfiguration.java:68` 条件不满足） | 注册（开关置 true 才生效） |
+| `UserContext` 谁写 | 两个 Filter 都写 | 只有 `JwtAuthFilter`（`:126`） | `UserContextFilter`（`:40`） |
+| `UserContext` 谁清 | `UserContextFilter`（`:45`） | **`JwtAuthFilter` finally（`:107`）** | `UserContextFilter`（`:45`） |
+
+> ⚠️ 第 ③ 列**现在不该打开**：开关只是"允许服务信头"，它**不替代**"客户端到不了服务"和"验签"这两件事。先满足第 5 节的前提，再谈开开关（踩坑 3 讲的就是被误开的后果）。
 
 ### 下一章（写网关）的前置决策
 
@@ -5371,6 +5496,546 @@ routes:
 3. **坑：在 WebFlux 网关里写阻塞代码**（同步 JDBC / `.block()` 滥用）—— 会拖垮少量线程的高并发模型。规避：网关只做转发与轻量校验（JWT 解析是纯计算，可以），重活交给下游服务。
 4. **坑：改了 routes 不重启/不刷新** —— MVP 用 yml 静态路由，改配置要重启；后续接 Nacos 配置中心可动态刷新路由。
 
+## 负载均衡 LB：客户端 LB 原理 + 本项目 `lb://` 全链路（含本地代码与云上实测对照）
+
+- 学于：2026-09-09（四讲原理 + 第五讲云上/本地实况对照与补漏）
+- 关联模块：`insight-engine-gateway`（LB 的**消费方**）、`insight-engine-ums`（被发现的**提供方**）、`insight-engine-starter-nacos`（LB 依赖的装配点）
+- 来源：TD §8.3、PROGRESS §三（2026-09-09 上云实况）/§6.4、本机 Windows + 云服务器 `39.106.110.214` 的实测数据
+- 环境版本（全部实测反查，非推测）：Spring Boot 3.2.x / Spring Cloud 2023.0.x / Spring Cloud Alibaba `2023.0.1.0` / Spring Cloud LoadBalancer `4.1.2` / Nacos Server `2.3.2` standalone
+
+> 目标：① 说清「客户端 LB」和「Nginx 那种服务端 LB」的本质差别；② 把 `uri: lb://insight-engine-ums` 这一行配置**走到真实 socket 的全过程**钉死；③ 用本项目 + 云上真实数据把「名单从哪来、什么时候会失真、摘一个实例要多久」量化；④ 登记本次实测挖出的真实漏洞（含 2 个 P0）。
+
+### 直观类比（延续「公寓楼 + 前台总机」）
+
+- **服务端 LB（Nginx / 云 SLB）**= 全楼只有**一个总机**。所有外部来电都先接到总机，由总机决定转给哪个分机。总机是**流量的必经一跳**：它挂了全楼失联，且它自己得再发一次网络请求才能转给分机。
+- **客户端 LB（Spring Cloud LoadBalancer / 旧 Ribbon）**= **每个打电话的人自己手里有一份分机号名单**。名单从「号码登记处」（Nacos）定期抄一份，放在**自己口袋里（本进程内存）**；拨号时自己挑一个分机直接拨，**中间没有任何中转节点**。
+- 由此推出客户端 LB 的三个特征（面试必答）：**没有必经的集中点**（不会因为 LB 挂而全崩）、**少一跳**（直连提供方）、**代价是每台调用方都要自己维护名单、自己判断健康**。
+
+> 本项目实况：网关（7000）就是"打电话的人"，它口袋里的名单是 `{insight-engine-ums → [172.18.128.1:7101]}`。
+
+#### ⚠️ 先把类比钉到实际组件上（不钉住必绕晕）
+
+上面那套"打电话"的说法最容易让人误以为「请求先到某个 LB 节点，再由它转发」——**这是错的**。逐一对号入座：
+
+| 类比里的角色 | 本项目实际是什么 | 关键澄清 |
+|---|---|---|
+| 「打电话的人」 | **发起这次调用的进程**。当前本项目 = **Gateway（:7000）** | 谁要调别人，谁就是"打电话的人"。**浏览器 → Gateway 那一段不属于 LB 话题**，它只是"外部请求打到入口" |
+| 「口袋里的分机号名单」 | Nacos 注册表里 `insight-engine-ums → [ip:port ...]` 的一份**快照**，缓存在 Gateway **自己进程内存** | 不是每请求都去问 Nacos |
+| 「号码登记处」 | **Nacos**（云上 `:8848`） | 只负责登记 + 推送名单，**不参与"选哪个"** |
+| 「自己挑一个分机直接拨」 | Gateway 进程内的 **Spring Cloud LoadBalancer** | ⚠️ 它是**进程里的一个 Bean（库）**，**不是独立进程/节点**；它只做一件事：把 `lb://服务名` 改写成 `http://真实ip:port`，然后由 Netty **直连**提供方，中间无中转 |
+| 「总机」（服务端 LB） | **Nginx / 云 SLB** —— ⚠️ **本项目当前没有** | 它在本篇只是**拿来对比的"另一种流派"**，不是本项目架构的一部分 |
+
+#### 「谁给谁打」——用一次真实请求走一遍
+
+> **直球答案：谁主动发起这次调用，谁就是"打电话的人"。** 它不是某个固定组件，而是**每次调用里的角色**。
+
+**【例子】前端点「登录」→ `POST /auth/login`，逐段看谁在给谁打电话**
+
+```text
+第 1 段：浏览器 → Gateway(:7000)
+  打电话的人 = 前端 / 浏览器
+  拨的"分机" = 本系统的入口 = Gateway :7000
+  → 【当前】入口只有 1 个，没得挑 → 暂时没有 LB
+  → 【补上 Nginx 后】这一段正是**服务端 LB 的落点**：
+     浏览器打 Nginx，Nginx 在多个 Gateway 实例里挑一个（见「附二」）
+
+第 2 段：Gateway → UMS(:7101)        ★ 客户端 LB 只发生在这一段
+  打电话的人 = **Gateway**（它手里有小本本）
+  它要拨的"部门" = 服务名 `insight-engine-ums`
+  小本本（Gateway 进程内存）里抄着：
+      insight-engine-ums → [ 172.18.128.1:7101 , 172.18.128.1:7102 ]
+  它自己挑一个（轮询：这次拨 7101，下次拨 7102）
+  → 直接拨 POST http://172.18.128.1:7101/auth/login
+  → 全程没有"总机"中转，Gateway 的 Netty 直接连 UMS
+
+第 3 段：UMS → PostgreSQL
+  打电话的人 = UMS
+  "分机" = PG（但 PG 不注册 Nacos、地址写死在 jdbc: 里，**不走 LB**）
+```
+
+> **注意角色的翻转**：同一台 Gateway，在第 1 段里是**被拨的分机**，在第 2 段里却变成了**打电话的人**。角色随调用方向变——这就是「打电话的人是谁」的答案：**看这次调用是谁发起的**。
+>
+> 同理，将来 UMS 调 KB（OpenFeign `lb://insight-engine-kb`）时，**UMS 就是那个"打电话的人"**，KB 是分机。将来 UMS 起 3 个实例，Gateway 的小本本上就有 3 个分机号，才会真的轮询。
+
+#### 两层 LB 分别落在哪一段？（把「哪来的 LB」对号入座）
+
+| 段 | 谁调谁 | LB 出现在哪 | LB 类型 | 本项目现状 |
+|---|---|---|---|---|
+| **第 1 段** | 浏览器 → 网关 | **Nginx**（夹在两者之间） | **服务端 LB** | ⚠️ 未部署；入口只有 1 个 Gateway，故**当前无 LB** |
+| **第 2 段** | 网关 → 业务服务 | **Gateway 进程内部**（SCL） | **客户端 LB** | 已有能力，但只有 1 个 UMS 实例，故**未真正分流** |
+| 第 3 段 | 服务 → 中间件 | 无 | —— | PG/Redis 不注册 Nacos，地址写死，不走 LB |
+
+> **「服务端 LB 体现在哪」的答案：就在第 1 段**——浏览器到网关这一跳。只是本项目现在**没装 Nginx、网关也只有 1 个**，所以这一层是空的。补上 Nginx + 多网关实例后，第 1 段就真正开始做服务端 LB（详见「附二」）。
+>
+> ⚠️ 注意别被"当前不算 LB"误导：它的准确含义是「**LB 该在这一层，但现在还没装**」，而不是「这一层与 LB 无关」。
+
+#### 那为什么要有网关？外部请求为什么不直接打业务服务？
+
+**先分清两个层面（这里最容易被我上一版带偏）**：
+
+| 层面 | 事实 | 结论 |
+|---|---|---|
+| **物理连接** | 浏览器只和网关建立 TCP 连接（一个 `ip:port`），**从不直连 UMS 的 7101** | 连接上「访问的是网关」 |
+| **URL 语义** | 路径 `/api/v1/user/**`、`/api/v1/kb/**` **本身就编码了业务归属**，网关正是靠它匹配路由 | 语义上「访问的确实是那个服务」 |
+
+> **所以你的理解是对的**：`/api/v1/user/**` 就是在访问 UMS，`/api/v1/kb/**` 就是在访问 KB；网关**不是把服务藏起来**，而是**替你解释路径、再把请求转过去**。
+> 不严谨的说法（我上一版就是这么写的，该改）：「外部请求访问的永远是网关，不是某个具体业务服务」——它只对了一半（物理连接），却否认了 URL 里明明白白的服务语义。
+
+**那「有网关」和「没网关」的区别在哪？** 不是「路径里有没有服务语义」（一直都有），而是**「谁来解释这个语义」**：
+
+```text
+没有网关：前端自己解释 → 代码里存 N 个 baseURL
+         baseURL = http://kb:7104   → 访问 /api/v1/kb/xxx
+         baseURL = http://ums:7101  → 访问 /api/v1/user/xxx
+         （前端要记 N 个地址、开 N 次跨域、每个服务各自鉴权）
+
+有网关：  网关解释 → 前端只存 1 个 baseURL
+         baseURL = http://gateway:7000
+                    路径 /api/v1/kb/xxx   → 网关按前缀转给 kb:7104
+                    路径 /api/v1/user/xxx → 网关按前缀转给 ums:7101
+         （前端只记 1 个地址；跨域、鉴权、traceId 统一在网关做）
+```
+
+**一句话**：**物理上只连网关，语义上确实在访问某个服务；路径里的服务语义一直是路由的依据**——没有网关时由前端解释，有网关时由网关解释。网关的"唯一入口"体现在**连接**，不体现在**语义**。
+
+**网关（`insight-engine-gateway`）的实际职责** = **"唯一大门 + 门卫 + 分拣员"**：
+
+1. **认证**：校验 JWT / `sk-` API Key（`AuthGlobalFilter`）——未登录直接 401，**请求根本到不了业务服务**；
+2. **路由**：读 URL 路径前缀决定转给谁（`/auth/**`→UMS、`/api/v1/kb/**`→KB…）——**路径即路由依据**；
+3. **traceId**：`TraceGlobalFilter` 给每个请求打链路 ID；
+4. **CORS**：统一处理跨域（前端不必逐服务去开）；
+5. **限流**：`RateLimitGlobalFilter`（规划中）；
+6. **防伪造**：剥离客户端伪造的身份头，再注入可信身份头。
+
+#### 依赖、`lb://`、Nacos 三者各管什么？（回答"导依赖时 lb 就在里面吗"）
+
+**不是"导进来就生效"。** 三样东西分工完全不同：
+
+| 东西 | 提供什么 | 缺了会怎样 |
+|---|---|---|
+| `spring-cloud-starter-loadbalancer`（**依赖**） | 把 LB 的**类/能力**装进进程 → 处于**待命**状态 | 遇到 `lb://` 直接失败（**不会**退化成直连） |
+| `lb://`（配置里的 **scheme**） | **开关**：告诉网关"这条路由要走服务发现" | 写成 `http://ip:port` 就完全绕过 LB，名单/轮询一律不参与 |
+| **Nacos**（注册中心） | **名单**（谁在哪、谁健康） | 名单为空 → 503（"LB 正常但没有可选实例"） |
+
+> 准确的说法：**依赖是造好的车，`lb://` 是点火钥匙，Nacos 是地图。** 三者缺一，第 2 段都跑不起来。本项目三者都在（见第三、四节）。
+
+**本项目当前完整链路（本机开发，全对得上）**：
+
+```
+浏览器 / 前端(:7200)
+      │  HTTP
+      ▼
+Gateway(:7000)   ← 唯一入口，本项目这里没有 Nginx
+      │  ┌─ 在 Gateway 进程内部发生"客户端 LB" ────────────┐
+      │  │  ① 见到 uri=lb://insight-engine-ums            │
+      │  │  ② 从本进程内存的名单缓存取候选：[172.18.128.1:7101] │
+      │  │  ③ 策略选一个 → 改写成 http://172.18.128.1:7101/xx │
+      │  └──────────────────────────────────────────────┘
+      ▼  Netty 直接建 TCP（无中间节点）
+UMS(:7101)
+      │
+      ▼
+PG / Redis（云上）
+```
+
+**两个必须掰开的点**：
+
+1. **本项目没有 Nginx**。Nginx 在本篇只作"服务端 LB"对照组出现（PRD/TD 里提到它，是给**将来生产部署**托管前端静态产物 + 多网关实例入口用的）。即便将来加上，它也是坐在 Gateway **前面**，**不替代** Gateway。
+2. **不存在「请求先到 LoadBalancer、再由 LB 转发」这种物理跳转**。LB 是 Gateway 进程内的一段逻辑：**改写目标地址**。真正发网络请求的始终是 Gateway 的 Netty 客户端。
+3. 两种 LB 会**同时存在于不同层**，不是二选一：`用户 → Nginx/SLB（服务端 LB，选 Gateway 实例）→ Gateway（客户端 LB，选 UMS 实例）→ UMS`。本项目现在只有后一段，且后一段只有 1 个实例，所以连"分流"都还没发生（见本节末「附」）。
+
+### 一、两种 LB 对照表（含"什么时候必须用哪个"）
+
+| 维度 | 服务端 LB（Nginx / 云 SLB） | 客户端 LB（SCL，本项目） |
+|---|---|---|
+| 谁做选择 | 独立的 LB 进程/设备 | **调用方 JVM 进程内**的一个 Bean |
+| 名单放哪 | LB 自己维护（或联动注册中心） | 调用方本地缓存（从注册中心订阅而来） |
+| 数据路径 | 客户端 → LB → 提供方（**两跳**） | 客户端 → 提供方（**一跳**） |
+| 故障域 | LB 是单点/集中瓶颈 | 分散；某调用方名单脏只影响它自己 |
+| 改端口语义 | 只需改 LB 配置 | 提供方端口变化会进名单，需同步（→ 见第八节 P1，Nacos 2.x 端口 1:1 的原因） |
+| 跨语言 | 无关（纯 TCP/HTTP 转发） | 每种语言要各自实现（无 JVM 就没有它） |
+| 适合 | 南北向入口（用户 → 系统） | 东西向内部调用（服务 → 服务） |
+
+> 本项目的分工正是这个模型：**用户 → 网关（入口，将来可再套一层 Nginx/SLB 做 TLS 与多网关实例）→ 网关用客户端 LB 找 UMS**。
+
+### 二、`lb://服务名` 是怎么变成真实 IP:端口的（八步，全对得上本项目）
+
+以实测通过的 `GET :7000/doc.html` 为例：
+
+```
+① Netty 收到请求（gateway 是 WebFlux/Netty 栈，不是 Tomcat）
+② RoutePredicateHandlerMapping 按声明顺序评估谓词 → 命中 id=insight-engine-ums 那条 Route
+   （此刻目标 uri 仍是字符串 lb://insight-engine-ums，还不知道要发给谁）
+③ 进入合并后的全局过滤器链：TraceGlobalFilter(写 X-Trace-Id) → AuthGlobalFilter(鉴权) → ...
+④ RouteToRequestUrlFilter：把 Route 的 uri 原样搬进 exchange 属性 GATEWAY_REQUEST_URL_ATTR
+   → 值仍是 lb://insight-engine-ums/doc.html
+⑤ ReactiveLoadBalancerClientFilter：判断 scheme == "lb" 才生效，做三件事
+   a. LoadBalancerClientFactory.getInstance("insight-engine-ums") 拿到该服务专属的 LB 实例
+   b. lb.choose(request) → ServiceInstanceListSupplier.getInstances()
+      → NacosDiscoveryClient 从**本地名单快照**返回 List<ServiceInstance>
+   c. 把选中的实例写回 GATEWAY_REQUEST_URL_ATTR：http://<ip>:<port>/doc.html
+      并塞入 GATEWAY_SERVICE_INSTANCE 属性
+⑥ NettyRoutingFilter：看到 http scheme，用真正的 HttpClient 发出请求 → 建立 TCP 连接
+⑦ UMS 响应回来，过滤器链逆序走完剩余部分
+⑧ 响应回浏览器：200 + X-Trace-Id（实测 86ms / 37ms）
+```
+
+**三个必背结论**：
+
+1. **「查号」和「选号」是两件事**：Nacos 只负责给名单（谁是健康的、在哪），**选哪个是调用方进程内的 LB 算法决定的**，Nacos 无权也不参与选择。
+2. **LB 只改写 URI，不搬字节**：第 ⑥ 步起，业务流量是**网关直连 UMS**，中间没有 LB 节点。所以「LB 挂了会怎样」这题的答案是：*客户端 LB 不是一个进程，它只是一个库；它"挂"等于调用方自己挂*。
+3. **scheme 决定命运**：`http://localhost:7101` 会被 ⑤ 直接跳过（不查名单、负载均衡无从发生）；只有 `lb://` 才走服务发现。这也是「代码里改成 lb:// 后行为差别在哪」的准确回答。
+
+对照本项目代码（配置就一行）：
+
+```yaml
+30:35:insight-engine-modules/insight-engine-gateway/src/main/resources/application.yml
+      routes:
+        - id: insight-engine-ums
+          # 经 Nacos 服务发现负载均衡（2026-09-09 接入，原为 http://localhost:7101 直连）
+          uri: lb://insight-engine-ums
+          predicates:
+            - Path=/auth/**,/api/v1/user/**,/api/v1/role/**,/api/v1/permission/**,/doc.html,...
+```
+
+### 附：本项目「到底均衡到哪几台机器」？（—— 配置里为什么看不到 IP）
+
+**这是读 `uri: lb://insight-engine-ums` 时最容易卡住的一点：配置文件里永远不会出现 IP，因为它写的不是「地址」，而是「服务名」。**
+
+- **配置里那串东西是什么**：`lb://insight-engine-ums` 中的 `insight-engine-ums` 是**服务名**（= 提供方 `spring.application.name`），既不是主机名、更不是 IP。所以你在 yml 里**翻不到「均衡到哪几台」——那儿本来就没有**。
+- **真正的机器清单在哪**：在 **Nacos 注册表**里。每个提供方实例启动时把自己 `ip:port` 注册进去，运行时动态增删；调用方（网关）启动后从 Nacos 拉一份快照缓存在**自己进程内存**里。要看清单，**去问 Nacos，不要看 yml**：
+
+```bash
+curl "http://<nacos>:8848/nacos/v1/ns/instance/list?serviceName=insight-engine-ums"
+```
+
+**2026-09-09 实测的本项目真实清单**（这就是「均衡到哪几台」的答案）：
+
+| 服务名（写进配置的） | 实例数 | 实例地址（Nacos 里的） | 进程实际跑在哪 | 谁在用 |
+|---|---|---|---|---|
+| `insight-engine-ums` | **1** | `172.18.128.1:7101` | **开发机本机**（`idea64.exe` 拉起的 `java.exe`） | 网关 `lb://` 的**唯一**候选 |
+| `insight-engine-gateway` | 1 | `172.18.128.1:7000` | 同上（本机） | 无；它是纯消费方，注册进来只污染名单（第八节 P2-1） |
+
+> 云服务器 `39.106.110.214` 上**只跑中间件**（PG `5433` / Redis `6380` / Nacos `8848`），**没有跑任何微服务**（云主机 `7000/7101` 端口探测不通）。所以「几台机器」目前是**一台开发机**，不是云上集群。
+
+**由此得到三个能直接解开这个困惑的结论**：
+
+1. **现在根本没有发生「均衡」**：UMS 只有 1 个实例，轮询候选集只有 1 个元素，「轮询」退化成「固定打这一台」，效果与直连 `http://localhost:7101` 完全相同。**看不出负载均衡是正常的，不是配置写错了。**
+2. **`lb://` 此刻的价值不在「分流」，而在「解耦地址」**：它把「网关要去哪台 UMS」从**编译期 / 配置期**挪到了**运行时**。以后 UMS 换端口、加实例、上云，**网关的 yml 一个字都不用改**。这也解释了为什么第八节 P0-1（注册 IP 落在虚拟网卡）一上云就炸，而 `lb://` 这一行本身**并没有配错**——错的不是配置，是实例自报的地址。
+3. **什么时候能看到真轮询**：起 2 个 UMS 实例（本机再开一个 `-Dserver.port=7102` 副本，或云上起两个容器），两者注册**同一个服务名** → 网关 `lb://` 的候选集变成 2 个 → 连打即可看到交替命中。验证配方见第七节 ⑤（当前 ⚪ P3 待做）。
+
+### 附二：补齐 Nginx 后的生产完整链路（两层 LB 全景）
+
+> 上一节「附」讲的是**当前实况**（单机、无 Nginx、单实例）。本节是**学习目标态 + 项目演进方向**：把 Nginx 那一层补上以后，整条链路长什么样、每一跳谁在干活，一次钉死。
+
+#### 全景图：从用户到数据库
+
+```text
+                        用户 / 浏览器
+                             │ HTTPS :443
+                             ▼
+                  ┌──────────────────────┐
+   ★ 第 1 层 LB → │  Nginx（/ 云 SLB）    │ ← 服务端 LB（南北向入口）
+   （服务端）     │  · TLS 终止           │    选一个 Gateway 实例
+                  │  · 托管前端静态产物    │    Nginx 是"必经一跳"（两跳模型）
+                  │  · 限流 / 压缩        │
+                  └──────────────────────┘
+                             │ http（内网）
+           ┌─────────────────┼─────────────────┐
+           ▼                 ▼                 ▼
+      Gateway-1         Gateway-2         Gateway-3     ← 无状态网关集群
+           │
+           │  ★ 第 2 层 LB：客户端 LB（在 Gateway 进程【内】，不是一个节点）
+           │    uri = lb://insight-engine-ums
+           │    ① 取名单（来自 Nacos，已缓存在本进程内存）
+           │    ② 按策略选一个 → 改写为 http://<ip>:<port>
+           │    ③ Netty 直连提供方，中间无节点
+           │
+     ┌─────┼─────┐
+     ▼     ▼     ▼
+   UMS-1  UMS-2  UMS-3    ← 业务服务集群（注册同一个服务名）
+     │
+     ▼
+  PG / Redis / RabbitMQ（云上；不注册 Nacos，地址写死）
+
+               ┌──────────────────────────────┐
+               │  Nacos：全场的"号码登记处"     │
+               │  · 收各实例注册               │
+               │  · 向 Gateway / OpenFeign 发名单 │
+               │  （名单的写权 = 流量分配权）    │
+               └──────────────────────────────┘
+```
+
+#### 每一跳逐个说清
+
+| 跳 | 从 → 到 | 谁在做"选择" | 走 Nacos 吗 | 说明 |
+|---|---|---|---|---|
+| ① | 用户 → Nginx | Nginx（**服务端 LB**） | 取决于上游方案 | TLS 在此终止；**前端静态资源由 Nginx 直接返回，根本不到后端** |
+| ② | Nginx → Gateway 实例 | Nginx（**服务端 LB**） | 可能 | 选一个网关实例；网关无状态，可水平扩 |
+| ③ | **Gateway 进程内部** | **客户端 LB（SCL）** | **是**（名单来源） | 只做一件事：把 `lb://服务名` 改写成 `http://ip:port` |
+| ④ | Gateway → UMS 实例 | 同 ③ | 同 ③ | 真正的业务流量，Netty 直连 |
+| ⑤ | UMS → KB / Agent … | 客户端 LB（OpenFeign） | 是 | 服务间调用同样走 `lb://` |
+
+**核心一句**：**LB 不是某一台机器，而是出现在两个不同层次的同一个概念**——
+
+- **第 1 层（Nginx）**：LB 是一个**独立进程**，坐在请求路径上，**必须经过它**（两跳）。
+- **第 2 层（Gateway 内的 SCL）**：LB 是**进程内的一段逻辑**，不在请求路径上，**不产生额外一跳**。
+
+#### 为什么不直接用 Nginx 干完所有事？（面试高频）
+
+因为两者解决的是**不同方向**的问题：
+
+| 能力 | Nginx / SLB | Gateway |
+|---|---|---|
+| TLS 终止 / 静态资源 | ✅ 强项 | ❌ 不适合 |
+| 南北向入口（用户→系统） | ✅ | ✅ |
+| JWT 鉴权 / 用户上下文 | ❌ 弱 | ✅（`AuthGlobalFilter`） |
+| 按业务路径路由到 N 个微服务 | ❌ 只能硬配 path，与 Spring Cloud 生态脱节 | ✅（Route/Predicate） |
+| traceId / CORS / API Key 分流 | ❌ | ✅ |
+| **服务实例动态上下线感知** | ⚠️ 需插件 | ✅ 原生订阅 Nacos |
+
+> 一句话：**Nginx 管"从外到内的门"，Gateway 管"进来之后怎么分发到各业务服务"。** Nginx 不认识业务服务，它只负责 TLS + 静态资源 + 把流量交给网关集群。
+
+#### Nginx 怎么知道有哪些 Gateway 实例？（三种做法）
+
+| 方案 | 机制 | 适合 |
+|---|---|---|
+| A. 静态 upstream | `upstream gateway { server g1:7000; server g2:7000; }` | 网关实例少且稳定；改实例要 reload |
+| B. 动态上游 | OpenResty/Kong/APISIX + Nacos 插件，或 `nginx-upsync-module` | 网关实例频繁扩缩容 |
+| C. K8s Ingress | nginx-ingress 监听 Service/Endpoints 自动更新上游 | 上了 K8s（PRD §17.3 Helm 方案） |
+
+本项目 PRD §17 的定位是 **Nginx 主要托管前端静态产物 + 443 入口**，网关集群规模小，**方案 A 足够**；将来上 Helm/K8s 自然转方案 C。
+
+#### 本项目补齐 Nginx 的落地步骤（将来照这个走）
+
+1. 前端 `dist` 交 Nginx 托管（`root /usr/share/nginx/html` + `try_files $uri /index.html` 兜底 SPA 路由）；
+2. `location /api/ { proxy_pass http://gateway_upstream; }` → 前端**不再直连 7000**，改走同源 443（**顺带消除跨域**，`globalcors` 可转生产白名单）；
+3. 透传 `X-Forwarded-For` / `X-Forwarded-Proto`（网关侧 traceId 与 IP 限流要用）；
+4. 起 2 个网关实例（`-Dserver.port=7001`）验证**第 1 层 LB 真在轮询**；
+5. 同步 TD §8.3 / DEVGUIDE「前端入口地址 + 启动方式」（P18 三处同步纪律）。
+
+### 三、这条链路需要哪些依赖（本项目实况 + 一个纠正我自己的点）
+
+#### 为什么"现在必须显式导 LB 依赖"——这是一条版本分界线
+
+**你的记忆没错：以前不用导，现在要导。** 分界线是 **Spring Cloud 2020.0.0（Ilford，2021-01）**：
+
+| 时代 | 负载均衡实现 | 依赖从哪来 | 要不要手写 |
+|---|---|---|---|
+| Spring Cloud ≤ Hoxton（对应 SC Alibaba 2.2.x） | Netflix **Ribbon** | **由 discovery starter 传递引入**（`eureka-client` / `nacos-discovery` 都带） | ❌ 不用写，`lb://` 开箱即用 |
+| Spring Cloud **2020.0.0** 起 | **Spring Cloud LoadBalancer（SCL）** | Ribbon 被整个 release train 移除（同批移出的还有 Hystrix / Zuul）；**SCL 不再由 discovery starter 传递提供** | ✅ **必须显式声明** |
+| 本项目（Spring Cloud 2023.0.x + SC Alibaba **2023.0.1.0**） | SCL **4.1.2** | `spring-cloud-starter-alibaba-nacos-discovery` **不传递** loadbalancer | ✅ 已在 `starter-nacos` 显式声明（见下） |
+
+依据：Spring Cloud 2020.0 Release Notes 原文「Support for ribbon, hystrix and zuul was removed across the release train projects」；官方 LoadBalancer 文档亦要求「添加 `spring-cloud-starter-loadbalancer`」。
+
+> ⚠️ **升级时最容易踩的坑**：从 Ribbon 迁到 SCL 却没加这个依赖，症状是 **`lb://` 直接失败**（`Load balancer does not have available server for client: xxx` / 503），**而不是**静默回退成直连——很多人会误判成"服务没注册上"。
+
+#### 那 gateway 需要自己写这一条吗？——不需要，统一在 starter 里声明
+
+**本项目是在 starter 里显式声明的**（不是靠传递依赖），所以 **gateway / ums 各自 pom 里都不写这一条**：
+
+```xml
+41:46:insight-engine-starter/insight-engine-starter-nacos/pom.xml
+        <!-- 客户端负载均衡：lb://service-name 解析必需（网关路由 / RestTemplate / WebClient）。
+             Spring Cloud Alibaba 2023.0.1.0 的 nacos-discovery 不再传递引入，需显式声明。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+```
+
+- 依赖链：`gateway/pom.xml`（L36-40 引 `insight-engine-starter-nacos`）→ starter 引 `nacos-discovery` + `nacos-config` + `spring-cloud-starter-loadbalancer` → **版本全部由父 BOM 锁定，模块 pom 不写 `<version>`**（呼应「Maven 多模块」篇）。
+- **少了 LB 依赖会怎样**：第 ⑤ 步拿不到 `ReactorLoadBalancer`，转发直接失败（表现为 5xx / 日志报找不到实例或无可用服务器），而**不是**回退成直连。所以"503 到底是名单空还是没依赖"要分开看：名单空是「LB 正常但 choose 返回 none」，缺依赖是「根本没有 LB」。
+- 反查真实 classpath 的手段（本次实测用的，比看 pom 更硬）：
+
+```powershell
+# 从打好的 fat jar 里读 BOOT-INF/lib，看 LB 相关依赖的真实版本
+tar -tf target\insight-engine-gateway-1.0.0-SNAPSHOT.jar | Select-String "(?i)loadbalancer|nacos-discovery"
+# 实测输出：
+#   BOOT-INF/lib/spring-cloud-starter-loadbalancer-4.1.2.jar
+#   BOOT-INF/lib/spring-cloud-loadbalancer-4.1.2.jar
+#   BOOT-INF/lib/spring-cloud-starter-alibaba-nacos-discovery-2023.0.1.0.jar
+#   BOOT-INF/lib/spring-cloud-starter-alibaba-nacos-config-2023.0.1.0.jar
+```
+
+- **Ribbon 为何退场**（高频追问）：① Spring Cloud 2021 起 Netflix 系组件（Ribbon/Hystrix/Zuul1/Turbine）集体停止维护并移出主线；② Ribbon 是**阻塞式** API，而网关是 WebFlux/Netty 响应式栈，需要 `ReactorServiceInstanceLoadBalancer` 这种返回 `Mono<ServiceInstance>` 的实现；③ SCL 轻量、与 `spring-cloud-commons` 的 `ServiceInstanceListSupplier` 抽象配套，可插拔（能换 supplier 做灰度/同机房优先）。**结论口径**：本项目用 SCL 4.1.2，是因为栈本身是响应式的，不是"追新"。
+
+### 四、名单的真实样貌：把「5s/15s/30s」从听说变成实测
+
+我用 Nacos 的 HTTP API 直接把云上注册表原样取出来（**这比控制台截图更有说服力，面试可以直接背字段名**）：
+
+```bash
+curl "http://<nacos>:8848/nacos/v1/ns/instance/list?serviceName=insight-engine-ums"
+curl "http://<nacos>:8848/nacos/v1/ns/service/list?pageNo=1&pageSize=100"
+curl "http://<nacos>:8848/nacos/v1/console/server/state"      # 看版本 + auth_enabled
+curl "http://<nacos>:8848/nacos/v1/console/namespaces"         # 看命名空间与配置数
+```
+
+2026-09-09 实测拿到的字段（本项目 UMS 实例）：
+
+| 字段 | 实测值 | 含义 / 与 LB 的关系 |
+|---|---|---|
+| `ip` / `port` | **`172.18.128.1`** / `7101` | LB 第 ⑤ 步选出来就拨这个地址 → **本案例的 P0 漏洞点**（见第八节） |
+| `healthy` | `true` | LB 只看健康名单；被标 `false` 就不进候选集 |
+| `enabled` | `true` | 手工在控制台「下线」改的是它（人工摘流，不动心跳） |
+| `weight` | `1.0` | 服务端记录的权重；**注意 SCL 默认策略并不读它**（第五节） |
+| `ephemeral` | `true` | **临时实例**：客户端主动心跳（本模型）；`false` 是持久实例，由服务端主动探活 |
+| `instanceHeartBeatInterval` | `5000` | 客户端每 **5s** 发一次心跳 |
+| `instanceHeartBeatTimeOut` | `15000` | **15s** 无心跳 → 标 unhealthy → 从 LB 候选集消失 |
+| `ipDeleteTimeout` | `30000` | **30s** 无心跳 → 从注册表**删除** |
+| `metadata.preserved.register.source` | `SPRING_CLOUD` | 证明是 Spring Cloud 自动注册的（不是手工 API 注册的） |
+| `cacheMillis` | `10000` | 服务端告诉客户端"这份快照你至少可以缓存 10s"→ **名单天生不是实时真相** |
+
+**活体实验（本次亲手复现，很值得讲）**：IDEA 里把网关/UMS 停掉 → 心跳中断 → 约 30s 后再查：
+
+```
+{"name":"DEFAULT_GROUP@@insight-engine-ums", ..., "hosts":[], "cacheMillis":10000}
+{"count":0,"doms":[]}          # 服务记录本身也没了（临时实例全删后服务不可见）
+```
+
+**时延叠加链（"摘掉一个实例到底要多久"的标准答案）**：
+
+```
+提供方进程死掉
+  → 0~15s：Nacos 服务端仍认为 healthy（窗口内调用方可能仍选中它 → 连接失败/502）
+  → 15s：标 unhealthy，不再进健康名单
+  → +推送/轮询到客户端 + Nacos client 本地缓存(cacheMillis=10s 量级)
+  → +调用方 LB 自己的名单缓存（默认几十秒量级，可配 spring.cloud.loadbalancer.cache.ttl）
+  → 30s：服务端彻底删除
+```
+
+> **这就是"客户端 LB 必然踩到脏名单"的根因**：链路上每一环都在缓存快照。所以**光靠 LB 摘除不够，必须有重试 / 熔断兜底**（→ 待学「熔断降级」篇正好接上）。
+
+### 五、选中哪个实例：策略、权重、以及本项目的一个"待你自证"分歧
+
+**本项目的配置现状 = 什么都没配**：`application.yml` 里没有任何 `spring.cloud.loadbalancer.*`，因此走 SCL 默认 —— 轮询。要显式钉死是这样：
+
+```yaml
+spring:
+  cloud:
+    loadbalancer:
+      retry:
+        enabled: true          # 换实例重试（与"脏名单窗口"直接相关；配 Retry 全局过滤器才生效）
+      cache:
+        ttl: 5s                # 默认几十秒量级；调小=更快看到新实例，代价是查询更密
+        capacity: 256
+      health-check:
+        refetch-instances: true  # 主动探活再过滤（默认关，靠注册中心的 healthy 标记）
+```
+
+三种常用策略（`RoundRobinLoadBalancer` / `RandomLoadBalancer` / 自定义）与**换策略的机制**：
+
+```java
+// SCL 没有 yml 开关，必须用「每个服务名一个子上下文」的方式注册 Bean
+@Configuration(proxyBeanMethods = false)
+public class UmRandomConfig {                     // ⚠️ 这个类不能被 @ComponentScan 扫到
+    @Bean
+    public ReactorLoadBalancer<ServiceInstance> umLoadBalancer(
+            Environment env, LoadBalancerClientFactory factory) {
+        String name = factory.getInstanceId();     // ← "insight-engine-ums"
+        return new RandomLoadBalancer(factory.getLazyProvider(name, ServiceInstanceListSupplier.class), name);
+    }
+}
+// 绑定方式（二选一）：
+//   A. 代码：自定义 LoadBalancerClientConfiguration 覆写 getClientConfiguration(name)
+//   B. 配置：spring.cloud.loadbalancer.configurations=random（全局）
+//            spring.cloud.loadbalancer.<service-name>.configurations=... （按服务）
+```
+
+**权重与灰度（真实系统必问，也是本项目最容易答错的点）**：
+
+- 注册中心里的 `weight=1.0` **不会被 SCL 默认策略读取**（`RoundRobinLoadBalancer` 只看列表顺序循环）。要让权重生效，必须自定义 `ServiceInstanceListSupplier`，从 `ServiceInstance.getMetadata().get("nacos.weight")` 读出来自己做加权。
+- 本项目的**灰度落点**（将来做时照这个思路，别写"改改 Nacos 权重就行"）：UMS 实例注册时带 `metadata: {version: v2}`，网关侧自定义 supplier 按「请求头 `X-Tenant-Gray: true` → 只保留 `version=v2` 的实例」过滤，命中不到就回退全量。这比加权更可控、可回滚。
+- **同机房/同集群优先**：Nacos 侧靠 `cluster-name`（`spring.cloud.nacos.discovery.cluster-name`），配合上面的自定义 supplier 实现"先同集群、集群内空了再跨集群"。
+
+**⚠️ 一个我实测没能确认、必须你自己验的分歧点**（诚实记录，别背我的结论）：
+
+`spring-cloud-starter-alibaba-nacos-discovery` 自带 `NacosLoadBalancer` + 其自动配置，与 SCL 的 `RoundRobinLoadBalancer` 都是 `@ConditionalOnMissingBean` 语义，**谁生效决定你的默认策略到底是哪个**：
+
+| 如果生效的是 | 行为差别 |
+|---|---|
+| SCL `RoundRobinLoadBalancer` | 纯轮询；健康过滤依赖 **Nacos 客户端** `selectInstances(healthy=true)` |
+| Alibaba `NacosLoadBalancer` | 也是轮询，但**在 LB 层**过滤 `healthy` + **同 cluster 优先** |
+
+验证方法（1 分钟，任选）：
+1. IDEA 里给网关加 VM 参数 `-Ddebug=true`，启动日志搜 `NacosLoadBalancerClientConfiguration` 是 `Matched` 还是 `did not match`；
+2. `mvn -o dependency:tree -Dincludes=*:*loadbalancer*,com.alibaba.cloud:*`（注意：本次我在本机没定位到 Maven 本地仓库实际路径 —— `~/.m2` 下只有 `wrapper`，说明仓库被配到了别处，这本身也是第八节 P1 的一个线索）；
+3. 起两个实例（其中一台在控制台标"下线"），连打 10 次看是否只命中健康那台。
+
+> 为什么值得较真：面试答"unhealthy 实例由 LB 过滤"是对的，但**在哪一层过滤**（LB 层 / Nacos 客户端层）才区分背书和真懂。
+
+### 六、本地代码 + 云上配置的实况对照（2026-09-09 全部实测）
+
+| 项 | 实况 | 证据 |
+|---|---|---|
+| Nacos 服务端 | `2.3.2` standalone，**`auth_enabled=false`**、`login_page_enabled=false` | `/v1/console/server/state` |
+| 命名空间 | 只有 `public`，`configCount=0`（**配置中心未真启用**，与 `import-check.enabled: false` 一致） | `/v1/console/namespaces` |
+| 服务名单 | 曾同时有 `insight-engine-ums` + `insight-engine-gateway`（均 `DEFAULT_GROUP`） | `/v1/ns/service/list` |
+| 实例地址 | `172.18.128.1:7101` = **本机 Windows 的 `vEthernet (Default Switch)` 网卡**（真实局域网 IP 是 `192.168.1.44`/WLAN） | `Get-NetIPAddress` |
+| 谁在跑 | 服务跑在**开发机**（由 `idea64.exe` 拉起的 `java.exe`）；云主机 `7000/7101` 端口探测**不通**，`8848/9848/5433/6380` **通** | `Test-NetConnection` + 进程父子关系 |
+| `lb://` 是否真生效 | **生效**：`GET :7000/doc.html` → `200` + `X-Trace-Id`；对照 `:7000/api/v1/kb/anything` → `404`（谓词不匹配、不误转）；`:7000/api/v1/user/current` → `{"code":"2001",未登录}`（Auth 在 LB 之前拦，符合 TD §8.3 链序） | 本机 curl |
+| 地址注入 | 两端都是 `server-addr: ${NACOS_ADDR:127.0.0.1:8848}`（gateway L17/L21、ums L20/L24）；但**实测 `NACOS_ADDR` 系统环境变量未设置、`application-local.yml` 无 nacos 行、`.idea/*.xml` 搜不到** → 只能来自启动那个 shell 的临时注入（详见第八节 P1-1） | 逐处 grep + 环境变量 |
+| compose 与云上漂移 | compose 里 nacos 有 `MODE=standalone`、`NACOS_AUTH_ENABLE: "false"`、`JVM_XMS/XMX=256m`、`8848/9848` **1:1**（注释已写明 1:1 的原因）；但**缺 `NACOS_SERVER_IP`**，而 PROGRESS §三 记的云上实况是手工 `docker run` 且额外带了 `-e NACOS_SERVER_IP=<公网IP>` | `docker-compose.yml` L103-130 |
+
+### 七、可复用的验证配方（下次自己跑一遍，别信笔记）
+
+```bash
+# ① 名单与心跳参数（LB 的唯一真相来源）
+curl "http://<nacos>:8848/nacos/v1/ns/instance/list?serviceName=insight-engine-ums"
+# ② 停掉提供方，等 30s 再跑 ① → hosts 应变为 []，service/list count 归 0
+# ③ 端到端证明 lb:// 在转发（有 X-Trace-Id 就说明整条链走通）
+curl -i "http://localhost:7000/doc.html"
+# ④ 反查 classpath 里的 LB 版本
+tar -tf <module>/target/<artifact>.jar | grep -i loadbalancer
+```
+
+```powershell
+# ⑤ 多实例轮询实测（当前只有单实例，这条是你还欠的验证）
+#    保留 7101，再起一个副本（IDEA 复制 Run Configuration，改这两项）
+-Dserver.port=7102  -DNACOS_ADDR=<nacos-host>:8848
+#    连打 12 次，看 UMS 日志里 7101/7102 是否交替命中
+1..12 | ForEach-Object { curl.exe -s -o NUL -w "%{http_code} " http://localhost:7000/doc.html }
+#    再验脏名单：停掉 7102 后立刻连打，观察是否仍被选中一小段时间（15s/30s + 各级缓存）
+```
+
+> 注意：副本仍会注册 `172.18.128.1`（同一块虚拟网卡），本机测通**不代表**云上多机部署也通 —— 见第八节 P0-1。
+
+### 八、本次实测挖出的漏洞清单（**只登记，未改代码；标「待评审」的需按 DEVGUIDE §5.2 走配置项变更**）
+
+> 2026-09-16 同步：P0-1 / P0-2 / P1-1 / P1-2 / P2-1 已登记进 `PROGRESS.md §五「云上 Nacos 安全加固」`（保证「开工四必读」可见）；P2-2 注释已修、P2-3 PROGRESS 状态已修。
+
+| 级别 | 问题 | 证据 | 修法 |
+|---|---|---|---|
+| 🔴 P0-1 | **注册 IP 落在虚拟网卡** `172.18.128.1`（`vEthernet (Default Switch)`）。现在能用只是因为网关和 UMS 在同一台 Windows 上、服务监听 `::`；**UMS 一上云/进容器就必炸**，症状是「名单里有实例且 healthy=true，但请求 502/连接超时」 | Nacos 名单 + `Get-NetIPAddress` | 三选一：① `spring.cloud.nacos.discovery.ip: ${INSIGHT_REGISTER_IP:}` 显式指定（**待评审**：新配置项要同步 `.env.example`/`.env.online.example`/TD §18.6）；② `spring.cloud.inetutils.preferred-networks: 192.168.` / `ignored-interfaces: vEthernet.*`；③ 容器化用 `--network host` 或显式 `ip` + 端口映射 |
+| 🔴 P0-2 | **公网可达的注册中心 + 未开鉴权 = 客户端 LB 的名单可被投毒**（这是 LB 主题下的安全问题，不是泛泛的"记得加鉴权"）。我**没带任何凭据**就读到了名单与心跳参数，读通即写通 | `auth_enabled=false` + 8848/9848 公网 True + API 原样返回 | ① Nacos 开 `NACOS_AUTH_ENABLE=true` + `NACOS_AUTH_TOKEN`(≥32B base64)/`NACOS_AUTH_IDENTITY_KEY`/`_VALUE`，客户端配 `username/password`；② 安全组把 8848/9848 收敛到「云主机内网 + 开发机固定出口 IP」，禁止 `0.0.0.0/0`；③ 开发期更优：**SSH 隧道**（`ssh -L 8848:127.0.0.1:8848 -L 9848:127.0.0.1:9848 root@<host>`），yml 保持默认 `127.0.0.1:8848`，**顺带把 P1-1 一起解决**；④ 与 PROGRESS §五 既有红线（云凭据入 git 历史、PG/Redis 公网可达）作为同一批债务处理 |
+| 🟠 P1-1 | **`NACOS_ADDR` 注入路径不可追溯**：yml 默认值是 `127.0.0.1:8848`，但实例注册到了公网那台 Nacos → 说明靠启动 shell 的临时环境变量。换终端/重开 IDEA/换机器会**静默退回 127.0.0.1**，表现为"代码没问题却 503 了"（实测观测期间 PID 已换过一轮） | 逐处 grep + `[Environment]::GetEnvironmentVariable` + `.idea/*.xml` | 固化到 `application-local.yml`（已 gitignore）的 `spring.cloud.nacos.discovery.server-addr`，或写进 IDEA Run Configuration 环境变量；并把「启动方式」写进 DEVGUIDE 启动章节（对齐既有纪律：改配置必须同步 yml **+ 启动方式**） |
+| 🟠 P1-2 | **compose 与云上 `docker run` 漂移**（P17 老毛病复发）：`docker-compose.yml` L103-130 缺 `NACOS_SERVER_IP`，而云上实配有。哪天用这份 compose 重建 Nacos → 自报地址变容器网段 IP → 整条服务发现挂 | compose vs PROGRESS §三 实况 | 出一份 `docker-compose.cloud.yml`（或在 compose 顶部注释指向权威定义），把 `NACOS_SERVER_IP` / 鉴权 / 堆参数差异显式化 |
+| 🟡 P2-1 | **网关自己注册进名单**（`insight-engine-gateway` :7000）。它是纯消费方，注册只会污染名单、多留心跳负载 | `service/list` 曾返回 2 个服务 | 网关加 `spring.cloud.nacos.discovery.register-enabled: false`（只订阅不注册），或明确写出"谁会发现网关" |
+| 🟡 P2-2 | **注释与实况矛盾**：`gateway/pom.xml` L22 仍写「路由目标当前直连 `localhost:7101`，Nacos 接入后改 `lb://`」，而 yml L33 已是 `lb://` | 两处对读 | ✅ 已修（2026-09-16）：注释改为现状（`lb://`，注明 2026-09-09 接入） |
+| 🟡 P2-3 | **PROGRESS 状态过期**：§6.4/§六/§七 Top3 仍记「8848/9848 被云安全组阻塞、注册实机验证待做」，实测已放行且注册早成功 | 端口探测 + 名单 | ✅ 已修（2026-09-09）：「上云对话」已更新 PROGRESS §一/§6.4/§七/§八 为「验证通过」 |
+| ⚪ P3 | **单实例 → 轮询无从验证**；且 `namespace` 只有 `public`（未做 dev/test/prod 隔离），将来真启用配置中心时要一并规划 | 名单只有 1 个实例 | 用第七节配方 ⑤ 补验证；命名空间隔离与配置中心一起设计 |
+
+### 面试可能追问（每条都给"本项目怎么答"）
+
+- **Q1 什么是客户端负载均衡，和服务端（Nginx）的区别？** 答：选择动作发生在**调用方进程内**，名单从注册中心订阅到本地缓存，直连提供方（一跳、无集中瓶颈、故障域分散）；Nginx/SLB 是必经的集中转发节点（两跳、单点、跨语言无关）。本项目：入口用网关，网关到 UMS 用客户端 LB。
+- **Q2 `lb://insight-engine-ums` 怎么变成真实地址？** 答：`ReactiveLoadBalancerClientFilter` 见 scheme=lb → 用 `LoadBalancerClientFactory` 取该服务的 LB → `ServiceInstanceListSupplier` 从 Nacos 客户端本地名单拿健康实例 → 策略选一个 → **改写 `GATEWAY_REQUEST_URL_ATTR`** → `NettyRoutingFilter` 才真正发连接（详见第二节八步）。
+- **Q3 你们用的什么策略？在哪配的？** 答：没配 `spring.cloud.loadbalancer.*`，走默认轮询（SCL 4.1.2）。**加分句（先自己验完再说出口）**：「我要确认一件事 —— spring-cloud-alibaba 的 nacos-discovery 自带 `NacosLoadBalancer`（在 LB 层过滤 healthy + 同 cluster 优先），和 SCL 的 RoundRobin 是条件装配竞争关系，用 `-Ddebug=true` 看自动配置匹配结果就知道实际生效的是哪个。」验证方法见第五节；**没验证前不要把它讲成既成事实**。
+- **Q4 提供方实例挂了，多久不再被调用？** 答：分两段。注册中心侧：临时实例靠客户端心跳（实测参数 **5s 心跳 / 15s 标 unhealthy / 30s 删除**）；调用方侧还叠加 Nacos 客户端缓存（响应里 `cacheMillis=10000`）+ LB 名单缓存（`spring.cloud.loadbalancer.cache.ttl`，几十秒量级）。**所以存在"脏名单窗口"，必须有超时 + 重试 + 熔断兜底**，不能指望 LB 自己保证可用。
+- **Q5 灰度发布怎么做？** 答：Nacos 控制台改 `weight` **对 SCL 默认策略无效**（它不读权重）；要么自定义 `ServiceInstanceListSupplier` 读 `metadata` 里的 weight/nacos.weight 做加权，要么用 metadata `version` 做条件路由（本项目打算后者，可回滚）。
+- **Q6 Ribbon 去哪了？** 答：Netflix 栈停止维护、且 API 是阻塞式，WebFlux 网关需要响应式 LB；SCL 用 `ServiceInstanceListSupplier` 抽象把「名单来源」和「选择策略」解耦。
+- **Q7 服务发现里最坑的一件事？** 答：**注册的 IP 必须是调用方真正可达的 IP**。我实测踩过：`InetUtils` 自动挑网卡挑到了 Hyper-V 虚拟网卡 `172.18.128.1`，因为两个服务都在本机、监听 `::`，所以"看起来是通的"；一旦提供方跨机部署就是必挂，而且 healthy=true 极具迷惑性。排查手法是**直接 curl Nacos 的 instance/list 看 ip 字段**，而不是翻日志猜。
+- **Q8 客户端 LB 的安全边界？**（杀手锏）答：客户端 LB **完全信任注册中心给的名单**，而我们的 Nacos 在公网上且未开鉴权 —— 任何人往 `insight-engine-ums` 塞一个实例，就能按轮询/权重分到流量（含 `Authorization` 头）。所以「名单的写入权」必须像数据库权限一样管理：开鉴权 + 安全组收敛，或根本不开公网。
+
+### 踩坑提醒
+
+1. **坑：把「503」一律当成服务没起来。** 三种根因要分开：① 缺 `spring-cloud-starter-loadbalancer` 依赖（根本没有 LB）；② LB 正常但**名单为空**（服务没注册上/namespace-group 不一致/已被摘除）；③ 名单非空但**地址不可达**（虚拟网卡或容器网段 IP，本项目现在正是这一类的潜伏态）。排查顺序：`curl instance/list` → 看 ip → 本机 curl 那个 ip:port。
+2. **坑：`namespace` / `group` 不一致。** 注册在 `public`+`DEFAULT_GROUP`、调用方却配了 namespace → 名单永远空，症状和"服务没起"一模一样（本项目两端都没配 namespace，全在 `public` → 对应第八节 P3 的隔离缺失，不是 P0-2；P0-2 是"谁能写名单"的问题）。
+3. **坑：改了 yml 立刻验证，结果"没生效"。** 名单在**两层缓存**里（Nacos 客户端 + LB），等一个 TTL 或重启调用方再看。
+4. **坑：`enabled` / `healthy` / 进程活着 三件事混为一谈。** 控制台"下线"改 `enabled`；心跳超时改 `healthy`；进程在但注册失败（`fail-fast: false` 会**只告警不阻断启动**）——本项目就开着 `fail-fast: false`，所以"服务起来了但没在名单里"是完全可能的状态，别用"进程在不在"当判据。
+5. **坑：单实例环境下测不出 LB 行为，却据此得出"LB 没问题"的结论。** 本次就是：真正危险的是注册 IP，而它在本机被"假通过"掩盖了。
+
 ---
 
 （持续沉淀中，学一个补一个）
+
+
