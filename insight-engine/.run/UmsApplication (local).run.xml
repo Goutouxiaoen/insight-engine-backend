@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <!--
+    IDEA 共享运行配置（提交入库，团队/多对话一致）：
+      作用：把 local profile 固化，避免「直接点 main 绿三角 → profile 未激活 → 占位符未解析」的启动失败。
+      前置：src/main/resources/application-local.yml 已存在（该文件被 .gitignore 忽略，各人本地自行维护）。
+      注意：本文件只写 profile 名，不含任何口令（凭据纪律 AGENTS.md 铁律 5 / DEVGUIDE P19）。
+  -->
+  <configuration default="false" name="UmsApplication (local)" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="insight-engine-ums" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.insightengine.ums.UmsApplication" />
+    <option name="ACTIVE_PROFILES" value="local" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

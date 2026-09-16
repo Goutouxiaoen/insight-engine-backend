@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <!--
+    IDEA 共享运行配置（提交入库）：
+      gateway 自身 application.yml 对 Nacos 地址与 JWT 密钥均给了开发默认值，故无需 local profile 即可启动；
+      Nacos 不可达时只告警（fail-fast: false），但路由走 lb:// 会不可用 → 需做前缀转发联调时，
+      临时用 VM/程序参数覆盖路由 URI 为直连（见 PROGRESS §6.4 记录）。
+      注意：本文件不含任何口令（AGENTS.md 铁律 5 / DEVGUIDE P19）。
+  -->
+  <configuration default="false" name="GatewayApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="insight-engine-gateway" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.insightengine.gateway.GatewayApplication" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

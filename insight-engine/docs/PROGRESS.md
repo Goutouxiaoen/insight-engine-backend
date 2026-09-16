@@ -154,6 +154,11 @@
 - [2026-09-16] 坑：**本机 → 云主机 5433/6380/8848 全部不可达（22 可达）**，服务启动后登录一律 500（`Unable to connect to Redis`）→ 排查链路复用 §四既有沉淀（本机 TCP → 云主机 `ss`/docker-proxy → 主机防火墙 → 云安全组）：云上容器均 `Up 6 days` 且 `0.0.0.0:5433/6380/8848` 正常监听，本机 `Test-NetConnection` 对三端口全 False、仅 22 True → 判定为**安全组已收敛（或本机出口 IP 变化）** → 临时用 **SSH 隧道**（paramiko `direct-tcpip`，本地 5433/6380 → 云 `127.0.0.1` 同端口）完成冒烟，服务侧用命令行覆盖 `--spring.datasource.url/--spring.data.redis.host` 指到 `127.0.0.1`，**不改受版本控制的配置**。验证后已停进程、关隧道
 - [2026-09-16] 坑：**代码正确但权限为空** —— 切换空间后新 token 调 workspace 接口全 403/2006，一度怀疑 roles/perms 查询写错；实际是**云端库 `ie_role_permission` 缺 role 2/3/5 的增量 seed**（`ws_admin` 一条授权都没有）。定位方法：看 MyBatis SQL 日志中权限查询 `Total: 0` + 直接查库 `group by role_id` 核对 → 规避：**凡 seed/授权变更，必须同步对已初始化库执行增量 SQL**，否则表现为「权限缺失」而非「代码报错」，极难反查
 - [2026-09-16] 坑：**PowerShell 5.1 读取「UTF-8 无 BOM」脚本时中文乱码**，导致引号配对错乱、脚本语法报错（`Unexpected token`）→ 规避：冒烟/临时脚本一律用**纯 ASCII**（或在 PS 中以 `-Encoding UTF8` 且带 BOM 写入）。与 §四 2026-08-25「勿凭控制台乱码判定文件损坏」同源问题的另一面：**写入侧也要注意编码**
+- [2026-09-16] 坑：**IDEA 直接点 main 绿三角启动 → `local` profile 未激活 → 启动即失败**，报错形态为
+  `Failed to bind properties under 'spring.data.redis.port' to int: Value: "${INSIGHT_REDIS_PORT}" ... NumberFormatException`
+  ——**根因不是代码/模块问题**：`application-local.yml` 在 `src` 与 `target/classes` 都在，只是没有任何属性源提供这些变量；`redis.host`（String）会静默留成字面量，只有 `port`（int）在绑定期报错，故**报错位置具有误导性**（看起来像配置写错，实为 profile 未激活）。
+  → 规避：① Run Configuration 的 `Active profiles` 填 `local`（或注入 `INSIGHT_*` 环境变量）；② 已提交共享运行配置 `insight-engine/.run/*.run.xml`（UMS/workspace 带 `local`，gateway 无需 profile），点绿三角即为正确配置。
+  📌 与 §四 2026-09-09「IDEA 加载 target/classes 旧配置」同族：**IDEA 侧配置问题优先查 profile / src-target 漂移，勿先怀疑代码**
 - [2026-09-16] 协作教训（并发编辑同一分支）：本仓库 `feature/docs-sync-security` 工作区被**两场对话并行编辑**——`LEARNING.md` 出现另一场对话的「Nacos 客户端负载均衡」大段笔记及后续 4 行改动，且**长期未提交**，与本对话改动混在同一工作区。规避：收尾提交前必须 `git diff` 辨别归属，**只提交本对话产物、勿把他人进行中的改动一并提交**；建议大文件（LEARNING）各写各章节并及时提交，避免同一文件长期脏区叠加导致提交边界模糊
 
 ---

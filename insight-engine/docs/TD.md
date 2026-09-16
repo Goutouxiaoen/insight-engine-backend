@@ -1169,6 +1169,12 @@ spring:
 > （有意设计：宁可启动失败，也不静默用空口令连库）。
 > 变量名清单见 `.env.example` 末尾「应用侧注入」段；新增配置项须同步三处
 > （`.env.example` / `application-local.example.yml` / 本文档），规则见 DEVGUIDE P19。
+>
+> **IDEA 启动（2026-09-16 固化）**：仓库已提供共享运行配置 `insight-engine/.run/`——
+> `UmsApplication (local)` / `WorkspaceApplication (local)`（均带 `Active profiles=local`）、
+> `GatewayApplication`（其默认值即可启动，无需 profile）。**不要直接点 main 方法绿三角 Run**：
+> 临时配置不带 profile → 占位符不解析 → 启动报
+> `Failed to bind properties under 'spring.data.redis.port' to int`（排查坑见 PROGRESS §四 2026-09-16）。
 
 ### 18.3 Dockerfile（后端示例）
 
