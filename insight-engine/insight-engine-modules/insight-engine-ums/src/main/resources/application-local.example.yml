@@ -1,34 +1,20 @@
 # =============================================================================
-# 本地开发覆盖配置（application-local.example.yml）
+# 本机私有口令模板（application-local.example.yml）
 #
-# 用法：
-#   1) 复制本文件为同目录 application-local.yml（已被 .gitignore 忽略，永不入库）
-#   2) 把 change-me-* 换成真实值
-#   3) 启动时激活 local profile：IDEA Run Configuration → Active profiles 填 local，
-#      或程序参数 --spring.profiles.active=local
+# 用法（新机器 / 别人机器上跑）：
+#   1) 把本文件复制为同目录 application-local.yml（该文件已被 .gitignore 忽略，永不入库）
+#   2) 把 change-me-* 换成真实口令
+#   3) 直接运行服务即可 —— application.yml 里已用 spring.config.import 自动加载本文件，
+#      **不需要 Active profiles、不需要环境变量**
 #
-# 为什么需要它：application.yml 里的 ${INSIGHT_*} 没有默认值，未注入时启动会
-# fail-fast（占位符无法解析）——有意设计，避免「忘了配 → 静默用空口令连库」。
-#
-# 替代方案：不建本文件，改在 IDEA Run Configuration → Environment variables 里
-# 逐个填 INSIGHT_PG_* / INSIGHT_REDIS_*（见 .env.example）。
+# 说明：
+#   - 非敏感项（PG/Redis/Nacos 地址、库名、账号）已在 application.yml 里写死并加备注；
+#   - application.yml **故意不写 password 键**：导入的文件优先级更低，写了会把它覆盖掉；
+#   - 生产部署：不建本文件，改用环境变量 SPRING_DATASOURCE_PASSWORD / SPRING_DATA_REDIS_PASSWORD。
 # =============================================================================
 spring:
   datasource:
-    # 本机跑容器 → 127.0.0.1:5433；连云服务器 → 换成云 IP:5433
-    url: jdbc:postgresql://127.0.0.1:5433/insight_engine
-    username: insight
     password: change-me-pg-strong-random
   data:
     redis:
-      host: 127.0.0.1
-      port: 6380
       password: change-me-redis-strong-random
-  cloud:
-    # Nacos 地址：本机跑容器 → 127.0.0.1:8848；连云服务器 → 云 IP:8848
-    # （Nacos 2.x 自报端口并据此推导 gRPC 端口，宿主机需 1:1 映射 8848/9848）
-    nacos:
-      discovery:
-        server-addr: 127.0.0.1:8848
-      config:
-        server-addr: 127.0.0.1:8848

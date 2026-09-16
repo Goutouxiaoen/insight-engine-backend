@@ -1,8 +1,11 @@
 # =============================================================================
-# Gateway 网关配置
-# 端口 7000（PRD §9.2）。响应式网关（Spring Cloud Gateway），统一入口。
-# 认证模型（2026-09-03 定案）：网关校验 JWT/API Key 后下发明文头，业务服务默认自校验。
-# 路由目标：经 Nacos 服务发现 lb://insight-engine-ums（2026-09-09 接入注册中心）。
+# Gateway 网关配置（端口 7000，响应式 Spring Cloud Gateway）
+#
+# 【写死策略 + 备注】2026-09-16 简化：**直接点 main 方法运行即可，不需要 Active profiles、
+# 不需要环境变量、不需要任何本机配置文件**。
+#   - Nacos 地址直接写死在本文件（网关不连数据库，无口令）；
+#   - 认证模型：网关校验 JWT/API Key 后下发明文头，业务服务默认自校验；
+#   - 路由目标经 Nacos 服务发现：lb://<服务名>（服务名 = 提供方 spring.application.name）。
 # =============================================================================
 server:
   port: 7000
@@ -11,19 +14,18 @@ spring:
   application:
     name: insight-engine-gateway
   cloud:
-    # Nacos 注册中心/配置中心（地址走 NACOS_ADDR 环境变量注入，见 .env.example）
+    # Nacos 注册中心/配置中心（写死云上地址，宿主机 8848/9848 与容器内 1:1）
     nacos:
       discovery:
-        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        server-addr: 39.106.110.214:8848
         # Nacos 不可达时只告警、不阻断启动（该属性默认 true，会导致服务直接起不来）
         fail-fast: false
         # 网关是纯消费方（只用 lb:// 订阅服务实例清单），自身不需要被发现：
         # 关掉注册可避免污染注册名单、少一份心跳负载，并消除停止时的 ERR_NACOS_DEREGISTER（PROGRESS §五 P2-1）
         register-enabled: false
       config:
-        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
-        # 配置中心暂未启用（配置仍落在各服务 application.yml），关闭 import 强制校验，
-        # 否则 Spring Cloud 2023 会因缺少 spring.config.import=nacos: 而启动失败。
+        server-addr: 39.106.110.214:8848
+        # 配置中心暂未启用（配置仍落在本文件），关闭 import 强制校验
         import-check:
           enabled: false
     gateway:
@@ -33,12 +35,10 @@ spring:
       # 其余 /api/v1/xxx（kb/model/agent 等后续服务）在网关层即 404，不误转已接入服务。
       routes:
         - id: insight-engine-ums
-          # 经 Nacos 服务发现负载均衡（2026-09-09 接入，原为 http://localhost:7101 直连）
           uri: lb://insight-engine-ums
           predicates:
             - Path=/auth/**,/api/v1/user/**,/api/v1/role/**,/api/v1/permission/**,/doc.html,/webjars/**,/v3/api-docs/**,/swagger-resources/**,/favicon.ico
         - id: insight-engine-workspace
-          # 组织 / 工作空间 / 成员（IF §5）；服务注册名见 workspace 的 spring.application.name
           uri: lb://insight-engine-workspace
           predicates:
             - Path=/api/v1/org/**,/api/v1/workspace/**,/api/v1/member/**
@@ -52,8 +52,8 @@ spring:
             allowed-headers: "*"
             allow-credentials: true
 
-# 网关自身 JWT 校验配置（insight.gateway.*），密钥与 UMS 同源（同一 HS256 密钥），
-# 生产通过环境变量 INSIGHT_SECURITY_JWT_SECRET 注入；本地默认值与 UMS 保持一致。
+# 网关自身 JWT 校验配置（insight.gateway.*），密钥与 UMS 同源（同一 HS256 密钥）；
+# 生产必须用环境变量 INSIGHT_SECURITY_JWT_SECRET 注入独立随机密钥
 insight:
   gateway:
     jwt-secret: ${INSIGHT_SECURITY_JWT_SECRET:insight-engine-local-dev-secret-change-me-in-prod-2026-09}

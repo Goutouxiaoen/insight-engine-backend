@@ -1162,23 +1162,20 @@ spring:
 | 侧 | 读取方式 | 真实值放哪 | 入库模板 |
 |----|----------|-----------|----------|
 | compose（中间件容器） | compose 自动加载同目录 `.env` | `insight-engine/.env`（已被 `.gitignore` 忽略） | `insight-engine/.env.example` |
-| Spring 应用（ums / workspace 等，**每服务各自一份**） | 环境变量 / profile 覆盖 | `<服务>/src/main/resources/application-local.yml`（已被 `.gitignore` 忽略），或 IDEA Run Configuration 环境变量 / systemd / 容器 `environment` | `<服务>/src/main/resources/application-local.example.yml`（现已有 `ums` 与 `workspace` 两份） |
+| Spring 应用（ums / workspace 等，**每服务各自一份**） | **`spring.config.import` 自动加载**（无需 profile / 环境变量） | `<服务>/src/main/resources/application-local.yml`（已被 `.gitignore` 忽略），**只放口令** | `<服务>/src/main/resources/application-local.example.yml` |
 
-> ⚠️ **Spring Boot 不会自动读取 `.env`**——`.env` 只服务 compose。应用侧必须另行注入，
-> 否则 `application.yml` 里的 `${INSIGHT_PG_*}` / `${INSIGHT_REDIS_*}` 无法解析 → 启动 fail-fast
-> （有意设计：宁可启动失败，也不静默用空口令连库）。
-> 变量名清单见 `.env.example` 末尾「应用侧注入」段；新增配置项须同步三处
-> （`.env.example` / `application-local.example.yml` / 本文档），规则见 DEVGUIDE P19。
+> **应用侧配置组织方式（2026-09-16 定型，已实测）**：
+> 1. `application.yml` 里**非敏感项直接写死并备注** —— PG/Redis/Nacos 地址、库名、账号、端口（本阶段部署就在云上，写死最省心）；
+> 2. **口令一律不写进 `application.yml`**（该文件会进 Git；项目曾因明文口令入库需轮换，见 PROGRESS §五），
+>    放同目录 `application-local.yml`，由 `spring.config.import: optional:classpath:application-local.yml` **自动加载**；
+> 3. ⚠️ 因此 `application.yml` **故意不写 `password` 键** —— 导入文件的优先级**低于**导入它的文件，写了会把本机值覆盖成空；
+> 4. 生产部署：不建 `application-local.yml`，用环境变量 `SPRING_DATASOURCE_PASSWORD` / `SPRING_DATA_REDIS_PASSWORD` 覆盖。
 >
-> **IDEA 启动（2026-09-16 固化，含更正）**：仓库已提供共享运行配置 `insight-engine/.run/`——
-> `UmsApplication (local)` / `WorkspaceApplication (local)` / `GatewayApplication (local)`，
-> **三者都带 `Active profiles=local`**，对应的 `application-local.yml` 需覆盖
-> **数据源 + Redis + Nacos 地址**（UMS/workspace 早期只覆盖前两者，导致 local 模式下 Nacos 仍回落 `127.0.0.1`）。
-> **不要直接点 main 方法绿三角 Run**：临时配置不带 profile →
-> ① UMS/workspace 报 `Failed to bind properties under 'spring.data.redis.port' to int`（占位符无默认值，启动即失败）；
-> ② gateway 则**静默降级**（`${NACOS_ADDR:127.0.0.1:8848}` 有默认值）——启动刷 `Server check fail ... 127.0.0.1:9848`、
-> 关闭抛 `ERR_NACOS_DEREGISTER ... Client not connected, current status:STARTING`、`lb://` 路由不可用。
-> 两者排查坑均见 PROGRESS §四 2026-09-16。
+> **Direct Run 即可（不要再配 profile）**：早期"用 Active profiles=local / 环境变量注入"的做法已废弃——
+> 它踩过两个坑（留档 PROGRESS §四 2026-09-16）：占位符无默认值时启动直接报
+> `Failed to bind properties under 'spring.data.redis.port' to int`；有默认值时（如 `${NACOS_ADDR:127.0.0.1:8848}`）
+> 则**静默连本机**，表现为 `Server check fail ... 127.0.0.1:9848` / `ERR_NACOS_DEREGISTER`。
+> 现方案下**直接点 main 方法运行**即可启动（实测三服务零参数启动 + 网关全链路 200）。
 
 ### 18.3 Dockerfile（后端示例）
 

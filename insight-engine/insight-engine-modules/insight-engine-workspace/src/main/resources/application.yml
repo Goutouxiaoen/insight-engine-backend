@@ -1,11 +1,13 @@
 # =============================================================================
-# Workspace 服务配置
-# 端口 7102（PRD §9.2）；数据源/Redis 的主机与口令一律走环境变量注入（不写明文）：
-#   INSIGHT_PG_HOST / INSIGHT_PG_PORT / INSIGHT_PG_DB / INSIGHT_PG_USERNAME / INSIGHT_PG_PASSWORD
-#   INSIGHT_REDIS_HOST / INSIGHT_REDIS_PORT / INSIGHT_REDIS_PASSWORD
-# 注入方式见 .env.example 末尾说明（推荐 application-local.yml 或 IDEA 环境变量）；
-# 未注入时启动 fail-fast（占位符无法解析），这是有意设计，避免静默用空口令连库。
-# 凭据纪律：AGENTS.md 铁律 5 / DEVGUIDE P19。
+# Workspace 服务配置（端口 7102）
+#
+# 【写死策略 + 备注】2026-09-16 简化：**直接点 main 方法运行即可，不需要 Active profiles、
+# 不需要环境变量**。
+#   1. 非敏感项（地址 / 端口 / 库名 / 账号）直接写死在本文件；
+#   2. 口令不写在本文件（本文件会进 Git；见 PROGRESS §五 明文口令事件），
+#      放同目录 application-local.yml（已被 .gitignore 忽略），由下面 spring.config.import 自动加载；
+#      ⚠️ 本文件**故意不写 password 键**——写了会覆盖 application-local.yml 的值；
+#   3. 生产部署用环境变量覆盖：SPRING_DATASOURCE_PASSWORD / SPRING_DATA_REDIS_PASSWORD 等。
 # =============================================================================
 server:
   port: 7102
@@ -13,47 +15,47 @@ server:
 spring:
   application:
     name: insight-engine-workspace
+  # 本机私有值（口令）自动加载；文件不存在则忽略（optional），不影响 CI / 生产
+  config:
+    import: optional:classpath:application-local.yml
   cloud:
-    # Nacos 注册中心/配置中心（地址走 NACOS_ADDR 环境变量注入，见 .env.example）
     nacos:
       discovery:
-        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
-        # Nacos 不可达时只告警、不阻断启动（该属性默认 true，会导致服务直接起不来）
+        # 写死云上 Nacos（宿主机 8848/9848 与容器内 1:1）
+        server-addr: 39.106.110.214:8848
+        # Nacos 不可达时只告警、不阻断启动（默认 true 会导致服务直接起不来）
         fail-fast: false
       config:
-        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
-        # 配置中心暂未启用（配置仍落在各服务 application.yml），关闭 import 强制校验，
-        # 否则 Spring Cloud 2023 会因缺少 spring.config.import=nacos: 而启动失败。
+        server-addr: 39.106.110.214:8848
         import-check:
           enabled: false
   datasource:
-    url: jdbc:postgresql://${INSIGHT_PG_HOST}:${INSIGHT_PG_PORT}/${INSIGHT_PG_DB}
-    username: ${INSIGHT_PG_USERNAME}
-    password: ${INSIGHT_PG_PASSWORD}
+    # 写死云上 PostgreSQL（宿主机 5433 → 容器内 5432）
+    url: jdbc:postgresql://39.106.110.214:5433/insight_engine
+    username: insight
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
       connection-timeout: 30000
+    # password 见文件头说明：由 application-local.yml / 环境变量提供
   data:
     redis:
-      host: ${INSIGHT_REDIS_HOST}
-      port: ${INSIGHT_REDIS_PORT}
-      password: ${INSIGHT_REDIS_PASSWORD}
+      # 写死云上 Redis（宿主机 6380 → 容器内 6379）
+      host: 39.106.110.214
+      port: 6380
       database: 0
       timeout: 3000
+      # password 同上，由 application-local.yml / 环境变量提供
 
 # MyBatis-Plus 基础配置
 mybatis-plus:
   configuration:
-    # 蛇形列名 → 驼峰属性自动映射（TD §5.1）
     map-underscore-to-camel-case: true
-    # 开发期打印 SQL，生产关闭
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 # JWT 配置（insight.security.*，由 starter-security 读取）
-# 切换空间需为本服务重签 access/refresh token，故密钥必须与 UMS 同源（同一 INSIGHT_SECURITY_JWT_SECRET），
-# 否则换签后的 token 在 UMS / 其他服务上验签失败。
+# 切换空间需重签令牌，密钥必须与 UMS 同源（同一 INSIGHT_SECURITY_JWT_SECRET），否则换签后的 token 验签失败
 insight:
   security:
     jwt-secret: ${INSIGHT_SECURITY_JWT_SECRET:insight-engine-local-dev-secret-change-me-in-prod-2026-09}

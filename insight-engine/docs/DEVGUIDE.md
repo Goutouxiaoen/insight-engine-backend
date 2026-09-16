@@ -1152,13 +1152,15 @@ Commit 类型：`feat`（功能）/ `fix`（修复）/ `docs`（文档）/ `refa
 ```
 【约束】本次涉及 application*.yml / docker-compose.yml / init.sql / 部署脚本，
 或新增任何「账号、口令、密钥、Token、连接串」配置项时：
-1. 一律写占位符，禁止写字面量：
-   - Spring（`application*.yml`）：`${INSIGHT_PG_HOST}` / `${INSIGHT_PG_PASSWORD}` / `${INSIGHT_REDIS_*}` 等；
-     `:` 后的默认值只允许「明显的开发占位串」，禁止与真实口令相同（prod 下含 "change-me" 会被 fail-fast 拦截）。
+1. 配置分「非敏感」与「口令」两类处理（2026-09-16 定型，详见 TD §18.2.6）：
+   - **非敏感项**（地址 / 端口 / 库名 / 账号）允许**直接写死在 `application.yml` + 加备注**（本阶段部署固定在云上，写死更省事、启动零配置）；
+   - **口令一律不写进受版本控制的文件**：放同目录 `application-local.yml`（已 gitignore），
+     由 `spring.config.import: optional:classpath:application-local.yml` **自动加载**（无需 profile / 环境变量）；
+     ⚠️ `application.yml` 里**不要写 `password` 键**——导入文件优先级更低，写了会把它覆盖成空；
+     生产用环境变量 `SPRING_DATASOURCE_PASSWORD` / `SPRING_DATA_REDIS_PASSWORD` 覆盖。
    - compose（`docker-compose.yml`）：`${POSTGRES_PASSWORD:?必填提示}` 等，真实值放同目录 `.env`。
-   - ⚠️ **两套注入路径勿混用**：compose 自动加载 `.env`；**Spring 不会自动读 `.env`**，
-     应用侧走 `application-local.yml`（已 gitignore）或环境变量（IDEA Run Configuration / systemd /
-     容器 environment），模板见 `ums/src/main/resources/application-local.example.yml`（详见 TD §18.2.6）。
+   - ⚠️ **两套路径勿混用**：compose 自动加载 `.env`；**Spring 不会自动读 `.env`**（只读 `application-local.yml` / 环境变量），
+     模板见各服务 `src/main/resources/application-local.example.yml`。
 2. `.env` 永不入库（`.gitignore` 已含 `.env` / `.env.*` / `application-local.yml` / `*.secret`）；
    仓库内只维护模板 `.env.example`（变量名 + 用途说明，无真实值）。
    ⚠️ `.env.*` 会把 `.env.example` 一起忽略，故 `.gitignore` 必须保留 `!.env.example` 例外行。
