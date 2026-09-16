@@ -22,7 +22,7 @@
 | ----- | ---------------------------------- |
 | 当前阶段  | 阶段 4：gateway 网关 —— **PR #5（`f84ffd2`）已合入 master**（路由按 §8.3 收窄 + TraceGlobalFilter + charset + JWT 常量下沉，复跑冒烟 9/9）；**云上 Nacos 2.3.2 已部署（healthy，8848/9848 1:1 端口，自报 39.106.110.214:8848）+ UMS/gateway Nacos 接入代码完成、全量 BUILD SUCCESS（路由已改 `lb://insight-engine-ums`）**，**P2-2/P2-3 注册与 lb:// 转发验证通过（冒烟 8/8，2026-09-09 安全组放行后）**；遗留 🔴 云凭据明文已进 master 历史（§五，闸门已失守，待口令轮换止血） |
 | 当前里程碑 | M4：gateway 网关                       |
-| 当前任务  | **云上 Nacos 部署 + UMS/gateway Nacos 接入（2026-09-09，P2）**：Nacos 2.3.2 容器已部署（healthy，`8848/9848` 1:1 端口修正，`NACOS_SERVER_IP` 强制自报 `39.106.110.214:8848`）；UMS/gateway 代码已接入（starter-nacos + loadbalancer + `fail-fast:false` + 路由改 `lb://insight-engine-ums`），全量 `mvn -DskipTests package` **BUILD SUCCESS**；✅ **注册实机验证通过（2026-09-09 安全组放行后）**：UMS/gateway 注册 Nacos 实例 UP（172.18.128.1:7101/7000 healthy），gateway `lb://insight-engine-ums` 转发冒烟 8/8（login/me/user/page/role/list 200、无/坏 token 401-2001、错口令 401-2002、`/doc.html` 200）。此前已完成：P1 运维加固（云盘扩容 vda3→49.8G、swap 2G + swappiness=0）实机复核通过 + 凭据纪律/占位化批次（2026-09-09）。**下一步：workspace 模块启动（阶段 5，兑现 BE-20260908-02）** |
+| 当前任务  | **云上 Nacos 部署 + UMS/gateway Nacos 接入（2026-09-09，P2）**：Nacos 2.3.2 容器已部署（healthy，`8848/9848` 1:1 端口修正，`NACOS_SERVER_IP` 强制自报 `39.106.110.214:8848`）；UMS/gateway 代码已接入（starter-nacos + loadbalancer + `fail-fast:false` + 路由改 `lb://insight-engine-ums`），全量 `mvn -DskipTests package` **BUILD SUCCESS**；✅ **注册实机验证通过（2026-09-09 安全组放行后）**：UMS/gateway 注册 Nacos 实例 UP（172.18.128.1:7101/7000 healthy），gateway `lb://insight-engine-ums` 转发冒烟 8/8（login/me/user/page/role/list 200、无/坏 token 401-2001、错口令 401-2002、`/doc.html` 200）。此前已完成：P1 运维加固（云盘扩容 vda3→49.8G、swap 2G + swappiness=0）实机复核通过 + 凭据纪律/占位化批次（2026-09-09）。**下一步：workspace 模块启动（阶段 5，兑现 BE-20260908-02）**；✅ 2026-09-16 交接体检完成：文档口径一致、2 commits 已推送（远程 `6af1c75`），可新开对话进阶段 5 |
 | 整体完成度 | 约 43%（阶段 1-4 已完成并全部合入 master；gateway 路由收窄 + TraceFilter/charset/JWT 常量已合入，冒烟 9/9；init.sql 角色 seed 授权补齐；凭据纪律硬约束 + 配置占位化已落地（`git grep` 明文归零）；**2026-09-09：云上 Nacos 2.3.2 部署 + UMS/gateway Nacos 接入闭环——注册实例 UP、`lb://` 转发冒烟 8/8 通过**；⬜ 待办：RabbitMQ/MinIO/Prom/Grafana 迁云 + §五 a) 口令轮换 + workspace 模块（阶段 5）；UMS 收尾项在 §6.1 待办池） |
 
 ---
@@ -139,6 +139,8 @@
 - [2026-09-09] 坑：**nacos-discovery/config 的 `fail-fast` 默认 true 会阻断启动**——Nacos 不可达时 UMS 报 `NacosException: Client not connected, current status:STARTING`（注册阶段抛错，端口已起后整体关闭）→ 规避：联调/容错期显式 `spring.cloud.nacos.*.fail-fast: false`（Nacos 未就绪时服务先起），生产再评估恢复 true
 - [2026-09-09] 坑：**`lb://` 路由缺 LoadBalancer 依赖**——`spring-cloud-starter-alibaba-nacos-discovery` 不传递引入 `spring-cloud-loadbalancer`，网关 `lb://` URI 会因无负载均衡器不可用 → 规避：显式引 `spring-cloud-starter-loadbalancer`（已放 starter-nacos 统一提供）
 - [2026-09-09] 协作/判定沉淀：远程中间件「连不上」的排查链路 = ① 本机到目标端口 TCP 可达性（`Test-NetConnection`）→ ② 云主机侧（ss 监听 / docker-proxy / ufw / firewalld / iptables policy）→ ③ 云安全组入方向。**主机全放行 ≠ 公网可达**，安全组与主机防火墙是两层，勿只查一层就下结论
+
+- [2026-09-16] 协作教训（并发编辑同一分支）：本仓库 `feature/docs-sync-security` 工作区被**两场对话并行编辑**——`LEARNING.md` 出现另一场对话的「Nacos 客户端负载均衡」大段笔记及后续 4 行改动，且**长期未提交**，与本对话改动混在同一工作区。规避：收尾提交前必须 `git diff` 辨别归属，**只提交本对话产物、勿把他人进行中的改动一并提交**；建议大文件（LEARNING）各写各章节并及时提交，避免同一文件长期脏区叠加导致提交边界模糊
 
 ---
 
@@ -272,6 +274,8 @@
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-16
+- 内容：阶段 4→5 交接体检 + 文档完整度收口（收尾三件套）—— ① **体检结论**：阶段 1-4 已完成并入 master（`f84ffd2`）、整体 ~43%；gateway Nacos 接入闭环（实例 UP + `lb://` 冒烟 8/8）；云端 PG/Redis/Nacos healthy、磁盘/swap 已加固；下一步 workspace（阶段 5，兑现 BE-20260908-02）。② **文档完整度修正**：4 处「Nacos 接入后改 lb://」过期前瞻改为现状（`TD §8.3` 注 / `ARCHITECTURE` 路由规则 / `PROGRESS §七 Top2` / `gateway/pom.xml` 注释）；`FE-SYNC` §1 gateway 证据列补 `lb://` 冒烟 8/8（契约无变化，§2 不加条目）。③ **发现并登记**：另一场对话的「Nacos 客户端负载均衡」实测漏洞清单（P0-1 注册 IP 落虚拟网卡 / P0-2 公网 Nacos 未鉴权可投毒 / P1-1 `NACOS_ADDR` 注入路径 / P1-2 compose 漂移 / P2-1 gateway 自注册）原先只落在 `LEARNING.md`，已登记进 **§五「云上 Nacos 安全加固」**（保证开工四必读可见）；`LEARNING` §八 P2-2/P2-3 标记已修。④ **提交**：`fa9c8c6`（LEARNING 笔记/口径）+ `6af1c75`（Nacos 接入 14 files）已推送 `feature/docs-sync-security`（远程 = `6af1c75`）。⑤ **编译证据**：`mvn -DskipTests -pl :insight-engine-gateway -am package` → **BUILD SUCCESS**（5.5s，2026-09-16）；本轮冒烟复用 2026-09-09 `lb://` 8/8（无新代码逻辑）。⑥ **未决**：`LEARNING.md` 存在另一并行对话的 4 行未提交改动（「Nacos 配置逐行拆解」+ P1-1 结案），保留其归属待其自行收尾；§五 口令轮换与 P0-1/P0-2 加固仍为部署前必办。**下一步：新开对话进 workspace 模块（阶段 5）**
 - 日期：2026-09-09
 - 内容：Nacos 注册实机验证通过（P2-2/P2-3 闭环，2026-09-09 安全组放行后）—— ① 前置：用户在阿里云控制台放行安全组 8848/9848（连通性复测 True）；② 本机以 `-DNACOS_ADDR=39.106.110.214:8848` 启 UMS（7101，profile local 连云库）+ gateway（7000），日志确认 `insight-engine-ums 172.18.128.1:7101` / `insight-engine-gateway 172.18.128.1:7000` register finished，Nacos API 实例列表 healthy（服务目录 count=2）；③ **冒烟 8/8（经 gateway `lb://` 到 UMS）**：login/me/user/page/role/list 200（code=0）、无 token 401-2001、坏 token 401-2001、错口令 401-2002、`/doc.html` 200；④ 注册实例 IP 为本机网卡 172.18.128.1（两服务同机互达即符合预期；跨机/容器部署需配注册为可达 IP，见 LEARNING）；⑤ 附带发现 🟡：`/api/v1/role/page` 这类非数字段会落入 `role/{id}` 路径参数 Long 解析抛 500/9999（正确列表端点为 role/list，正常），记 §6.1；⑥ 回填 PROGRESS §一/§6.4/§七/§八、FE-SYNC gateway 行。**下一步：workspace 模块（§七 Top2）**
 - 日期：2026-09-09
