@@ -262,6 +262,7 @@
 - [x] gateway 增 TraceGlobalFilter（order=-200，TD §8.3 过滤器链首项）——**2026-09-09 完成**：读取/校验上游 `X-Trace-Id`（非法/缺失则生成 UUID）→ 重建请求头透传 → 回写响应头；`AuthGlobalFilter` 错误响应必带 traceId
 - [x] JWT Claim 常量下沉 common——**2026-09-09 完成**：新增 `common.constant.JwtClaimConstants`（type/access/refresh/tenant_id/ws_id/roles/perms），UMS `JwtUtil` 与 gateway `GatewayJwtParser` 改为共享引用，消除双份字面量
 - [x] gateway 错误响应补 `charset=UTF-8`——**2026-09-09 完成**：`AuthGlobalFilter.writeError` 改用 `new MediaType(APPLICATION_JSON, UTF_8)`，与 UMS 侧 charset 修复对齐
+- [ ] 🟡 **本机 `mvn package` 产出的 jar 内含 `application-local.yml`（真实云库/Redis 口令）**（2026-09-16 核查发现）：已实测 `insight-engine-ums-1.0.0-SNAPSHOT.jar` 中同时存在 `BOOT-INF/classes/application-local.yml`（647B，含真实凭据）与 `application-local.example.yml`。`target/` 已被 gitignore（**不进 Git**），但只要把本机打的 jar 外传 / 上传服务器 / 当交付物，即等于把口令一起送出去（属 P19 精神范围内的泄露路径，非已泄露）。**修法（择一）**：① 推荐——把 `application-local.yml` 移出 `src/main/resources`（如放工程外或用 `--spring.config.additional-location` / 环境变量注入），jar 不再携带凭据；② 纪律约束——本机 jar 不外传，部署只用「干净源码构建 + 环境变量注入」（§五 a 轮换后此条风险随之收敛）。**注：2026-09-16 冒烟时本机 jar 确实带该文件运行过，未见外泄**
 - [ ] API Key（`sk-`）通道落地（`AuthGlobalFilter` 当前一律拒绝 2001）——workspace/conv 阶段开放 OpenAPI 前必须实现 TD §7.6 校验
 - [ ] gateway 接入 Sentinel 限流（TD §8.3 RateLimitGlobalFilter，生产前）；CORS 由 `*` 收敛为白名单（生产）
 - [ ] refresh 单槽轮换多端语义：并发/多标签刷新可能被判重放并吊销全会话 → 与前端约定 refresh 单飞互斥（IF/前端联调说明）
