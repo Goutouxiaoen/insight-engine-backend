@@ -1170,11 +1170,15 @@ spring:
 > 变量名清单见 `.env.example` 末尾「应用侧注入」段；新增配置项须同步三处
 > （`.env.example` / `application-local.example.yml` / 本文档），规则见 DEVGUIDE P19。
 >
-> **IDEA 启动（2026-09-16 固化）**：仓库已提供共享运行配置 `insight-engine/.run/`——
-> `UmsApplication (local)` / `WorkspaceApplication (local)`（均带 `Active profiles=local`）、
-> `GatewayApplication`（其默认值即可启动，无需 profile）。**不要直接点 main 方法绿三角 Run**：
-> 临时配置不带 profile → 占位符不解析 → 启动报
-> `Failed to bind properties under 'spring.data.redis.port' to int`（排查坑见 PROGRESS §四 2026-09-16）。
+> **IDEA 启动（2026-09-16 固化，含更正）**：仓库已提供共享运行配置 `insight-engine/.run/`——
+> `UmsApplication (local)` / `WorkspaceApplication (local)` / `GatewayApplication (local)`，
+> **三者都带 `Active profiles=local`**，对应的 `application-local.yml` 需覆盖
+> **数据源 + Redis + Nacos 地址**（UMS/workspace 早期只覆盖前两者，导致 local 模式下 Nacos 仍回落 `127.0.0.1`）。
+> **不要直接点 main 方法绿三角 Run**：临时配置不带 profile →
+> ① UMS/workspace 报 `Failed to bind properties under 'spring.data.redis.port' to int`（占位符无默认值，启动即失败）；
+> ② gateway 则**静默降级**（`${NACOS_ADDR:127.0.0.1:8848}` 有默认值）——启动刷 `Server check fail ... 127.0.0.1:9848`、
+> 关闭抛 `ERR_NACOS_DEREGISTER ... Client not connected, current status:STARTING`、`lb://` 路由不可用。
+> 两者排查坑均见 PROGRESS §四 2026-09-16。
 
 ### 18.3 Dockerfile（后端示例）
 

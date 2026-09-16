@@ -1,0 +1,20 @@
+<component name="ProjectRunConfigurationManager">
+  <!--
+    IDEA 共享运行配置（提交入库，团队/多对话一致）：
+      作用：激活 local profile → 从 application-local.yml 注入 Nacos 地址
+            （application.yml 里是 ${NACOS_ADDR:127.0.0.1:8848}，有默认值所以不会 fail-fast，
+             而是「静默连不上 Nacos」：启动刷 Server check fail 127.0.0.1:9848，
+             关闭时抛 ERR_NACOS_DEREGISTER ... Client not connected, current status:STARTING，
+             lb:// 路由也不可用 —— 见 PROGRESS §五 P1-1 / §四 2026-09-16）。
+      前置：src/main/resources/application-local.yml 已存在（被 .gitignore 忽略，各人本地维护）。
+      注意：本文件只写 profile 名，不含任何口令与 IP（AGENTS.md 铁律 5 / DEVGUIDE P19）。
+  -->
+  <configuration default="false" name="GatewayApplication (local)" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="insight-engine-gateway" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.insightengine.gateway.GatewayApplication" />
+    <option name="ACTIVE_PROFILES" value="local" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

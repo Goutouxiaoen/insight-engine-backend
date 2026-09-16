@@ -17,6 +17,9 @@ spring:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
         # Nacos 不可达时只告警、不阻断启动（该属性默认 true，会导致服务直接起不来）
         fail-fast: false
+        # 网关是纯消费方（只用 lb:// 订阅服务实例清单），自身不需要被发现：
+        # 关掉注册可避免污染注册名单、少一份心跳负载，并消除停止时的 ERR_NACOS_DEREGISTER（PROGRESS §五 P2-1）
+        register-enabled: false
       config:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
         # 配置中心暂未启用（配置仍落在各服务 application.yml），关闭 import 强制校验，
