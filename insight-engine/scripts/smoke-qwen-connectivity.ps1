@@ -24,7 +24,9 @@ param(
   [string]$BaseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   [string]$Model = 'qwen-plus',
   [string]$EmbeddingModel = 'text-embedding-v3',
-  [string]$ApiKeyFile = ''
+  [string]$ApiKeyFile = '',
+  # 该套餐不含 embedding 模型时置 1 跳过第 3 步（如千问AI平台 Token Plan Lite：14 个模型里无 embedding）
+  [switch]$SkipEmbedding
 )
 $ErrorActionPreference = 'Stop'
 $tmp = Join-Path $env:TEMP ("qwen-" + [Guid]::NewGuid().ToString('N'))
@@ -76,6 +78,11 @@ if ($hasDone) { Write-Host "RESULT2: OK" } else { Write-Host ("error/abnormal bo
 
 # ---------- 3) embedding (dimension check for kb stage) ----------
 Write-Host ""
+if ($SkipEmbedding) {
+  Write-Host ""
+  Write-Host "== 3) embeddings -> SKIPPED (-SkipEmbedding) =="
+} else {
+Write-Host ""
 Write-Host "== 3) POST /embeddings (dimensions=1024) =="
 $b = Body 'c3.json' (("{""model"":""$EmbeddingModel"",""input"":""insight engine connectivity test"",""dimensions"":1024}"))
 $code = (& curl.exe -s -o "$tmp\c3.out" -w '%{http_code}' --max-time 60 -X POST "$BaseUrl/embeddings" -H "Authorization: Bearer $key" -H 'Content-Type: application/json' -d "@$b")
@@ -88,6 +95,7 @@ if ($o3 -and $o3.data) {
 } else {
   Write-Host ("error body: " + $raw3)
   Write-Host "RESULT3: FAILED"; $fail++
+}
 }
 
 Remove-Item -Force -Recurse $tmp -ErrorAction SilentlyContinue
