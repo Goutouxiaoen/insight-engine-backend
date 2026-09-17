@@ -129,6 +129,7 @@
 | 11 | 系统 | ie_dict | 字典类型 |
 | 11 | 系统 | ie_dict_item | 字典项 |
 | 11 | 系统 | ie_sys_config | 系统配置 |
+| 11 | 系统 | ie_secret | 密钥（敏感凭据加密存储） |
 
 ---
 
@@ -740,6 +741,32 @@
 | created_at / updated_at / deleted | — | — | — | — |
 
 **索引**：`uk_sys_config_key(config_key) WHERE deleted=0`（唯一）。
+
+#### 5.11.4 ie_secret — 密钥表
+
+> 用途：敏感凭据（模型厂商 API Key、后续通知 webhook token 等）**加密后**存储。TD §16.1：`AES-256-GCM 加密存储，主密钥（KEK）放环境变量`；**明文永不入库**，接口也不回传明文（只回 `maskedHint`）。
+> 关联：`ie_model_vendor.api_key_secret_id` → `ie_secret.id`（该外键列首版就预留了，表于 2026-09-17 阶段 6 准入时补建）。
+
+| 字段 | 类型 | 可空 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| id | BIGSERIAL | 否 | 自增 | 主键 |
+| tenant_id | BIGINT | 否 | 0 | 租户 ID；**0 = 平台级（全租户共用）**，与 `ie_role.tenant_id=0` 同口径 |
+| name | VARCHAR(128) | 否 | — | 展示名（如「通义千问-默认Key」） |
+| secret_type | VARCHAR(32) | 否 | — | 类型：`MODEL_API_KEY` / `WEBHOOK_TOKEN` … |
+| cipher_text | TEXT | 否 | — | 密文（AES-256-GCM，Base64） |
+| iv | VARCHAR(64) | 否 | — | GCM IV/Nonce（Base64，**每次加密独立生成**，绝不复用） |
+| algo | VARCHAR(32) | 否 | AES-256-GCM | 加密算法 |
+| kek_version | VARCHAR(16) | 否 | v1 | 主密钥版本（支持轮换：旧密文按版本解，无需全量重加密） |
+| masked_hint | VARCHAR(64) | 是 | — | 尾四位提示（如 `sk-****1a2b`），供界面识别是哪把 Key |
+| enabled | SMALLINT | 是 | 1 | 1 启用 / 0 停用 |
+| created_at / updated_at / created_by / updated_by / deleted | — | — | — | 通用审计与逻辑删除字段 |
+
+**索引**：`uk_secret_tenant_name(tenant_id, name) WHERE deleted=0`（唯一）。
+
+**实现纪律**：
+- KEK 只从环境变量读（如 `INSIGHT_SECRET_KEK`），**不进库、不进 Git**；轮换时新增 `kek_version` 记录而非覆盖旧值；
+- 接入厂商时 `apiKey` 由接口接收（HTTPS）→ 服务端加密 → 写 `ie_secret` → `ie_model_vendor.api_key_secret_id` 指向它；**读取接口只回 `maskedHint`**；
+- 日志/异常/审计中禁止打印明文（含 `curl` 证据留存时需自行打码）。
 
 ---
 

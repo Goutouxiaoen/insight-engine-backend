@@ -677,6 +677,13 @@ curl -X POST http://localhost:7000/auth/login \
 
 **权限**：`model:vendor:write`
 
+**安全约束（2026-09-17 补充，对应 DB.md §5.11.4 `ie_secret`）**：
+
+- 请求体里的 `apiKey` 是**明文入参**（HTTPS 传输），服务端**加密后落 `ie_secret`**（AES-256-GCM，KEK 取环境变量），`ie_model_vendor.api_key_secret_id` 指向该记录；
+- **任何读取接口（分页/详情）都不回传 `apiKey` 明文**，只回 `maskedHint`（如 `sk-****1a2b`）；更新时若 `apiKey` 缺省则视为"不修改密钥"；
+- 平台/组织管理员接入、**所有业务方共用**（2026-09-17 裁决：模型目录为平台级，`ie_model_vendor` 当前无租户/空间归属列；BYOK 不在本期范围）；
+- 日志、异常信息、审计记录中禁止输出明文 Key。
+
 ### 7.2 模型列表
 
 `GET /api/v1/model/page?vendorId=1&type=CHAT&pageNum=1&pageSize=10`

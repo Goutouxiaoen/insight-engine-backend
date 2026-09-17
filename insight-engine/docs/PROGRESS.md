@@ -152,6 +152,15 @@
   **验证**：`scripts/smoke-workspace-permission.ps1` 扩展为 17 项断言 **ALL PASS**（同一 token 在 W1 放行 / W2 `403/2006`；空间侧授 super_admin、org_admin → `1003`、授 app_developer → 200；建号侧 roleId 1/2 → `1003`、5 → 200、999 → `1001`、超管授 ALL → 200）；跨租户空间实测（`tenant_id=99`）→ `DELETE` **404/1004**、`my-permissions` **404/1004**、`PUT` 被第二层先拦 `403/2006`。
   **本轮新登记（未修，需裁决）**：**Y5 权限授予侧同源问题**（`role:permissions` 可授 `auth:write`/`system:write` → org_admin 自升平台级）；**Y6 门控语义错配**（UMS 用户管理用空间级 `member:create` 承载组织级动作）。理由：均属权限模型/跨端契约裁决，不是顺手可改。
 
+- [2026-09-17] ✅ 已裁决并落地（**阶段 6 模型网关前置：模型归属路线 + `ie_secret` 建表**）：
+  **① 模型归属 = 路线 A（平台级共用）**：开发者裁决「**平台/组织管理员接入厂商，所有业务方共用**」→ `ie_model_vendor` / `ie_model` **保持无租户/空间归属列**，模型目录为平台级；BYOK（用户自带模型）**不在本期范围**。
+  **为什么不再加"预留归属列"**（我在 §七 3.7 里原建议预留，现修正）：既然明确 BYOK 不在近期，长期空列只会误导后来者（看到 `workspace_id` 就以为已支持）；而 PG 给大表加**可空列**是秒级 DDL、无数据迁移风险 → **真要做时再加一条 ALTER 即可**，预留的收益不抵认知成本。
+  **② `ie_secret` 表已建（此前唯一缺失的表）**：`ie_model_vendor.api_key_secret_id` 自首版就引用了它但表一直没建（`init.sql` 尾部注释自认"阶段 3/8 补"）。本次补 `DB.md §5.11.4` 定义 + `init.sql` 建表语句 + **云端库执行 DDL**（实测：总表数 35→**36**，`\d ie_secret` 字段/默认值/`uk_secret_tenant_name` 唯一索引齐备，13 条列注释已生效）。
+  **字段设计依据**（TD §16.1「AES-256-GCM + KEK 放环境变量」）：`cipher_text` + `iv`（**每次加密独立生成，绝不复用**）+ `algo` + `kek_version`（支持轮换：旧密文按版本解，不必全量重加密）+ `masked_hint`（只存尾四位供界面识别）+ `tenant_id=0` 表示平台级（**与 `ie_role.tenant_id=0` 同口径**，铁律 6）+ `secret_type`（该表不只服务模型，通知 webhook token 等复用）。
+  **③ 密钥全链路纪律（写进 IF §7.1）**：接入时 `apiKey` 明文入参（HTTPS）→ 服务端加密 → 落 `ie_secret` → `ie_model_vendor.api_key_secret_id` 指向它；**任何读取接口只回 `maskedHint`**；更新时缺省视为"不改密钥"；日志/异常/审计禁止输出明文。
+  **④ 附赠自测脚本** `scripts/smoke-qwen-connectivity.ps1`：Key 只从**环境变量**或**显式指定的文件**读、**只打印掩码**；一次跑通三项前置验证——非流式 chat（验证 Key/base_url/模型名）、**流式 SSE**（模型网关核心验收点）、**embedding 维度=1024**（对上 `ie_chunk.embedding` 约束，避免 kb 阶段返工）。
+  **决策性结论（可复用）**：**"先验钥匙、再写代码"**——外部依赖（厂商 API）的 Key/模型名/流式协议，用 30 行脚本先证伪，比写完 Java 再 debug 便宜一个数量级。
+
 ---
 
 ## 四、踩坑记录（增量追加）
@@ -369,6 +378,8 @@
 1. **workspace 收尾（阶段 5 收口，只差两步）**：① **建 PR 并合入 master**——`feature/workspace` 已推送且**领先 master 20 commits**（`cf6580c` 为最新），本机未安装 `gh`，PR 待开发者点：<https://github.com/Goutouxiaoen/insight-engine-backend/compare/master...feature/workspace>；② **前端把空间内门控改用 `GET /api/v1/workspace/{id}/my-permissions`**（FE-SYNC §2 2026-09-17 条目），并在 `BE-ISSUES.md` 把 `BE-20260916-01` 核到 `🟢`（后端已回填答复 + 证据，2026-09-17）
 2. **§五 口令轮换（唯一止血手段，部署前必办）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档占位化 + **规范补缺（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 代码侧配置占位化（§五 b）均已完成**——**未轮换前该项不闭环**
 3. **阶段 6「模型网关」准入（2026-09-17 判定：有条件进入；开工前需 3 项裁决 + 若干必办）**：
+   - **【2026-09-17 最新进展 · 准入已清空 2/3 项】**：① **模型归属已裁决 = 路线 A**（平台/组织管理员接入厂商、**所有业务方共用**；`ie_model_vendor`/`ie_model` **不加**租户/空间归属列，理由见 §三 决策条目）；② **`ie_secret` 密钥表已建成**（`DB.md §5.11.4` + `init.sql` 定义 + **云端库已执行 DDL 并核对**：36 张表、字段/默认值/`uk_secret_tenant_name` 唯一索引齐备）；③ `IF §7.1` 已补安全约束（`apiKey` 明文入参 → 加密落 `ie_secret`、**读取只回 `maskedHint`**）；④ 新增 `scripts/smoke-qwen-connectivity.ps1`（**不打印 Key**，一次跑通 非流式 chat / 流式 SSE / embedding 1024 维三项自测）。**剩余**：开发者提供 DashScope Key 跑一次自测（命令见脚本注释），通过后即可开新对话写 model 服务代码
+
    - ✅ **已具备**：IF §7.1~§7.8 契约完整（厂商 CRUD / 模型 CRUD / 路由策略 / **chat completions SSE** / embeddings / rerank / 用量查询）；权限码 `model:*` **7 条**已在字典（实测授权：`super_admin` 7 / `org_admin` 7 / `ws_admin` 2 / `end_user` 1 / **`app_developer` 0** → 说明"模型管理=组织级、空间级只读"的分域已天然成立，但**应用开发者调用 chat/embeddings 会 2006**，需按 PRD §12.2.2 复核是否补种子）；`ie_model_vendor` / `ie_model` 两表**云端已建**；`starter-security`（JWT/权限/第二层空间鉴权）、`starter-redis`、`starter-mybatis`、OpenAPI 均可复用；网关路由纪律与 workspace 已示范接入方式；IF §2.6 SSE 心跳契约已定（`heartbeat`/15s）
    - ⬜ **必须补（DB/契约缺口，按铁律 2/6 先裁决再动手）**：
      1. ~~`ie_model_route` 表缺失~~ **【2026-09-17 更正：此项为误判，已撤回】**——路由策略表**已存在**，名为 **`ie_route_policy`**（`init.sql:301`、`DB.md §5.3.3`、`PRD.md:2160`、云端库已建）。列 = `id/name/rules(jsonb)/priority/enabled/created_at/updated_at/created_by/updated_by/deleted`，与 **IF §7.4 的 `{name, priority, rules}` 完全对得上**，无需补表、无需裁决。**真实待办只剩一条小的**：该表**无 seed**（实测 0 行）→ 本章是否需要一条"默认路由"种子（可选，不阻塞）。误判成因见 §四 2026-09-17；

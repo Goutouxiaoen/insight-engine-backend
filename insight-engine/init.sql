@@ -993,6 +993,48 @@ COMMENT ON COLUMN ie_sys_config.deleted       IS '逻辑删除标记：0 正常 
 CREATE UNIQUE INDEX uk_sys_config_key ON ie_sys_config (config_key) WHERE deleted = 0;
 
 -- =============================================================================
+-- 密钥表（TD §16.1：模型 API Key 等敏感凭据 AES-256-GCM 加密存储，KEK 不进库）
+-- 背景：ie_model_vendor.api_key_secret_id 自首版起就预留了这个外键，但表一直未建
+--       （见本文件末尾"阶段 3/8 落地时补充"的注释）；2026-09-17 阶段 6 准入时补上。
+-- 设计要点：
+--   1) 只存密文 + IV + 算法 + KEK 版本，**明文永不入库**，接口也不回传明文（只回 masked_hint）；
+--   2) tenant_id=0 表示平台级（全租户共用），与 ie_role.tenant_id=0 同口径（铁律 6）；
+--   3) kek_version 支持主密钥轮换：旧密文按版本解，不必全量重加密；
+--   4) secret_type 作类型判别，该表不只服务模型（后续通知 webhook token 等复用）。
+-- =============================================================================
+CREATE TABLE ie_secret (
+    id          BIGSERIAL PRIMARY KEY,
+    tenant_id   BIGINT       NOT NULL DEFAULT 0,     -- 0 = 平台级（全租户共用）
+    name        VARCHAR(128) NOT NULL,               -- 展示名，如「通义千问-默认Key」
+    secret_type VARCHAR(32)  NOT NULL,               -- MODEL_API_KEY / WEBHOOK_TOKEN ...
+    cipher_text TEXT         NOT NULL,               -- AES-256-GCM 密文（Base64）
+    iv          VARCHAR(64)  NOT NULL,               -- GCM IV/Nonce（Base64，每次加密独立生成）
+    algo        VARCHAR(32)  NOT NULL DEFAULT 'AES-256-GCM',
+    kek_version VARCHAR(16)  NOT NULL DEFAULT 'v1',  -- 主密钥版本（轮换用）
+    masked_hint VARCHAR(64),                         -- 掩码提示（仅尾四位，如 sk-****1a2b）
+    enabled     SMALLINT     DEFAULT 1,
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+    created_by  BIGINT,
+    updated_by  BIGINT,
+    deleted     SMALLINT     NOT NULL DEFAULT 0
+);
+COMMENT ON TABLE  ie_secret                IS '密钥表：敏感凭据（模型 API Key 等）加密存储，明文不入库（TD §16.1）';
+COMMENT ON COLUMN ie_secret.tenant_id      IS '租户 ID；0 表示平台级（全租户共用）';
+COMMENT ON COLUMN ie_secret.name           IS '展示名（如 通义千问-默认Key）';
+COMMENT ON COLUMN ie_secret.secret_type    IS '密钥类型：MODEL_API_KEY / WEBHOOK_TOKEN 等';
+COMMENT ON COLUMN ie_secret.cipher_text    IS '密文（AES-256-GCM，Base64）';
+COMMENT ON COLUMN ie_secret.iv             IS 'GCM IV/Nonce（Base64，每次加密独立生成）';
+COMMENT ON COLUMN ie_secret.algo           IS '加密算法（默认 AES-256-GCM）';
+COMMENT ON COLUMN ie_secret.kek_version    IS '主密钥版本（KEK 来自环境变量，支持轮换）';
+COMMENT ON COLUMN ie_secret.masked_hint    IS '掩码提示（仅尾四位，供界面识别是哪把 Key）';
+COMMENT ON COLUMN ie_secret.enabled        IS '是否启用：1 启用 / 0 停用';
+COMMENT ON COLUMN ie_secret.created_at     IS '创建时间（UTC）';
+COMMENT ON COLUMN ie_secret.updated_at     IS '更新时间（UTC）';
+COMMENT ON COLUMN ie_secret.deleted        IS '逻辑删除标记：0 正常 / 1 已删除';
+CREATE UNIQUE INDEX uk_secret_tenant_name ON ie_secret (tenant_id, name) WHERE deleted = 0;
+
+-- =============================================================================
 -- 种子数据（TD §18.4：管理员账号、权限字典、内置工具）
 -- =============================================================================
 
