@@ -161,6 +161,16 @@
   **④ 附赠自测脚本** `scripts/smoke-qwen-connectivity.ps1`：Key 只从**环境变量**或**显式指定的文件**读、**只打印掩码**；一次跑通三项前置验证——非流式 chat（验证 Key/base_url/模型名）、**流式 SSE**（模型网关核心验收点）、**embedding 维度=1024**（对上 `ie_chunk.embedding` 约束，避免 kb 阶段返工）。
   **决策性结论（可复用）**：**"先验钥匙、再写代码"**——外部依赖（厂商 API）的 Key/模型名/流式协议，用 30 行脚本先证伪，比写完 Java 再 debug 便宜一个数量级。
 
+- [2026-09-17] ✅ 已答复（**BE-20260917-01：「空间角色授予限制未生效」= 运行实例未重启，非契约问题**）：
+  **前端实测**：`member/invite` 传 `roleId=1`(ALL)/`roleId=2`(ORG) 均 200，与 IF §5.6 冲突 → 前端按 IF 字面过滤下拉并来问"是没部署还是有意豁免"。
+  **裁决与结论**：**①「未部署到运行实例」成立；②「超管豁免」不成立** → **IF §5.6 写法正确、无需修改，前端过滤保持**。
+  **判定依据（可复用的三步法）**：
+  1. **时间线对撞**（最快、最硬）：运行实例启动时间 vs 修复代码写入时间 vs 产物构建时间。本次 = 实例 **14:28:42** 启动 / `RoleGrantPolicy.java` **14:35:19** / `MemberServiceImpl` 接线 **14:36:33** / jar **14:37:07** / 提交 `cf6580c` **14:43** → 实例启动**早于修复 7 分钟**，类里根本没有该校验；
+  2. **行为 A/B**：同一条请求分别打在「旧实例」与「今日 jar 起的新实例」上对比。本次新实例实测 **`403/1003`**「不允许授予该角色：超出工作空间管理范围」，与冒烟脚本第 9 节一致；旧实例因 IDEA 实例间 **JWT 密钥不同**（跨实例 token 不互认，401-2001）+ 其 UMS 登录异常，未取到端到端对比（**如实标注，不硬凑证据**）；
+  3. **代码事实**：`MemberServiceImpl.java:191-197` 只有 scope + 租户两条校验，**无任何调用者豁免分支**；超管豁免只在 UMS 建号侧（`UserServiceImpl.assertRoleGrantable`），IF §4.2 已写明。
+  **纪律性结论（写进常识）**：**"代码已改"≠"你测的实例已改"**——开发期用 IDE 跑服务时，改完必须 **Rebuild/Restart**；跨端复测前先确认"被测实例的启动时间晚于修复时间"，否则会把"环境未更新"误判成"功能未实现"，白烧一轮沟通（本次前端工单即因此产生）。**建议**：联调期统一用 `mvn package` 产物起服务，或至少复测前贴一句"实例启动时间/版本"。
+  **善后**：前端 `BE-ISSUES.md` 已回填答复+证据（状态 ✅，待其复测转 🟢）；`FE-SYNC §2` 已双写；另登记新缺口「组织级角色无授予入口」入 §6.3。
+
 ---
 
 ## 四、踩坑记录（增量追加）
@@ -321,6 +331,7 @@
 - [x] 🟡 **SpEL 表达式每次请求重新 parse** —— **已修**：`WorkspacePermissionAspect` 增加 `EXPRESSION_CACHE`（`ConcurrentHashMap<String, Expression>` + `computeIfAbsent`），求值上下文仍每请求新建。**实测依据**：`javap` 核对 spring-expression 6.1.6，`SpelExpressionParser.parseExpression(String)` **无内部缓存**（`InternalSpelExpressionParser` 只有正则 `patternCache`），故该建议成立；冒烟全绿说明缓存路径下注解判定行为不变
 - [x] 🟢 **三项小问题** —— **已修**：① `myPermissions` 的 `roles` 与 `permissions` 改为**同一份缓存快照**（缓存值 `角色码,角色码|权限码,权限码`，新增 `WorkspacePermissionChecker#rolesOf`；旧格式无 `|` 时自动回源覆盖，向后兼容）；② `WorkspacePermissionAspect` 显式 `@Order(Ordered.LOWEST_PRECEDENCE)`（原依赖隐式默认）；③ 新增 `WorkspacePermissionCacheInvalidator` 接口，`MemberServiceImpl`/`WorkspaceServiceImpl` 改为**依赖接口**（不再注入 `WorkspacePermissionCheckerImpl` 实现类）
 - [ ] 🟡 **【本轮新发现 Y5】权限授予侧同源问题**：`PUT /api/v1/role/{id}/permissions`（`RoleServiceImpl.assignPermissions`，门控 `role:write`，**`org_admin` 持有**）可把 `auth:write`/`system:write` 等**平台级权限**授予任意角色（包括自己所在的角色）→ 组织管理员可借"角色授权"把自己的权限升到平台级。当前种子特意把 `auth:write`/`system:write` 排除在 `org_admin` 之外，说明设计意图是"不该有此能力"，但分配接口没挡住。建议二选一：① **按权限域分级**（`auth:*`/`system:*` 等平台级仅超管可授）；② **权限子集原则**（只能授出"授予者自己拥有"的权限，通用且一劳永逸）。未修原因：属权限模型裁决（影响 IF §6 与前端角色授权页），不是顺手可改
+- [ ] 🟡 **【2026-09-17 新登记】组织级角色缺少"授予已有成员"的入口**：空间侧只能授 `WS/SELF`（有意为之，见 §三 同日条目），UMS 建号接口只能在建号时定角色；因此 `org_admin`（`scope=ORG`）**没有任何入口可以授予一个已存在的用户**（超管也不行）。触发场景：把某人从空间管理员提升为组织管理员。**待裁决**：① 新增「组织级成员管理」接口（组织级门控，如 `org:write` + `member:update`，允许授 ORG 及以下）；② 或维持现状（组织级角色只能通过"新建账号"或直接改库获得）——**建议 ①，但属新接口，需评估前端页面归属**；
 - [ ] 🟡 **【本轮新发现 Y6】门控语义错配：空间级权限码承载组织级动作**：UMS 用户管理（建号/改资料/改状态，`UserController:57/67/79`）用 **`member:create`/`member:update`** 门控，而 `member:*` 是**空间级**权限（`ws_admin` 持有）→ 空间管理员可创建平台账号。本轮已在服务层收紧（非超管只能授 WS/SELF 角色、roleId 必须存在），但"ws_admin 能否建号"本身仍是越界。建议：权限字典补 `user:*` 域（或改挂 `org:write`）——**属跨端契约变更**，需同步 FE-SYNC + 前端按钮门控。未修原因：会移除 `ws_admin` 的建号能力，需前端配套
 - [ ] DataScope 行级数据权限拦截器（TD §7.5）——多租户/V1.0 前必须完成，覆盖全部业务列表查询。**归属待裁决（2026-09-17 登记）**：DEVGUIDE 把它列在**阶段 5（workspace）**，实际未做；**建议不在阶段 6（model）之前补**（当前仅 `ie_workspace` 一张业务表且已按 tenant/org 收敛，主战场是阶段 7 的 `ie_kb*` 等带 `workspace_id` 的表）→ **建议明确为"阶段 7 落地前完成"**，待开发者确认后同步 DEVGUIDE 阶段 5/7 措辞（避免"阶段 5 未完成就进阶段 6"的口径含糊）
 - [x] 🟡 **token 内 `roles`/`perms` 口径不统一（2026-09-17 开发者裁决：方案 B，已实施）** —— 裁决为 **B. 统一为全局**：`switch` 只换 `ws_id`、不重展开 `roles`/`perms`，三个签发入口统一走 `AuthTokenIssuer` + `common.AuthQuerySql`；"按空间隔离权限"的需求**另立为 §6.3「空间维度授权」两步**（服务端二次判定 + 前端「当前空间权限」接口），**不作为 token 口径**。验证：`scripts/smoke-auth-claims.ps1` 全绿。原登记（留档）：：`roles`/`perms` 有**三个签发入口**，其中 **UMS 登录 / 刷新按全局展开**（`RoleMapper.selectRoleCodesByUserId`、`PermissionMapper.selectPermissionCodesByUserId`，仅按 `user_id` 过滤），而 **`workspace/switch` 按目标空间展开**（`RoleMapper.selectRoleCodesByUserAndWorkspace`，带 `m.workspace_id` 条件）→ 登录后是全局权限、切空间后仅本空间权限，**同一语义两套口径**。IF §3.5 已如实标注「两者语义不同」，但**从未裁决**。两条路：**A. 统一为按空间**（登录也按默认空间展开，`org_admin` 无空间时保留全局兜底）——权限隔离更正确，需改 UMS；**B. 统一为全局**（`switch` 只换 `ws_id`、不重展开 `roles`/`perms`）——改动小但切空间无权限隔离。**裁决前不得再扩散第三种口径**（AGENTS.md 铁律 6）
