@@ -5,6 +5,7 @@ import com.insightengine.workspace.dto.request.WorkspaceCreateRequest;
 import com.insightengine.workspace.dto.request.WorkspacePageQuery;
 import com.insightengine.workspace.dto.request.WorkspaceSwitchRequest;
 import com.insightengine.workspace.dto.request.WorkspaceUpdateRequest;
+import com.insightengine.workspace.dto.response.WorkspacePermissionVO;
 import com.insightengine.workspace.dto.response.WorkspaceSwitchVO;
 import com.insightengine.workspace.dto.response.WorkspaceVO;
 
@@ -41,4 +42,12 @@ public interface WorkspaceService {
      * @param userId 当前登录用户 ID（取自认证上下文，不信任客户端传参）
      */
     WorkspaceSwitchVO switchWorkspace(Long userId, WorkspaceSwitchRequest request);
+
+    /**
+     * 「我在该空间的权限」（IF §5.7，空间维度授权）：供前端做按钮门控，保证与后端第二层判定同源。
+     *
+     * @param userId      当前登录用户
+     * @param workspaceId 目标空间（须为该空间成员，否则 403/2006）
+     */
+    WorkspacePermissionVO myPermissions(Long userId, Long workspaceId);
 }

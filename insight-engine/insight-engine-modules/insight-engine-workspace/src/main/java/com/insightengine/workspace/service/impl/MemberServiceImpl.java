@@ -17,11 +17,15 @@ import com.insightengine.workspace.mapper.RoleMapper;
 import com.insightengine.workspace.mapper.UserRefMapper;
 import com.insightengine.workspace.mapper.WorkspaceMapper;
 import com.insightengine.workspace.service.MemberService;
+import com.insightengine.workspace.support.WorkspacePermissionCheckerImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+
+import static com.insightengine.workspace.constant.WorkspaceConstants.PERM_MEMBER_DELETE;
+import static com.insightengine.workspace.constant.WorkspaceConstants.PERM_MEMBER_UPDATE;
 
 /**
  * 空间成员服务实现。
@@ -39,15 +43,18 @@ public class MemberServiceImpl implements MemberService {
     private final WorkspaceMapper workspaceMapper;
     private final RoleMapper roleMapper;
     private final UserRefMapper userRefMapper;
+    private final WorkspacePermissionCheckerImpl permissionChecker;
 
     public MemberServiceImpl(MemberMapper memberMapper,
                              WorkspaceMapper workspaceMapper,
                              RoleMapper roleMapper,
-                             UserRefMapper userRefMapper) {
+                             UserRefMapper userRefMapper,
+                             WorkspacePermissionCheckerImpl permissionChecker) {
         this.memberMapper = memberMapper;
         this.workspaceMapper = workspaceMapper;
         this.roleMapper = roleMapper;
         this.userRefMapper = userRefMapper;
+        this.permissionChecker = permissionChecker;
     }
 
     /**
@@ -97,6 +104,8 @@ public class MemberServiceImpl implements MemberService {
         member.setRoleId(request.getRoleId());
         member.setJoinedAt(LocalDateTime.now(ZoneOffset.UTC));
         memberMapper.insert(member);
+        // 新成员的空间权限缓存失效（此前可能缓存过"非成员=空权限"）
+        permissionChecker.evict(userId, workspace.getId());
         return member.getId();
     }
 
@@ -106,10 +115,14 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public void remove(Long id, Long operatorUserId) {
         Member member = requireMember(id);
+        // 第二层鉴权（空间维度）：操作者必须在该成员所属空间有 member:delete
+        // ——token 的 perms 是跨空间并集，只证明"这类动作你会"，证明不了"在这个空间你有"
+        requireWorkspacePermission(operatorUserId, member.getWorkspaceId(), PERM_MEMBER_DELETE);
         if (member.getUserId().equals(operatorUserId)) {
             throw new BizException(ErrorCode.OPERATION_NOT_ALLOWED, "不允许移除自己");
         }
         memberMapper.deleteById(id);
+        permissionChecker.evict(member.getUserId(), member.getWorkspaceId());
     }
 
     /**
@@ -118,6 +131,7 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public void updateRole(Long id, MemberRoleUpdateRequest request, Long operatorUserId) {
         Member member = requireMember(id);
+        requireWorkspacePermission(operatorUserId, member.getWorkspaceId(), PERM_MEMBER_UPDATE);
         if (member.getUserId().equals(operatorUserId)) {
             throw new BizException(ErrorCode.OPERATION_NOT_ALLOWED, "不允许修改自己的空间角色");
         }
@@ -128,9 +142,23 @@ public class MemberServiceImpl implements MemberService {
         update.setId(id);
         update.setRoleId(request.getRoleId());
         memberMapper.updateById(update);
+        // 成员角色变了 → 其空间权限缓存必须失效（否则最长 10min 内仍按旧角色放行）
+        permissionChecker.evict(member.getUserId(), member.getWorkspaceId());
     }
 
     /* ==================== 私有方法 ==================== */
+
+    /**
+     * 第二层鉴权（空间维度，TD §7.5）：操作者必须在目标空间拥有指定权限，否则 403/2006。
+     *
+     * <p>为什么这里手写判定而不是用 {@code @WorkspacePermission}：目标空间要**先按 memberId 反查成员记录**
+     * 才知道，注解的 SpEL 取不到该值。与其写绕来绕去的表达式，不如在业务里显式判定（检查点可见、易审计）。</p>
+     */
+    private void requireWorkspacePermission(Long userId, Long workspaceId, String permission) {
+        if (!permissionChecker.has(userId, workspaceId, permission)) {
+            throw new BizException(ErrorCode.FORBIDDEN, "您在目标工作空间没有该操作权限");
+        }
+    }
 
     /**
      * 查询工作空间，不存在抛 1004（成员列表/添加前先确认空间存在，避免对无效空间做操作）。

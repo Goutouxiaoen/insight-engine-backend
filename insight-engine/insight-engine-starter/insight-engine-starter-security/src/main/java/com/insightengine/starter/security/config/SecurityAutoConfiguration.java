@@ -6,10 +6,13 @@ import com.insightengine.starter.security.filter.JwtAuthFilter;
 import com.insightengine.starter.security.handler.RestAccessDeniedHandler;
 import com.insightengine.starter.security.handler.SecurityExceptionHandlerAdvice;
 import com.insightengine.starter.security.handler.RestAuthenticationEntryPoint;
+import com.insightengine.starter.security.aspect.WorkspacePermissionAspect;
 import com.insightengine.starter.security.session.TokenSessionService;
 import com.insightengine.starter.security.token.AuthTokenIssuer;
 import com.insightengine.starter.security.util.JwtUtil;
+import com.insightengine.starter.security.workspace.WorkspacePermissionChecker;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -99,6 +102,17 @@ public class SecurityAutoConfiguration {
     @ConditionalOnMissingBean(AuthTokenIssuer.class)
     public AuthTokenIssuer authTokenIssuer(JwtUtil jwtUtil) {
         return new AuthTokenIssuer(jwtUtil);
+    }
+
+    /**
+     * 空间维度权限校验切面（第二层鉴权，TD §7.5）：
+     * 仅当业务服务提供了 {@link WorkspacePermissionChecker} 实现时才装配——
+     * 没有判定器就不做空间维度校验（而不是静默放行：注解是被显式声明的需求，服务未实现时应尽快暴露）。
+     */
+    @Bean
+    @ConditionalOnBean(WorkspacePermissionChecker.class)
+    public WorkspacePermissionAspect workspacePermissionAspect(WorkspacePermissionChecker checker) {
+        return new WorkspacePermissionAspect(checker);
     }
 
     /**

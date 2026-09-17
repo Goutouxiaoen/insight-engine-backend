@@ -6243,7 +6243,7 @@ public Result<Long> create(@RequestBody KbCreateRequest req) { ... }
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 第 1 步 | **切换空间只改 `ws_id`，`roles`/`perms` 与登录同口径（用户维度全量）** | ✅ 2026-09-17 已修（`WorkspaceServiceImpl` + `RoleMapper`） |
-| 第 2 步（轻量） | `@workspacePermission` 空间维度判定 + 前端「当前空间权限」接口 | ⬜ PROGRESS §6.3 待办 |
+| 第 2 步（轻量） | `@WorkspacePermission` 空间维度判定 + 前端「当前空间权限」接口 | ✅ **2026-09-17 已实现**：`common.@WorkspacePermission`（`value` + `workspaceIdExpr` SpEL）→ `starter-security` 的 `WorkspacePermissionAspect` + `WorkspacePermissionChecker`（SPI，业务实现）→ workspace 侧查 `ie_member→ie_role→role_permission→permission` 并缓存 `ie:ws:user-perm:{wsId}:{userId}`（10min，成员变更主动失效）；配套 `GET /api/v1/workspace/{id}/my-permissions`。**实测**：同一 token（perms=27 含 `member:create`）在 W1（`ws_admin`）invite→200、在 W2（`end_user`）invite→**403/2006** —— 这正是"token 答不了、第二层才答得了"的问题。**两个实现细节值得记**：① 目标空间在方法参数里 → 用注解 SpEL（需编译开 `-parameters`，否则参数名变 `arg0` 直接报错）；目标空间要先查库才知道（如按 `memberId` 反查）→ 服务内**显式调用**判定器（比写绕的表达式更可审计）；② **组织级动作（`ws:create`/`ws:delete`）不做空间判定**——它们与"在哪个空间"无关，混淆了就会再造一次 BE-20260916-01 那类 bug |
 | 第 3 步（彻底） | DataScope 行级拦截器 + perms 移出 token（角色编码 + Redis 权限缓存，§6.6 方案 A） | ⬜ PROGRESS §6.3 / §6.6 |
 
 > ⚠️ 纪律：第 2/3 步都**不得**回退到"按空间裁剪 token 权限"的老路。

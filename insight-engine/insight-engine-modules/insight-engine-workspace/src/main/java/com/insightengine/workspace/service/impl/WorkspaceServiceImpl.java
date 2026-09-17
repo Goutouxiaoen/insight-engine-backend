@@ -10,6 +10,8 @@ import com.insightengine.starter.redis.session.TokenSessionCache;
 import com.insightengine.starter.security.token.AuthTokenIssuer;
 import com.insightengine.starter.security.token.IssuedTokens;
 import com.insightengine.starter.web.context.UserContext;
+import com.insightengine.workspace.dto.response.WorkspacePermissionVO;
+import com.insightengine.workspace.support.WorkspacePermissionCheckerImpl;
 import com.insightengine.workspace.constant.WorkspaceConstants;
 import com.insightengine.workspace.dto.request.WorkspaceCreateRequest;
 import com.insightengine.workspace.dto.request.WorkspacePageQuery;
@@ -62,19 +64,22 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     private final RoleMapper roleMapper;
     private final AuthTokenIssuer authTokenIssuer;
     private final TokenSessionCache tokenSessionCache;
+    private final WorkspacePermissionCheckerImpl permissionChecker;
 
     public WorkspaceServiceImpl(WorkspaceMapper workspaceMapper,
                                OrganizationMapper organizationMapper,
                                MemberMapper memberMapper,
                                RoleMapper roleMapper,
                                AuthTokenIssuer authTokenIssuer,
-                               TokenSessionCache tokenSessionCache) {
+                               TokenSessionCache tokenSessionCache,
+                               WorkspacePermissionCheckerImpl permissionChecker) {
         this.workspaceMapper = workspaceMapper;
         this.organizationMapper = organizationMapper;
         this.memberMapper = memberMapper;
         this.roleMapper = roleMapper;
         this.authTokenIssuer = authTokenIssuer;
         this.tokenSessionCache = tokenSessionCache;
+        this.permissionChecker = permissionChecker;
     }
 
     /**
@@ -161,6 +166,28 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         }
         workspaceMapper.deleteById(id);
         memberMapper.delete(new LambdaQueryWrapper<Member>().eq(Member::getWorkspaceId, id));
+        // 空间维度权限缓存整体失效（该空间已不存在，缓存留着也是垃圾）
+        permissionChecker.evictWorkspace(id);
+    }
+
+    /**
+     * 「我在该空间的权限」（IF §5.7）：供前端按钮门控使用，与后端第二层判定同源。
+     *
+     * <p>非该空间成员返回 403/2006（不泄露"该空间的权限清单"给非成员）。</p>
+     */
+    @Override
+    public WorkspacePermissionVO myPermissions(Long userId, Long workspaceId) {
+        requireWorkspace(workspaceId);
+        List<String> roles = roleMapper.selectRoleCodesByUserAndWorkspace(userId, workspaceId);
+        List<String> permissions = permissionChecker.permissionsOf(userId, workspaceId);
+        if (roles.isEmpty() && permissions.isEmpty()) {
+            throw new BizException(ErrorCode.FORBIDDEN, "您不是该工作空间的成员");
+        }
+        WorkspacePermissionVO vo = new WorkspacePermissionVO();
+        vo.setWorkspaceId(workspaceId);
+        vo.setRoles(roles);
+        vo.setPermissions(permissions);
+        return vo;
     }
 
     /**

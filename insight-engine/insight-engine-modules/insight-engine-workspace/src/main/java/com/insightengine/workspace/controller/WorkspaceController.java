@@ -1,5 +1,6 @@
 package com.insightengine.workspace.controller;
 
+import com.insightengine.common.annotation.WorkspacePermission;
 import com.insightengine.common.core.PageResult;
 import com.insightengine.common.core.Result;
 import com.insightengine.starter.web.context.UserContext;
@@ -7,6 +8,7 @@ import com.insightengine.workspace.dto.request.WorkspaceCreateRequest;
 import com.insightengine.workspace.dto.request.WorkspacePageQuery;
 import com.insightengine.workspace.dto.request.WorkspaceSwitchRequest;
 import com.insightengine.workspace.dto.request.WorkspaceUpdateRequest;
+import com.insightengine.workspace.dto.response.WorkspacePermissionVO;
 import com.insightengine.workspace.dto.response.WorkspaceSwitchVO;
 import com.insightengine.workspace.dto.response.WorkspaceVO;
 import com.insightengine.workspace.service.WorkspaceService;
@@ -57,6 +59,8 @@ public class WorkspaceController {
     @Operation(summary = "更新工作空间", description = "可改名称与配额；编码与所属组织不可修改")
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('ws:write')")
+    // 第二层：必须"在该空间"有 ws:write（token 的 perms 只是跨空间并集，不能证明这一点）
+    @WorkspacePermission(value = "ws:write", workspaceIdExpr = "#id")
     public Result<Void> update(@PathVariable("id") Long id,
                                @Valid @RequestBody WorkspaceUpdateRequest request) {
         workspaceService.update(id, request);
@@ -98,5 +102,19 @@ public class WorkspaceController {
     public Result<WorkspaceSwitchVO> switchWorkspace(@Valid @RequestBody WorkspaceSwitchRequest request) {
         Long userId = UserContext.getUserId();
         return Result.ok(workspaceService.switchWorkspace(userId, request));
+    }
+
+    /**
+     * 「我在该空间的权限」（IF §5.7，空间维度授权）：前端按钮门控的判据来源。
+     *
+     * <p>为什么前端需要它：token 的 {@code perms} 是跨空间并集，用它渲染会出现
+     * 「切到 B 空间按钮还在、点下去 403」。用本接口返回的**当前空间权限**做门控，
+     * 显示与后端判定同源。</p>
+     */
+    @Operation(summary = "我在该空间的权限", description = "返回当前用户在该空间内的角色与权限编码；非成员返回 2006")
+    @GetMapping("/{id}/my-permissions")
+    @PreAuthorize("hasAuthority('ws:read')")
+    public Result<WorkspacePermissionVO> myPermissions(@PathVariable("id") Long id) {
+        return Result.ok(workspaceService.myPermissions(UserContext.getUserId(), id));
     }
 }

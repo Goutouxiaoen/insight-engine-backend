@@ -50,4 +50,28 @@ public interface RoleMapper extends BaseMapper<Role> {
      */
     @Select(AuthQuerySql.SELECT_PERMISSION_CODES_BY_USER)
     List<String> selectPermissionCodesByUserId(@Param("userId") Long userId);
+
+    /* ==========================================================================================
+     * 以下两条是「空间维度」查询（2026-09-17 新增）：**只服务于 @WorkspacePermission 二次判定
+     * 与「当前空间权限」接口**，⚠️ 严禁用于 token 签发（token 必须用上面两条「用户维度」的 SQL）。
+     *
+     * 为什么两者必须并存：
+     *   · token 回答"我是谁、我能做哪些类别的动作"（用户维度、跨空间聚合）；
+     *   · 空间维度回答"我在这一个空间里能做什么"（同一用户在不同空间角色可以不同）。
+     * 曾经把空间维度结果写进 token → 一切空间就丢组织级能力（BE-20260916-01）。
+     * ========================================================================================== */
+
+    /**
+     * 查询用户在某工作空间内的角色编码（空间维度，二次判定用）。
+     */
+    @Select(AuthQuerySql.SELECT_ROLE_CODES_BY_USER_AND_WORKSPACE)
+    List<String> selectRoleCodesByUserAndWorkspace(@Param("userId") Long userId,
+                                                   @Param("workspaceId") Long workspaceId);
+
+    /**
+     * 查询用户在某工作空间内的权限编码（空间维度，二次判定 / my-permissions 用）。
+     */
+    @Select(AuthQuerySql.SELECT_PERMISSION_CODES_BY_USER_AND_WORKSPACE)
+    List<String> selectPermissionCodesByUserAndWorkspace(@Param("userId") Long userId,
+                                                         @Param("workspaceId") Long workspaceId);
 }

@@ -52,7 +52,7 @@
 |------|--------------|------|
 | auth | 5 | 登录/刷新/登出/注册/用户信息 |
 | user | 5 | 用户 CRUD + 密码 |
-| org / workspace | 11 | 组织（创建/详情）、空间（创建/更新/删除/分页/切换）、成员（分页/添加/移除/改角色） |
+| org / workspace | 12 | 组织（创建/详情）、空间（创建/更新/删除/分页/切换/我在该空间的权限）、成员（分页/添加/移除/改角色） |
 | role / permission | 6 | 角色、权限、分配 |
 | model | 10 | 厂商、模型、路由、调用 |
 | prompt | 6 | 模板、示例、调试 |
@@ -156,7 +156,10 @@
 1. `roles` / `perms` **只按"用户"维度算**，**禁止按 `workspace_id` 过滤**——`ie_member.workspace_id` 可空 = 组织级成员，
    且 `org:*` / `ws:create` / `ws:delete` 等组织级能力不属于任何空间；
 2. `ws_id` 是**请求上下文**，不是身份：**切换空间只改它**，不改 `roles`/`perms`；
-3. 「同一用户在不同空间的权限差异」不由 token 承载 → 由服务端按当前 `ws_id` 二次判定（TD §7.5，PROGRESS §6.3 待办）。
+3. 「同一用户在不同空间的权限差异」不由 token 承载 → 由服务端**二次判定**（TD §7.5）；
+   **落地形态（2026-09-17 已实现，见 §5.6 校验点表）**：`@WorkspacePermission` 注解（切面判 `(userId, 目标空间)` 的成员关系权限）
+   + 服务内显式调用判定器（目标空间需先查库才知道时）；**前端按钮门控应改用 `GET /api/v1/workspace/{id}/my-permissions`（§5.7）**，
+   不要用 token 的 `perms`（它是跨空间并集，会"按钮在、点了 403"）。
 
 ### 3.1 登录
 
@@ -497,6 +500,44 @@ curl -X POST http://localhost:7000/auth/login \
 - 添加成员要求邮箱对应**平台已注册用户**，未注册 / 重复加入均返回 `1001`；
 - 添加与改角色均校验 `roleId` 存在（防孤儿成员关系）；
 - 操作保护：不允许移除自己、不允许修改自己的空间角色（`1003`）。
+
+**空间维度校验点（2026-09-17 新增，第二层鉴权，见 §3.0 与 TD §7.5）**：
+
+| 接口 | 动作门控（`@PreAuthorize`） | 空间维度判定（`@WorkspacePermission` / 服务内判定） | 判定目标空间来源 |
+|------|------------------------------|------------------------------------|------------------|
+| `GET /api/v1/member/page` | `member:read` | `member:read`（注解） | 请求参数 `workspaceId` |
+| `POST /api/v1/member/invite` | `member:create` | `member:create`（注解） | 请求体 `workspaceId` |
+| `DELETE /api/v1/member/{id}` | `member:delete` | `member:delete`（服务内显式判定） | 先按 `memberId` 反查成员记录所属空间 |
+| `PUT /api/v1/member/{id}/role` | `member:update` | `member:update`（服务内显式判定） | 同上 |
+| `PUT /api/v1/workspace/{id}` | `ws:write` | `ws:write`（注解） | 路径变量 `id` |
+| `POST /api/v1/workspace`、`DELETE /api/v1/workspace/{id}` | `ws:create` / `ws:delete` | **不判定**（空间增删属**组织级**动作，与"在哪个空间"无关） | — |
+
+> 判定失败统一返回 **`403 / 2006`「您在当前工作空间没有该操作权限」**（与"业务规则禁止"的 `1003` 区分开）。
+> 差异示例：某用户在 W1 是 `ws_admin`、在 W2 只是 `end_user`，其 token 的 `perms` 是二者**并集**（含 `member:create`）；
+> 在 W1 调 invite → `200`，在 W2 调 invite → **`403/2006`**（实测见 PROGRESS §三 2026-09-17「空间维度授权」条目）。
+
+### 5.7 我在该空间的权限（前端按钮门控判据来源）★
+
+`GET /api/v1/workspace/{id}/my-permissions`
+
+**权限**：`ws:read`（+ 服务端校验须为**该空间成员**，非成员返回 `403/2006`）
+
+**响应 `data`**：
+
+```json
+{
+  "workspaceId": 2,
+  "roles": ["ws_admin"],
+  "permissions": ["agent:read", "agent:write", "member:create", "member:read", "ws:read", "ws:write", "..."]
+}
+```
+
+**为什么前端需要它**（重要）：token 里的 `perms` 是**用户跨空间的并集**，用它渲染按钮会出现
+「切到某空间后按钮还在、点下去 403」。本接口返回的是**你在该空间内的真实权限**，
+与后端第二层判定**同源**——前端应以它做按钮门控（token 的 `perms` 只用于路由/粗粒度判断）。
+
+**缓存**：服务端按 `(workspaceId, userId)` 缓存 10 分钟（`ie:ws:user-perm:*`，成员变更时主动失效；
+角色授权变更发生在 UMS，靠 10min TTL 兜底生效）。
 
 ---
 

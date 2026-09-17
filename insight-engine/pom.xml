@@ -97,6 +97,9 @@
                     <configuration>
                         <release>17</release>
                         <encoding>UTF-8</encoding>
+                        <!-- 保留方法参数名：SpEL 按参数名取值需要它（如 @WorkspacePermission(workspaceIdExpr="#request.workspaceId")），
+                             也是 Spring Boot 官方父 POM 的默认行为；缺失时参数名会变成 arg0 导致表达式解析失败 -->
+                        <parameters>true</parameters>
                         <!-- 让 Lombok 注解处理器在编译期生效 -->
                         <annotationProcessorPaths>
                             <path>

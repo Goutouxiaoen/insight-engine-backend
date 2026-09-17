@@ -414,6 +414,7 @@ CREATE UNIQUE INDEX uk_ws_code_org ON ie_workspace(org_id, code) WHERE deleted =
 | `ie:user:info:{userId}` | hash | 30min | 用户缓存 |
 | `ie:role:permissions:{roleId}` | set | 10min | 角色权限 |
 | `ie:ws:member:{workspaceId}` | set | 10min | 空间成员 userId |
+| `ie:ws:user-perm:{workspaceId}:{userId}` | string | 10min | 用户**在该空间内**的权限编码（逗号拼接）；`@WorkspacePermission` 二次判定与 `my-permissions` 接口的读缓存；成员变更主动失效，角色授权变更靠 TTL（2026-09-17 新增） |
 
 > **实现侧口径（2026-09-16）**：上表 `ie:auth:*` 五个键的**字面量统一定义在 `common.constant.CacheKeyConstants`**（UMS 写入：登录/刷新/登出/锁定；workspace 写入：切换空间换签；各服务读取：starter-redis 的登录态/黑名单实现）。新增/改名键必须只改这一处，禁止在各服务内重复写字面量（防 drift 致静默失效）。
 >
@@ -501,6 +502,16 @@ SecurityFilterChain filterChain(HttpSecurity http) {
 ```
 
 ### 7.5 数据权限（ABAC）
+
+> **实现进度（2026-09-17）**：本节分两层落地，**第一层（动作/空间维度鉴权）已实现**，**第二层（行级过滤）待做**。
+>
+> | 层 | 内容 | 状态 |
+> |----|------|------|
+> | **A. 空间维度鉴权**（"在这一个空间里能不能做"） | `common` 的 `@WorkspacePermission` 注解 + `starter-security` 的 `WorkspacePermissionAspect`（判据由业务实现 `WorkspacePermissionChecker`：`ie_member → ie_role → ie_role_permission`，结果缓存 `ie:ws:user-perm:*` 10min）；配套 `GET /api/v1/workspace/{id}/my-permissions`（IF §5.7）供前端门控同源 | ✅ 已实现（证据：PROGRESS §三 2026-09-17，冒烟 `scripts/smoke-workspace-permission.ps1` 全绿） |
+> | **B. 行级数据过滤**（"能查到哪些行"） | 下面这段 `DataScopeInterceptor`：自动追加 `workspace_id = 当前空间`，作为"忘了写 where"的防漏兜底（水平越权的主要来源） | ⬜ 待做（PROGRESS §6.3 / §7 待办） |
+>
+> 分工记法：**A 管"动作"，B 管"数据行"**；A 拒绝返回 `403/2006`，B 是让查询结果里根本不存在别人的数据。
+> 另：`ie_role.scope`（ALL/ORG/WS/SELF）是 B 的过滤依据，当前仅被 `RoleServiceImpl` 读写、**尚无消费方**（LEARNING 已记录）。
 
 MyBatis-Plus 拦截器实现行级隔离：
 

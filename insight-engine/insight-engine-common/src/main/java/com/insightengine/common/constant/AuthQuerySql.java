@@ -55,4 +55,43 @@ public final class AuthQuerySql {
               AND p.deleted = 0
             ORDER BY p.code
             """;
+
+    /* ==========================================================================================
+     * 以下两条是「空间维度」查询：**只用于二次判定（@WorkspacePermission / my-permissions）**，
+     * ⚠️ 严禁用于 token 签发（token 必须用上面两条「用户维度」的 SQL）。
+     *
+     * 两者区别（2026-09-17 固化，BE-20260916-01 的教训）：
+     *   · token 承载「用户级能力」→ 用户维度、跨空间聚合（含 workspace_id 为空的组织级成员）；
+     *   · 「在某个空间里能不能做某事」→ 空间维度，按 (userId, workspaceId) 查成员关系后判定。
+     * 曾经把空间维度查询的结果写进 token，导致"一切空间就降级"（丢掉 org 域、ws:create、ws:delete 等组织级能力）。
+     * ========================================================================================== */
+
+    /**
+     * 用户在某工作空间内的角色编码（空间维度，二次判定用）。
+     * <p>参数：{@code #{userId}}、{@code #{workspaceId}}</p>
+     */
+    public static final String SELECT_ROLE_CODES_BY_USER_AND_WORKSPACE = """
+            SELECT DISTINCT r.code
+            FROM ie_role r
+            JOIN ie_member m ON m.role_id = r.id AND m.deleted = 0
+            WHERE m.user_id = #{userId}
+              AND m.workspace_id = #{workspaceId}
+              AND r.deleted = 0
+            """;
+
+    /**
+     * 用户在某工作空间内的权限编码（空间维度，二次判定用）。
+     * <p>参数：{@code #{userId}}、{@code #{workspaceId}}</p>
+     */
+    public static final String SELECT_PERMISSION_CODES_BY_USER_AND_WORKSPACE = """
+            SELECT DISTINCT p.code
+            FROM ie_permission p
+            JOIN ie_role_permission rp ON rp.permission_id = p.id
+            JOIN ie_role r ON r.id = rp.role_id AND r.deleted = 0
+            JOIN ie_member m ON m.role_id = r.id AND m.deleted = 0
+            WHERE m.user_id = #{userId}
+              AND m.workspace_id = #{workspaceId}
+              AND p.deleted = 0
+            ORDER BY p.code
+            """;
 }

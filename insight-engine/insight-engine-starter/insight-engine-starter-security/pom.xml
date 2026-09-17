@@ -39,6 +39,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+        <!-- AOP：承载 @WorkspacePermission 空间维度校验切面（TD §7.5 第二层鉴权） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
         <!-- JJWT：JWT 签发与解析 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

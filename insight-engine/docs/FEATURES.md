@@ -303,6 +303,20 @@
 ### 3.4 修改成员角色 `PUT /api/v1/member/{id}/role`
 - **权限**：`member:update`；校验 `roleId` 存在；**不允许修改自己的空间角色**（`1003`，防自提权/自降权）
 
+### 4.1 空间维度授权（第二层鉴权，2026-09-17 新增）
+
+- **解决的问题**：同一用户在 A 空间是 `ws_admin`（能加成员）、在 B 空间只是 `end_user`（不能）——
+  而 token 里的 `perms` 是**跨空间并集**（两个空间拿到的 token 一模一样），`@PreAuthorize` 拦不住这种"跨空间越权"。
+- **两层职责**：
+  - 第一层 `@PreAuthorize`：**动作类别**能不能做（判据 = token perms）；
+  - 第二层 `@WorkspacePermission` / 服务内判定：**在这个空间**能不能做（判据 = 该空间成员关系）。
+- **实现**：`common.@WorkspacePermission`（`value` + `workspaceIdExpr` SpEL）→ `starter-security.WorkspacePermissionAspect`
+  （失败 `403/2006`）→ 业务实现 `WorkspacePermissionChecker`（workspace 侧查 `ie_member→ie_role→role_permission→permission`，
+  缓存 `ie:ws:user-perm:{wsId}:{userId}` 10min，成员变更主动失效）。
+- **校验点与分域**：`member:*`、`ws:read/write` 属空间级（做判定）；`ws:create`/`ws:delete`、`org:*` 属组织级（不判定）。
+- **前端门控**：用 `GET /api/v1/workspace/{id}/my-permissions`（返回"当前空间权限"），与后端判定同源。
+- **为什么不做进 token**：token 表达"每个空间的权限"要么膨胀、要么每次切换重签，且历史上曾按空间裁剪 token 权限导致丢组织级能力（BE-20260916-01）。
+
 ## 贯穿设计：与 UMS 的协作边界（MVP 现状）
 
 - **同库只读引用**：workspace 按邮箱定位用户（`UserRefMapper` → `ie_user`）、UMS 取空间名（`WorkspaceMapper` → `ie_workspace`），均为 MVP 临时方案，Service 间契约化（Feign + api 模块）后收口（TD §3.2，PROGRESS §6.3）

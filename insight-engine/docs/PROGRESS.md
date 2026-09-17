@@ -41,7 +41,7 @@
 | 基础设施（docker-compose/init.sql）             | 🔵 进行中 | 92%  | docker-compose.yml / init.sql / prometheus.yml | compose/init.sql 定义完成；✅ 云服务器（39.106.110.214）PG/Redis 已按 compose 逐项对齐重建完成（卷 + appendonly + unless-stopped），并经 UMS 冒烟实机验证（2026-09-08 8/8 通过）；✅ Nacos 容器迁云完成（2026-09-09：1:1 端口 8848/9848 + 公网 IP 自报 + healthy）；2026-09-09 补齐 init.sql 角色 seed 授权（org_admin/ws_admin/end_user，带 `ON CONFLICT` 可增量重跑）；✅ **2026-09-16 云端库增量 seed 已执行**（role 2/3/5 授权补齐，`ie_role_permission`=143，与 DB.md 一致）；⬜ 待办：**RabbitMQ / MinIO / Prom / Grafana 容器迁云**（compose 已写好，云上仅 postgres/redis/nacos 3 容器在跑）+ **compose 与云上实跑漂移（P1-2：compose 的 nacos 服务缺 `NACOS_SERVER_IP`）** + §五 凭据收敛（口令轮换） |
 | UMS 认证服务                                  | ✅ 完成  | 100% | 认证5+用户5+角色权限6 接口 / JWT / RBAC / 黑名单 / 登录锁定 / Knife4j | 功能实机验证通过；UMS-1（双身份源收敛）+ UMS-2（refresh 轮换撤销）回归验证通过，PR #2 已合入 master，阶段正式收口；遗留 UMS 收尾优化项转 §6.1 待办池（不阻塞） |
 | gateway 网关                                | 🔵 进行中 | 95%  | 骨架/路由/CORS + AuthGlobalFilter（JWT+防伪造头+sk-分流）+ TraceGlobalFilter + 常量下沉 | 全链路冒烟 8/8（2026-09-08，云 PG/Redis，UMS 7101 + gateway 7000）；3 修复 + 文档已提交 feature/gateway（fe912aa）；2026-09-09 路由按 §8.3 收窄（`/auth/**`+`/api/v1/user|role|permission/**`）+ TraceGlobalFilter(-200) + 错误响应 charset + JWT Claim 常量下沉 common，**复跑冒烟 9/9 通过**（含 `X-Trace-Id` 单值修复、2007 过期 token、`/doc.html` 白名单、`sk-` 分流）；**PR #5（`f84ffd2`）已合入 master**；✅ Nacos 接入闭环（2026-09-09：路由改 `lb://insight-engine-ums` + `fail-fast:false`；实例 UP、`lb://` 转发冒烟 8/8 通过）；**2026-09-16 新增 workspace 路由 + `lb://` 双服务复验通过**（UMS/workspace 注册 healthy、经网关 login/org/workspace-page/user-page 200、无路由 404）+ `register-enabled:false`（P2-1）。⬜ 剩余均为生产向项：API Key（`sk-`）通道、Sentinel 限流、CORS 白名单、未匹配路由 404 统一体、Nginx 入口 |
-| workspace 工作空间                            | 🔵 进行中 | 95%  | 组织/空间/成员 11 端点 + 切换空间换签 + 网关路由接入              | 2026-09-16 实现完成、全量编译通过、**实机冒烟 28/28**（含经网关复验）；前端 BE-20260908-02 已可切真联调（FE-SYNC §1 置 ✅）；**`lb://` 服务发现复验已完成（2026-09-16）**；代码已提交并推送 `feature/workspace`（`6490cf5` 等，详见 §八）；⬜ 待办：PR 合并 + 前端切真复测；❌ 不含 audit（属 obs 服务，仍在 mock） |
+| workspace 工作空间                            | 🔵 进行中 | 97%  | 组织/空间/成员 12 端点 + 切换空间换签 + 网关路由接入              | 2026-09-16 实现完成、全量编译通过、**实机冒烟 28/28**（含经网关复验）；前端 BE-20260908-02 已可切真联调（FE-SYNC §1 置 ✅）；**`lb://` 服务发现复验已完成（2026-09-16）**；**2026-09-17 新增空间维度授权（第二层鉴权）**：`@WorkspacePermission` + `my-permissions` 接口，冒烟全绿（12 端点）；代码已提交并推送 `feature/workspace`；⬜ 待办：PR 合并 + 前端切真复测（门控改用 `my-permissions`）；❌ 不含 audit（属 obs 服务，仍在 mock） |
 | model 模型网关                                | ⚪ 未开始 | 0%   |                                                |                                        |
 | kb 知识库                                    | ⚪ 未开始 | 0%   |                                                |                                        |
 | tool 工具市场                                 | ⚪ 未开始 | 0%   |                                                |                                        |
@@ -132,6 +132,14 @@
   ⑤ 清理死配置：`AuthConstants` 中三个键常量随收口下沉后已无引用，删除并留注；
   ⑥ **断言**：新增 `scripts/smoke-auth-claims.ps1`（全 ASCII —— PS 5.1 读无 BOM 的 UTF-8 会乱码；口令走参数不落库），覆盖 5 类/10 项断言。
   **验证（隔离实例 :17101/:17102，不打断 IDEA 中运行的服务）**：`RESULT: ALL PASS` —— 登录/刷新/切换三入口 `roles`+`perms` 一致、**刷新前后 `ws_id` 不变**、**切换后刷新仍停留在目标空间**、切换后旧 token `401/2001`、删当前空间 `403/1003`、清理返回 200
+
+- [2026-09-17] ✅ 已决策并实施（**空间维度授权轻量版落地**，TD §7.5 的 A 层）：回答"同一用户在不同空间权限不同"这个真实需求，**且不污染 token 口径**——
+  **关键取舍**：① 该需求**不由 token 承载**（token 只承载用户级能力），而是在**服务端二次判定**；② 判定器做成 `starter-security` 的 SPI（`WorkspacePermissionChecker`），实现放业务侧（当前 workspace；将来跨库再改 Feign）——保持 starter 不依赖业务表；
+  ③ 判定入口两种形态：目标空间在方法参数里 → 注解 `@WorkspacePermission(value, workspaceIdExpr)`（SpEL，需 `-parameters`，已在根 POM 开启）；目标空间需先查库才知道（如按 `memberId` 反查）→ 服务内**显式调用**判定器（检查点可见、易审计）；
+  ④ 缓存 `ie:ws:user-perm:{wsId}:{userId}`（10min）：成员变更**主动失效**，角色授权变更在 UMS（跨服务）靠 TTL 兜底；
+  ⑤ 前端门控改由 `GET /api/v1/workspace/{id}/my-permissions` 提供"当前空间权限"，**做到显示与后端判定同源**（否则会出现"按钮在、点了 403"）；
+  ⑥ 权限分域纪律：`ws:create`/`ws:delete` 属**组织级**，不做空间判定；`member:*`/`ws:write`/`ws:read` 及后续 `kb:*` 等属**空间级**。
+  **验证**：`scripts/smoke-workspace-permission.ps1` 全绿（同 token 在 W1 放行、在 W2 `403/2006`；`my-permissions` 在两空间分别返回 27/7 条）
 
 ---
 
@@ -263,7 +271,14 @@
 - [x] 权限编码二级/三级混用统一规范（`kb:read` vs `model:vendor:write`）——**2026-09-09 完成**：统一规则「`资源路径:动作`，最后一段固定为动作」，写入 IF §6.7（前端按最后一个 `:` 切分或用权限树 `resource` 字段分组，禁用 `startsWith` 前缀匹配）；现有编码零改动，已答复前端 BE-20260909-06
 - [ ] `WorkspaceMapper` 直查 `ie_workspace` 改走 Feign（workspace 服务落地后，TD §3.2 服务边界）——**workspace 已于 2026-09-16 落地，该项仍未做**：`/auth/me` 的 `workspaceName` 目前仍由 UMS 直查 `ie_workspace`（同库只读），需与下一项一并收口
 - [ ] `UserRefMapper` 直查 `ie_user`（workspace 侧按邮箱定位已注册用户，IF §5.6 添加成员）同样属 MVP 临时直查；与上一项一起抽象为 `insight-engine-api` Feign 契约（TD §3.2）
-- [ ] 🟡 **空间维度授权（"同一用户在不同空间权限不同"）**（2026-09-17 由 BE-20260916-01 引出，属 TD §7.5 的一部分）：
+- [x] 🟡 **空间维度授权 —— 第①步「轻量版」已完成（2026-09-17）；第②步「行级 DataScope」待做**（由 BE-20260916-01 引出，属 TD §7.5；TD §7.5 已补实现进度表）
+  **✅ 落地内容（第①步，2026-09-17）**：`common` 新增 `@WorkspacePermission`（`value` 权限码 + `workspaceIdExpr` SpEL，缺省取 token `ws_id`）；
+  `starter-security` 新增 `WorkspacePermissionChecker`（SPI）+ `WorkspacePermissionAspect`（判定失败 `403/2006`，`@ConditionalOnBean` 装配、无实现则不生效）；
+  workspace 实现 `WorkspacePermissionCheckerImpl`（`ie_member → ie_role → ie_role_permission → ie_permission`，缓存 `ie:ws:user-perm:{wsId}:{userId}` 10min，成员变更主动失效）；
+  校验点：`member/page|invite`（注解）、`member/{id}` 移除与改角色（服务内显式判定，目标空间需按 memberId 反查）、`workspace/{id}` 更新（注解）；**`ws:create`/`ws:delete` 属组织级，不做空间判定**；
+  新接口 `GET /api/v1/workspace/{id}/my-permissions`（IF §5.7）供前端门控同源。
+  **证据**：`scripts/smoke-workspace-permission.ps1` **全绿**（隔离实例 :17101/:17102）——同一 token（`perms`=27 含 `member:create`）在 W1（ws_admin）invite→**200**、在 W2（end_user）invite→**403/2006**「您在当前工作空间没有该操作权限」；`my-permissions` W1=27 条 / W2=7 条（与 token 并集不同）
+  **设计（原计划，留档）**：
   **现状**：token 只承载「用户级能力」（用户维度全量，与登录一致），服务端**尚未**按「当前 `ws_id`」做二次判定，故"在 A 空间能建、在 B 空间不能建"这类需求**目前无法表达**。
   **设计（分两步，先轻后重）**：
   ① **轻量版**：新增 `@workspacePermission("kb:write")`（或 `WorkspacePermissionAspect`），判定 = 当前 `ws_id` 空间内该用户是否拥有该权限（`ie_member`→`ie_role`→`ie_role_permission`→`ie_permission`，走 Redis 缓存 `ie:ws:member:{wsId}` / `ie:role:permissions:{roleId}`，TD §6.1）；同时给前端补「我在这个空间的权限」接口（或在 `/auth/me` 增 `currentWorkspacePerms` 字段），保证**按钮显示与后端判定同源**（否则会出现"按钮在、点了 403"）；
@@ -330,6 +345,8 @@
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-17（三段）
+- 内容：**空间维度授权（第二层鉴权）轻量版落地**（兑现 §6.3 第①步 / TD §7.5 的 A 层）—— ① **目标**：满足"同一用户在不同空间权限不同"（在 A 能建、在 B 不能建），且**不污染 token 口径**（token 只承载用户级能力）；② **实现**：`common.@WorkspacePermission`（value + `workspaceIdExpr` SpEL）→ `starter-security.WorkspacePermissionChecker`（SPI）+ `WorkspacePermissionAspect`（失败 `403/2006`，`@ConditionalOnBean` 装配）→ workspace `WorkspacePermissionCheckerImpl`（查 `ie_member→ie_role→ie_role_permission→ie_permission`，缓存 `ie:ws:user-perm:{wsId}:{userId}` 10min，成员变更主动失效）；根 POM 开 `-parameters`（SpEL 按参数名取值的前提）；③ **校验点**：`member/page|invite`、`workspace/{id}` 更新用注解；`member/{id}` 移除/改角色在服务内显式判定（目标空间需按 memberId 反查）；**`ws:create`/`ws:delete` 属组织级，明确不做空间判定**；④ **新接口** `GET /api/v1/workspace/{id}/my-permissions`（IF §5.7）——前端按钮门控改用它，解决"按钮在、点了 403"；⑤ **证据**：`scripts/smoke-workspace-permission.ps1`（新增、全 ASCII、口令参数化）**ALL PASS** —— 同一 token（perms=27 含 `member:create`）：W1（ws_admin）invite→**200**、W2（end_user）invite→**403/2006**；`my-permissions` W1=27 / W2=7；⑥ **编译**：中途踩到两处低级错误（块注释里写了 `*/` 提前结束注释；漏 import/静态导入），修复后全量 BUILD SUCCESS；⑦ **收尾**：隔离实例已停、测试空间与测试用户已从云库删除、临时脚本已清、IDEA 三服务未受影响；⑧ **文档**：IF §3.0/§5.6/§5.7、TD §6.1 键表/§7.5 进度表、PROGRESS §二/§三/§6.3/§八、FE-SYNC §2。**遗留**：第②步行级 DataScope 拦截器（防漏兜底）仍待做
 - 日期：2026-09-17（续）
 - 内容：**口径收口三件套落地（治本层）+ 修掉 refresh 的 `ws_id` 重置 + 新增跨入口一致性断言脚本** —— ① **用户决策**："一起解决"（选项上：`roles/perms` 统一为**全局口径**＝方案 B；refresh 的 `ws_id` 统一为**沿用**＝方案 A）；② **实现收口**：新增 `common.AuthQuerySql`（SQL 唯一字面量）、`starter-security.AuthTokenIssuer`+`IssuedTokens`（唯一签发入口）、`starter-redis.TokenSessionCache`（会话唯一读写入口），UMS 登录/刷新/登出/改密/禁用 与 workspace 切换空间**全部改走这三个收口点**；`JwtUtil.createRefreshToken(userId, jti, wsId)` + `JwtRefreshPayload.workspaceId`（refresh 携带空间）；删除 `AuthConstants` 三个已无引用的键常量；③ **修掉第 4 个不一致**：`/auth/refresh` 不再把 `ws_id` 重置回默认空间（`AuthServiceImpl` 改传旧令牌的 `ws_id`）；④ **新增断言**：`scripts/smoke-auth-claims.ps1`（全 ASCII、口令参数化、可按 `-UmsUrl/-WsUrl` 指向直连或网关），覆盖**登录 / 刷新 / 切换 / 切换后刷新 / 删除保护 / 旧令牌失效** 六组共 10 项断言；⑤ **证据**：隔离实例（UMS `:17101` + workspace `:17102`，`register-enabled=false`，**不打断 IDEA 中运行的实例**）→ `RESULT: ALL PASS`（含"切换后刷新 `ws_id` 仍为目标空间"这条本轮修复的关键断言）；⑥ **文档**：`IF §3.0 新增「token 载荷口径表」`（三个签发入口 × 各字段口径 + 三条硬约束）、`IF §3.2` 补刷新语义、`PROGRESS §三/§6.1/§6.3`、`FE-SYNC §2`；⑦ **收尾**：隔离实例已停、测试空间已硬删（云端仅剩种子空间与前端自测残留）、服务端口 7000/7101/7102 仍为用户 IDEA 实例。**下一步：workspace 走 PR 合并 + 前端切真复测**
 - 日期：2026-09-17

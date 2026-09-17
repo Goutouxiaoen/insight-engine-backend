@@ -33,4 +33,19 @@ public final class CacheKeyConstants {
 
     /** 登出黑名单键：{@code ie:auth:blacklist:{tokenHash}}，TTL=token 剩余有效期 */
     public static final String AUTH_BLACKLIST = "ie:auth:blacklist:";
+
+    /* ============ 空间维度授权（ie:ws:*，2026-09-17 新增，TD §6.1） ============ */
+
+    /**
+     * 用户在**某个空间内**的权限集合：{@code ie:ws:user-perm:{workspaceId}:{userId}}，
+     * 值=权限编码逗号拼接（权限码本身不含逗号），TTL=10min。
+     *
+     * <p>用途：{@code @WorkspacePermission} 空间维度二次判定的读缓存（避免每次请求打
+     * ie_member/ie_role_permission/ie_permission 三张表）。</p>
+     *
+     * <p>失效策略：成员增删改角色时由 workspace 主动删除（精确失效）；
+     * **角色授权变更发生在 UMS**（`PUT /api/v1/role/{id}/permissions`）→ 跨服务主动失效成本高，
+     * 因此设定 10min TTL 兜底（最长 10 分钟后生效），与 TD §6.1 其他权限缓存的取舍一致。</p>
+     */
+    public static final String WS_USER_PERM = "ie:ws:user-perm:";
 }

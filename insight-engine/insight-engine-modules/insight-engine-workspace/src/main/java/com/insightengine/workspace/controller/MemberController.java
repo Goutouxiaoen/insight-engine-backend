@@ -1,5 +1,6 @@
 package com.insightengine.workspace.controller;
 
+import com.insightengine.common.annotation.WorkspacePermission;
 import com.insightengine.common.core.PageResult;
 import com.insightengine.common.core.Result;
 import com.insightengine.starter.web.context.UserContext;
@@ -26,6 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>统一前缀 {@code /api/v1/member}；操作人（当前登录用户）从认证上下文读取，用于
  * 「禁止移除自己 / 修改自己的角色」等操作保护。</p>
+ *
+ * <p><b>两层鉴权</b>（IF §3.0）：{@code @PreAuthorize} 管"动作类别"（判据=token 的 perms，跨空间并集）；
+ * {@code @WorkspacePermission} 管"在这个空间能不能做"（判据=该空间的成员关系）。
+ * 「移除成员 / 改角色」的目标空间需先按 {@code memberId} 反查成员记录才知道，注解取不到，
+ * 故这两处由 {@code MemberServiceImpl} 内显式调用判定器（检查点可见、易审计）。</p>
  */
 @Tag(name = "空间成员管理", description = "成员分页、添加成员、移除成员、修改成员角色")
 @RestController
@@ -44,6 +50,7 @@ public class MemberController {
     @Operation(summary = "成员分页", description = "返回成员昵称/邮箱/空间角色/加入时间")
     @GetMapping("/page")
     @PreAuthorize("hasAuthority('member:read')")
+    @WorkspacePermission(value = "member:read", workspaceIdExpr = "#query.workspaceId")
     public Result<PageResult<MemberVO>> page(@Valid MemberPageQuery query) {
         return Result.ok(memberService.page(query));
     }
@@ -54,6 +61,7 @@ public class MemberController {
     @Operation(summary = "添加成员", description = "邮箱须为已注册用户；重复加入返回 1001")
     @PostMapping("/invite")
     @PreAuthorize("hasAuthority('member:create')")
+    @WorkspacePermission(value = "member:create", workspaceIdExpr = "#request.workspaceId")
     public Result<Long> invite(@Valid @RequestBody MemberInviteRequest request) {
         return Result.ok(memberService.invite(request));
     }
