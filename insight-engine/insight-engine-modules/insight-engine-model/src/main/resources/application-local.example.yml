@@ -1,0 +1,31 @@
+# =============================================================================
+# 本机私有口令/密钥模板（application-local.example.yml）
+#
+# 用法（新机器 / 别人机器上跑）：
+#   1) 把本文件复制为同目录 application-local.yml（该文件已被 .gitignore 忽略，永不入库）
+#   2) 把 change-me-* 换成真实值
+#   3) 直接运行服务即可 —— application.yml 里已用 spring.config.import 自动加载本文件，
+#      **不需要 Active profiles、不需要环境变量**
+#
+# 说明：
+#   - 非敏感项（PG/Redis/Nacos 地址、库名、账号）已在 application.yml 里写死并加备注；
+#   - application.yml **故意不写 password 键**：导入的文件优先级更高，写两处容易互相覆盖（导入文件优先）；
+#   - 生产部署：不建本文件，改用环境变量 SPRING_DATASOURCE_PASSWORD / SPRING_DATA_REDIS_PASSWORD
+#     / INSIGHT_SECRET_KEK（新增配置项按 AGENTS 铁律 5「三件事」：代码占位 + 本模板 + 文档写变量名）。
+#
+# insight.secret.kek（敏感凭据主密钥，TD §16.1）怎么生成：
+#   PowerShell: [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Max 256 }))
+#   openssl   : openssl rand -base64 32
+# ⚠️ 该值**必须与已加密数据一致**：换了 KEK 就解不开旧密文（轮换请走 kek_version 机制，不要直接替换）。
+# =============================================================================
+spring:
+  datasource:
+    password: change-me-pg-strong-random
+  data:
+    redis:
+      password: change-me-redis-strong-random
+
+insight:
+  secret:
+    # AES-256-GCM 主密钥（KEK），Base64 编码的 32 字节随机值
+    kek: change-me-secret-kek-32-bytes-base64

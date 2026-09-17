@@ -32,7 +32,8 @@ spring:
       # 路由表（TD §8.3 / P18）：按服务专属前缀细分，禁止 /api/v1/** 全量 fallback。
       # UMS：/auth/** 与 /api/v1/user|role|permission/**（含文档路径）；
       # workspace：/api/v1/org|workspace|member/**（IF §5，与 UMS 前缀无交集）；
-      # 其余 /api/v1/xxx（kb/model/agent 等后续服务）在网关层即 404，不误转已接入服务。
+      # model：/api/v1/model/**（IF §7，与已接入前缀无交集）；
+      # 其余 /api/v1/xxx（kb/agent/conv 等后续服务）在网关层即 404，不误转已接入服务。
       routes:
         - id: insight-engine-ums
           uri: lb://insight-engine-ums
@@ -42,6 +43,10 @@ spring:
           uri: lb://insight-engine-workspace
           predicates:
             - Path=/api/v1/org/**,/api/v1/workspace/**,/api/v1/member/**
+        - id: insight-engine-model
+          uri: lb://insight-engine-model
+          predicates:
+            - Path=/api/v1/model/**
       # 全局跨域（TD §8.3：MVP 放开，生产收敛为白名单）
       globalcors:
         add-to-simple-url-handler-mapping: true

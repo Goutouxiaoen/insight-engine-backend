@@ -1,0 +1,73 @@
+# =============================================================================
+# Model 服务配置（端口 7103）
+#
+# 【写死策略 + 备注】2026-09-16 起统一：**直接点 main 方法运行即可，不需要 Active profiles、
+# 不需要环境变量**。
+#   1. 非敏感项（地址 / 端口 / 库名 / 账号）直接写死在本文件；
+#   2. 口令不写在本文件（本文件会进 Git；见 PROGRESS §五 明文口令事件），
+#      放同目录 application-local.yml（已被 .gitignore 忽略），由下面 spring.config.import 自动加载；
+#      ⚠️ 本文件**故意不写 password 键**——写了会覆盖 application-local.yml 的值；
+#   3. 生产部署用环境变量覆盖：SPRING_DATASOURCE_PASSWORD / SPRING_DATA_REDIS_PASSWORD / INSIGHT_SECRET_KEK。
+# =============================================================================
+server:
+  port: 7103
+
+spring:
+  application:
+    name: insight-engine-model
+  # 本机私有值（口令 / 密钥）自动加载；文件不存在则忽略（optional），不影响 CI / 生产
+  config:
+    import: optional:classpath:application-local.yml
+  cloud:
+    nacos:
+      discovery:
+        # 写死云上 Nacos（宿主机 8848/9848 与容器内 1:1）
+        server-addr: 39.106.110.214:8848
+        # Nacos 不可达时只告警、不阻断启动（默认 true 会导致服务直接起不来）
+        fail-fast: false
+      config:
+        server-addr: 39.106.110.214:8848
+        import-check:
+          enabled: false
+  datasource:
+    # 写死云上 PostgreSQL（宿主机 5433 → 容器内 5432）
+    url: jdbc:postgresql://39.106.110.214:5433/insight_engine
+    username: insight
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+    # password 见文件头说明：由 application-local.yml / 环境变量提供
+  data:
+    redis:
+      # 写死云上 Redis（宿主机 6380 → 容器内 6379）
+      host: 39.106.110.214
+      port: 6380
+      database: 0
+      timeout: 3000
+      # password 同上，由 application-local.yml / 环境变量提供
+
+# MyBatis-Plus 基础配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 开发期打印 SQL，生产关闭
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# JWT 配置（insight.security.*，由 starter-security 读取；须与 UMS 同源，否则 token 验签失败）
+insight:
+  security:
+    jwt-secret: ${INSIGHT_SECURITY_JWT_SECRET:insight-engine-local-dev-secret-change-me-in-prod-2026-09}
+    access-token-ttl-seconds: 7200      # 2 小时（TD §7.2）
+    refresh-token-ttl-seconds: 604800   # 7 天（TD §7.2）
+
+  # -----------------------------------------------------------------------------
+  # 敏感凭据加密（TD §16.1）：模型厂商 API Key 以 AES-256-GCM 加密存储于 ie_secret。
+  # KEK（主密钥）**只从环境变量/本机 local.yml 读**，绝不入库、绝不入 Git：
+  #   - 本机：写在 application-local.yml 的 insight.secret.kek（见 application-local.example.yml）
+  #   - 生产：环境变量 INSIGHT_SECRET_KEK（32 字节随机值的 Base64）
+  # 未配置时服务可正常启动（读接口可用），但**接入/更新厂商密钥会明确报错**，不会静默存明文。
+  # -----------------------------------------------------------------------------
+  secret:
+    kek: ${INSIGHT_SECRET_KEK:}
