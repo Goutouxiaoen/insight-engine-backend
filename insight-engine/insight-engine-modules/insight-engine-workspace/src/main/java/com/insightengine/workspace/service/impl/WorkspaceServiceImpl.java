@@ -9,9 +9,11 @@ import com.insightengine.common.core.PageResult;
 import com.insightengine.starter.redis.session.TokenSessionCache;
 import com.insightengine.starter.security.token.AuthTokenIssuer;
 import com.insightengine.starter.security.token.IssuedTokens;
+import com.insightengine.starter.security.workspace.WorkspacePermissionCacheInvalidator;
+import com.insightengine.starter.security.workspace.WorkspacePermissionChecker;
 import com.insightengine.starter.web.context.UserContext;
 import com.insightengine.workspace.dto.response.WorkspacePermissionVO;
-import com.insightengine.workspace.support.WorkspacePermissionCheckerImpl;
+import com.insightengine.workspace.support.TenantGuard;
 import com.insightengine.workspace.constant.WorkspaceConstants;
 import com.insightengine.workspace.dto.request.WorkspaceCreateRequest;
 import com.insightengine.workspace.dto.request.WorkspacePageQuery;
@@ -64,7 +66,12 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     private final RoleMapper roleMapper;
     private final AuthTokenIssuer authTokenIssuer;
     private final TokenSessionCache tokenSessionCache;
-    private final WorkspacePermissionCheckerImpl permissionChecker;
+
+    /** 空间维度权限查询（第二层判定 / my-permissions）；依赖接口而非实现类（code review 收口） */
+    private final WorkspacePermissionChecker permissionChecker;
+
+    /** 空间维度权限缓存失效（撤销类操作：须在数据库变更**之前**调用，见实现说明） */
+    private final WorkspacePermissionCacheInvalidator permissionCache;
 
     public WorkspaceServiceImpl(WorkspaceMapper workspaceMapper,
                                OrganizationMapper organizationMapper,
@@ -72,7 +79,8 @@ public class WorkspaceServiceImpl implements WorkspaceService {
                                RoleMapper roleMapper,
                                AuthTokenIssuer authTokenIssuer,
                                TokenSessionCache tokenSessionCache,
-                               WorkspacePermissionCheckerImpl permissionChecker) {
+                               WorkspacePermissionChecker permissionChecker,
+                               WorkspacePermissionCacheInvalidator permissionCache) {
         this.workspaceMapper = workspaceMapper;
         this.organizationMapper = organizationMapper;
         this.memberMapper = memberMapper;
@@ -80,6 +88,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         this.authTokenIssuer = authTokenIssuer;
         this.tokenSessionCache = tokenSessionCache;
         this.permissionChecker = permissionChecker;
+        this.permissionCache = permissionCache;
     }
 
     /**
@@ -136,7 +145,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
      */
     @Override
     public void update(Long id, WorkspaceUpdateRequest request) {
-        requireWorkspace(id);
+        requireWorkspaceInTenant(id);
         Workspace update = new Workspace();
         update.setId(id);
         if (StringUtils.hasText(request.getName())) {
@@ -160,14 +169,14 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        requireWorkspace(id);
+        requireWorkspaceInTenant(id);
         if (id.equals(UserContext.getWorkspaceId())) {
             throw new BizException(ErrorCode.OPERATION_NOT_ALLOWED, "不允许删除当前所处的工作空间，请先切换到其他空间");
         }
+        // 撤销类操作：先失效权限缓存、再改库（失效失败则整体失败，不留"库里没了、缓存还在"的窗口，Y3）
+        permissionCache.evictWorkspace(id);
         workspaceMapper.deleteById(id);
         memberMapper.delete(new LambdaQueryWrapper<Member>().eq(Member::getWorkspaceId, id));
-        // 空间维度权限缓存整体失效（该空间已不存在，缓存留着也是垃圾）
-        permissionChecker.evictWorkspace(id);
     }
 
     /**
@@ -177,8 +186,9 @@ public class WorkspaceServiceImpl implements WorkspaceService {
      */
     @Override
     public WorkspacePermissionVO myPermissions(Long userId, Long workspaceId) {
-        requireWorkspace(workspaceId);
-        List<String> roles = roleMapper.selectRoleCodesByUserAndWorkspace(userId, workspaceId);
+        requireWorkspaceInTenant(workspaceId);
+        // 角色与权限取自**同一份快照**（2026-09-17 code review：此前角色实时查库、权限读缓存，同一响应可能自相矛盾）
+        List<String> roles = permissionChecker.rolesOf(userId, workspaceId);
         List<String> permissions = permissionChecker.permissionsOf(userId, workspaceId);
         if (roles.isEmpty() && permissions.isEmpty()) {
             throw new BizException(ErrorCode.FORBIDDEN, "您不是该工作空间的成员");
@@ -279,6 +289,18 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(WorkspaceConstants.PERM_ORG_WRITE::equals);
+    }
+
+    /**
+     * 查询工作空间并**校验租户归属**（2026-09-17 code review Y2 收口）：
+     * 跨租户的 id 一律按"不存在"处理（1004，不泄露存在性）。
+     *
+     * <p>MVP 单租户下不暴露；多租户/多组织前必须收口，否则组织级用户拿到别租户的空间 id 即可改/删。</p>
+     */
+    private Workspace requireWorkspaceInTenant(Long id) {
+        Workspace workspace = requireWorkspace(id);
+        TenantGuard.assertSameTenant(workspace.getTenantId(), "工作空间");
+        return workspace;
     }
 
     /**

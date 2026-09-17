@@ -6248,6 +6248,18 @@ public Result<Long> create(@RequestBody KbCreateRequest req) { ... }
 
 > ⚠️ 纪律：第 2/3 步都**不得**回退到"按空间裁剪 token 权限"的老路。
 
+**第二轮（2026-09-17 code review 收口）的四条通用教训**（比"修了哪几行"更值钱）：
+
+1. **「能授予」= 「能分配权限」——所有带 `roleId` / `permissionIds` 参数的接口，危险等级与"权限校验接口"相同**。
+   第二层鉴权刚做完就被 reviewer 抓到：`member/invite`、`member/{id}/role` 只校验角色存在，于是空间管理员可以给自己小号授 `super_admin`——**把第二层鉴权整条绕过**（不用越权调用，直接给自己发权限）。
+   修法不是"加个判断"，而是立**一条可复用规则**（`common.RoleGrantPolicy`）：空间接口只能授 `scope ∈ {WS,SELF}`，ORG/ALL 越界。
+   顺带发现**同源缺口**：UMS 建号接口连"角色是否存在"都没查（写错 roleId 就产生孤儿成员），而且它由 **`member:create`** 门控（空间管理员也持有）→ 不修，Y1 就白修。
+   **推而广之**：新加任何一个"能传权限/角色 id"的接口，先问三个问题——谁持有它的门控权限？他能授出比自己高的东西吗？租户/组织归属校验了吗？
+2. **撤销类操作的正确顺序是"先失效缓存、再改库"**；顺序错了，正确性就不存在，只剩"窗口多大"。
+   原来先改库、后 evict，Redis 一抖就留下"库里已移除、缓存还放行（最长 TTL）"的窗口。**fail-closed**（失效失败就让操作失败）比"记日志 + 等 TTL"更符合安全语义——尤其当 Redis 故障本身已经让登录态校验失效时，多失败一个写操作没有额外代价。
+3. **别假设框架帮你缓存**：`SpelExpressionParser.parseExpression(String)` **没有内部表达式缓存**（`javap` 看到 `InternalSpelExpressionParser` 只有正则 `patternCache`）——这次是用字节码核实的，不是靠印象；顺手的 `ConcurrentHashMap<String, Expression>` 就是标准解法。**"框架应该做了吧"是最贵的假设**。
+4. **同一响应里的多个字段应当来自同一份快照**：`myPermissions` 原来 roles 实时查库、permissions 读缓存，刚改完角色/刚被移除时会自相矛盾（前端拿到"角色是 end_user、权限是 ws_admin 的"）。修法是把两者塞进同一个缓存值（`角色|权限`），并让旧格式自动回源兼容。
+
 ### 六、验证配方（自己跑一遍，别背结论）
 
 ```powershell

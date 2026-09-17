@@ -6,18 +6,22 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.insightengine.common.core.BizException;
 import com.insightengine.common.core.ErrorCode;
 import com.insightengine.common.core.PageResult;
+import com.insightengine.common.core.RoleGrantPolicy;
+import com.insightengine.starter.security.workspace.WorkspacePermissionCacheInvalidator;
+import com.insightengine.starter.security.workspace.WorkspacePermissionChecker;
 import com.insightengine.workspace.dto.request.MemberInviteRequest;
 import com.insightengine.workspace.dto.request.MemberPageQuery;
 import com.insightengine.workspace.dto.request.MemberRoleUpdateRequest;
 import com.insightengine.workspace.dto.response.MemberVO;
 import com.insightengine.workspace.entity.Member;
+import com.insightengine.workspace.entity.Role;
 import com.insightengine.workspace.entity.Workspace;
 import com.insightengine.workspace.mapper.MemberMapper;
 import com.insightengine.workspace.mapper.RoleMapper;
 import com.insightengine.workspace.mapper.UserRefMapper;
 import com.insightengine.workspace.mapper.WorkspaceMapper;
 import com.insightengine.workspace.service.MemberService;
-import com.insightengine.workspace.support.WorkspacePermissionCheckerImpl;
+import com.insightengine.workspace.support.TenantGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,18 +47,25 @@ public class MemberServiceImpl implements MemberService {
     private final WorkspaceMapper workspaceMapper;
     private final RoleMapper roleMapper;
     private final UserRefMapper userRefMapper;
-    private final WorkspacePermissionCheckerImpl permissionChecker;
+
+    /** 空间维度权限判定（第二层鉴权）；依赖接口而非实现类 */
+    private final WorkspacePermissionChecker permissionChecker;
+
+    /** 空间维度权限缓存失效（撤销类操作须在改库之前调用） */
+    private final WorkspacePermissionCacheInvalidator permissionCache;
 
     public MemberServiceImpl(MemberMapper memberMapper,
                              WorkspaceMapper workspaceMapper,
                              RoleMapper roleMapper,
                              UserRefMapper userRefMapper,
-                             WorkspacePermissionCheckerImpl permissionChecker) {
+                             WorkspacePermissionChecker permissionChecker,
+                             WorkspacePermissionCacheInvalidator permissionCache) {
         this.memberMapper = memberMapper;
         this.workspaceMapper = workspaceMapper;
         this.roleMapper = roleMapper;
         this.userRefMapper = userRefMapper;
         this.permissionChecker = permissionChecker;
+        this.permissionCache = permissionCache;
     }
 
     /**
@@ -92,9 +103,7 @@ public class MemberServiceImpl implements MemberService {
             throw new BizException(ErrorCode.PARAM_ERROR, "该用户已是空间成员");
         }
 
-        if (roleMapper.selectById(request.getRoleId()) == null) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "角色不存在");
-        }
+        assertRoleGrantable(request.getRoleId(), workspace);
 
         Member member = new Member();
         member.setTenantId(workspace.getTenantId());
@@ -102,10 +111,11 @@ public class MemberServiceImpl implements MemberService {
         member.setWorkspaceId(workspace.getId());
         member.setUserId(userId);
         member.setRoleId(request.getRoleId());
+        // 先清缓存再落库：此前可能缓存过"非成员=空权限"，不清会导致新成员最长 10min 无法操作；
+        // 顺序反过来（先插库后清缓存）在清缓存失败时会留下"库里已是成员、缓存里不是"的不一致
+        permissionCache.evict(userId, workspace.getId());
         member.setJoinedAt(LocalDateTime.now(ZoneOffset.UTC));
         memberMapper.insert(member);
-        // 新成员的空间权限缓存失效（此前可能缓存过"非成员=空权限"）
-        permissionChecker.evict(userId, workspace.getId());
         return member.getId();
     }
 
@@ -121,8 +131,10 @@ public class MemberServiceImpl implements MemberService {
         if (member.getUserId().equals(operatorUserId)) {
             throw new BizException(ErrorCode.OPERATION_NOT_ALLOWED, "不允许移除自己");
         }
+        // 撤销类操作：先失效缓存、再改库。若顺序反过来且失效失败，就会出现
+        // "库里已移除、缓存仍放行"的窗口（最长 = 缓存 TTL），对踢人操作不可接受（Y3）
+        permissionCache.evict(member.getUserId(), member.getWorkspaceId());
         memberMapper.deleteById(id);
-        permissionChecker.evict(member.getUserId(), member.getWorkspaceId());
     }
 
     /**
@@ -135,15 +147,13 @@ public class MemberServiceImpl implements MemberService {
         if (member.getUserId().equals(operatorUserId)) {
             throw new BizException(ErrorCode.OPERATION_NOT_ALLOWED, "不允许修改自己的空间角色");
         }
-        if (roleMapper.selectById(request.getRoleId()) == null) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "角色不存在");
-        }
+        assertRoleGrantable(request.getRoleId(), requireWorkspace(member.getWorkspaceId()));
+        // 撤销类操作：先失效缓存、再改库（否则缓存失败会留下"库里已降权、缓存仍放行"的窗口，Y3）
+        permissionCache.evict(member.getUserId(), member.getWorkspaceId());
         Member update = new Member();
         update.setId(id);
         update.setRoleId(request.getRoleId());
         memberMapper.updateById(update);
-        // 成员角色变了 → 其空间权限缓存必须失效（否则最长 10min 内仍按旧角色放行）
-        permissionChecker.evict(member.getUserId(), member.getWorkspaceId());
     }
 
     /* ==================== 私有方法 ==================== */
@@ -161,13 +171,42 @@ public class MemberServiceImpl implements MemberService {
     }
 
     /**
-     * 查询工作空间，不存在抛 1004（成员列表/添加前先确认空间存在，避免对无效空间做操作）。
+     * 角色授予校验（2026-09-17 code review Y1 收口）：**授权接口本身就是提权接口**，
+     * 只校验 {@code roleId} 存在是不够的——空间内持 {@code member:create}/{@code member:update} 者可借此把
+     * {@code super_admin} 授给自己或小号，完成变相提权。
+     *
+     * <p>校验三条（规则单点在 {@link RoleGrantPolicy}）：</p>
+     * <ol>
+     *   <li>角色存在（否则产生孤儿成员关系）；</li>
+     *   <li>作用域只能是 WS / SELF —— 空间管理员的权能边界就是这一个空间，
+     *       不得授予组织级（ORG）或平台级（ALL）角色；</li>
+     *   <li>角色归属该租户（平台内置 {@code tenant_id=0} 对所有租户可见）。</li>
+     * </ol>
+     */
+    private void assertRoleGrantable(Long roleId, Workspace workspace) {
+        Role role = roleMapper.selectById(roleId);
+        if (role == null) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "角色不存在");
+        }
+        if (!RoleGrantPolicy.grantableWithinWorkspace(role.getScope())) {
+            throw new BizException(ErrorCode.OPERATION_NOT_ALLOWED,
+                    "不允许授予该角色：超出工作空间管理范围（仅可授予空间级/自身级角色）");
+        }
+        if (!RoleGrantPolicy.belongsToTenant(role.getTenantId(), workspace.getTenantId())) {
+            throw new BizException(ErrorCode.OPERATION_NOT_ALLOWED, "该角色不属于当前租户");
+        }
+    }
+
+    /**
+     * 查询工作空间，不存在抛 1004（成员列表/添加前先确认空间存在，避免对无效空间做操作）；
+     * 并校验租户归属（跨租户按"不存在"处理，Y2 收口）。
      */
     private Workspace requireWorkspace(Long id) {
         Workspace workspace = workspaceMapper.selectById(id);
         if (workspace == null) {
             throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "工作空间不存在");
         }
+        TenantGuard.assertSameTenant(workspace.getTenantId(), "工作空间");
         return workspace;
     }
 

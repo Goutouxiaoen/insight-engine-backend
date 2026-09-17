@@ -1,19 +1,23 @@
 <#
-  Smoke: workspace-scoped authorization (layer 2, TD 7.5 / IF 3.0)
+  Smoke: workspace-scoped authorization (layer 2, TD 7.5 / IF 3.0) + role-grant guards (Y1)
 
-  Core assertion: 同一个 token（perms 是跨空间并集）在不同空间的判定结果必须不同：
-    - M 在 W1 是 ws_admin（有 member:create）→ 邀请成员 200
-    - M 在 W2 是 end_user（无 member:create）→ 邀请成员 403/2006   <- 第二层拦截
-    - GET /workspace/{id}/my-permissions 返回的是"该空间权限"，与 token 的并集不同
+  Assertions:
+    A. 同一个 token（perms 是跨空间并集）在不同空间的判定结果必须不同：
+       - M 在 W1 是 ws_admin（有 member:create）→ 邀请成员 200
+       - M 在 W2 是 end_user（无 member:create）→ 邀请成员 403/2006
+       - GET /workspace/{id}/my-permissions 返回的是"该空间权限"，与 token 的并集不同
+    B. 角色授予守卫（授权接口即提权接口）：
+       - 空间接口：只能授予 scope=WS/SELF 的角色（roleId=1 super_admin / roleId=2 org_admin → 1003）
+       - 建号接口：门控是 member:create（空间管理员也持有），故非超管同样只能授予 WS/SELF，
+         超管不受限；roleId 不存在 → 1001（此前会造孤儿成员关系）
 
   Usage:
     powershell -File scripts/smoke-workspace-permission.ps1 -UmsUrl http://localhost:7101 -WsUrl http://localhost:7102 -AdminPassword <pwd>
 
   Notes:
     * ASCII only (PowerShell 5.1 mis-reads UTF-8 without BOM on zh-CN Windows).
-    * Role ids come from init.sql seed: 3 = ws_admin, 5 = end_user.
-    * Test users cannot be deleted via API (no such endpoint) -> leftover rows are harmless but
-      can be removed with SQL if needed:
+    * Role ids from init.sql seed: 1=super_admin(ALL) 2=org_admin(ORG) 3=ws_admin(WS) 4=app_developer(WS) 5=end_user(SELF).
+    * Test users (smoke-wsperm-*) cannot be deleted via API (no such endpoint); clean up with SQL if needed:
         DELETE FROM ie_member WHERE user_id IN (SELECT id FROM ie_user WHERE email LIKE 'smoke-wsperm-%');
         DELETE FROM ie_user   WHERE email LIKE 'smoke-wsperm-%';
 #>
@@ -49,6 +53,9 @@ function Req($m, $u, $tk, $bf) {
 function Check($name, $ok, $detail) {
   if ($ok) { Write-Host ("  PASS  {0}  {1}" -f $name, $detail) } else { $script:fail++; Write-Host ("  FAIL  {0}  {1}" -f $name, $detail) }
 }
+function NewUser($authToken, $mail, $nick) {
+  return Req 'POST' "$UmsUrl/api/v1/user" $authToken (Body "u$nick.json" ("{""email"":""$mail"",""nickname"":""$nick"",""password"":""Passw0rd123"",""roleId"":5}"))
+}
 
 Write-Host "== 0) admin login =="
 $r = Req 'POST' "$UmsUrl/auth/login" $null (Body 'a.json' ("{""account"":""$AdminAccount"",""password"":""$AdminPassword""}"))
@@ -64,20 +71,25 @@ $W2 = $r.Obj.data
 if (-not $W1 -or -not $W2) { throw 'create workspace failed' }
 Write-Host ("  W1={0} W2={1}" -f $W1, $W2)
 
-Write-Host "== 2) create users M (under test) and N (invite target) =="
-$mailM = "smoke-wsperm-$ts-m@example.com"; $mailN = "smoke-wsperm-$ts-n@example.com"
-Req 'POST' "$UmsUrl/api/v1/user" $TAdmin (Body 'um.json' ("{""email"":""$mailM"",""nickname"":""WsPermM"",""password"":""Passw0rd123"",""roleId"":5}")) | Out-Null
-Req 'POST' "$UmsUrl/api/v1/user" $TAdmin (Body 'un.json' ("{""email"":""$mailN"",""nickname"":""WsPermN"",""password"":""Passw0rd123"",""roleId"":5}")) | Out-Null
-Write-Host ("  M={0} N={1}" -f $mailM, $mailN)
+Write-Host "== 2) create users M (under test), N/N2/N3 (targets) =="
+$mM = "smoke-wsperm-$ts-m@example.com"; $mN = "smoke-wsperm-$ts-n@example.com"
+$m2 = "smoke-wsperm-$ts-n2@example.com"; $m3 = "smoke-wsperm-$ts-n3@example.com"
+NewUser $TAdmin $mM 'WsPermM' | Out-Null
+NewUser $TAdmin $mN 'WsPermN' | Out-Null
+NewUser $TAdmin $m2 'WsPermN2' | Out-Null
+NewUser $TAdmin $m3 'WsPermN3' | Out-Null
+Write-Host "  created M/N/N2/N3"
 
-Write-Host "== 3) M joins W1 as ws_admin(3) and W2 as end_user(5) =="
-$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TAdmin (Body 'i1.json' ("{""workspaceId"":$W1,""email"":""$mailM"",""roleId"":3}"))
-Write-Host ("  invite M->W1: HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
-$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TAdmin (Body 'i2.json' ("{""workspaceId"":$W2,""email"":""$mailM"",""roleId"":5}"))
-Write-Host ("  invite M->W2: HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
+Write-Host "== 3) M joins W1 as ws_admin(3) and W2 as end_user(5); N joins W1 =="
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TAdmin (Body 'i1.json' ("{""workspaceId"":$W1,""email"":""$mM"",""roleId"":3}"))
+Write-Host ("  invite M->W1(ws_admin): HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TAdmin (Body 'i2.json' ("{""workspaceId"":$W2,""email"":""$mM"",""roleId"":5}"))
+Write-Host ("  invite M->W2(end_user): HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TAdmin (Body 'i3.json' ("{""workspaceId"":$W1,""email"":""$mN"",""roleId"":5}"))
+Write-Host ("  invite N->W1(end_user): HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
 
 Write-Host "== 4) M login: token perms is the UNION across spaces =="
-$r = Req 'POST' "$UmsUrl/auth/login" $null (Body 'm.json' ("{""account"":""$mailM"",""password"":""Passw0rd123""}"))
+$r = Req 'POST' "$UmsUrl/auth/login" $null (Body 'm.json' ("{""account"":""$mM"",""password"":""Passw0rd123""}"))
 $TM = $r.Obj.data.token
 if (-not $TM) { throw "M login failed: $($r.Obj.message)" }
 $PM = Decode $TM
@@ -92,13 +104,13 @@ $r = Req 'GET' "$WsUrl/api/v1/workspace/$W1/my-permissions" $TM1 $null
 Write-Host ("  my-permissions W1: roles={0} perms={1}" -f ($r.Obj.data.roles -join ','), $r.Obj.data.permissions.Count)
 Check 'my-permissions W1 = ws_admin scope' ($r.Obj.data.permissions.Count -eq 27) ("count={0}" -f $r.Obj.data.permissions.Count)
 
-Write-Host "== 6) M invites N into W1 -> layer 2 allows =="
-$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TM1 (Body 'inv1.json' ("{""workspaceId"":$W1,""email"":""$mailN"",""roleId"":5}"))
+Write-Host "== 6) M invites N2 into W1 -> layer 2 allows =="
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TM1 (Body 'inv1.json' ("{""workspaceId"":$W1,""email"":""$m2"",""roleId"":5}"))
 Write-Host ("  HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
 Check 'invite into W1 (M is ws_admin) -> 200' ($r.Obj.code -eq 0) ''
 
-Write-Host "== 7) M invites N into W2 -> LAYER 2 must reject =="
-$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TM1 (Body 'inv2.json' ("{""workspaceId"":$W2,""email"":""$mailN"",""roleId"":5}"))
+Write-Host "== 7) M invites N2 into W2 -> LAYER 2 must reject =="
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TM1 (Body 'inv2.json' ("{""workspaceId"":$W2,""email"":""$m2"",""roleId"":5}"))
 Write-Host ("  HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
 Check 'invite into W2 (M is end_user) -> 403/2006' (($r.Http -eq '403') -and ($r.Obj.code -eq 2006)) ("HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
 
@@ -107,7 +119,39 @@ $r = Req 'GET' "$WsUrl/api/v1/workspace/$W2/my-permissions" $TM1 $null
 Write-Host ("  my-permissions W2: roles={0} perms={1}" -f ($r.Obj.data.roles -join ','), $r.Obj.data.permissions.Count)
 Check 'my-permissions W2 = end_user scope' (($r.Obj.data.permissions.Count -eq 7) -and -not ($r.Obj.data.permissions -contains 'member:create')) ("count={0}" -f $r.Obj.data.permissions.Count)
 
-Write-Host "== 9) cleanup: delete both test workspaces with ADMIN token =="
+Write-Host "== 9) WORKSPACE role-grant guard: only WS/SELF roles are grantable =="
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TM1 (Body 'g1.json' ("{""workspaceId"":$W1,""email"":""$m3"",""roleId"":1}"))
+Write-Host ("  grant super_admin(1):  HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
+Check 'grant super_admin via member/invite -> 1003' ($r.Obj.code -eq 1003) ("code={0}" -f $r.Obj.code)
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TM1 (Body 'g2.json' ("{""workspaceId"":$W1,""email"":""$m3"",""roleId"":2}"))
+Write-Host ("  grant org_admin(2):    HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
+Check 'grant org_admin via member/invite -> 1003' ($r.Obj.code -eq 1003) ("code={0}" -f $r.Obj.code)
+$r = Req 'POST' "$WsUrl/api/v1/member/invite" $TM1 (Body 'g3.json' ("{""workspaceId"":$W1,""email"":""$m3"",""roleId"":4}"))
+$memberId3 = $r.Obj.data
+Write-Host ("  grant app_developer(4):HTTP={0} code={1} (memberId={2})" -f $r.Http, $r.Obj.code, $memberId3)
+Check 'grant app_developer (WS scope) -> 200' ($r.Obj.code -eq 0) ''
+$r = Req 'PUT' "$WsUrl/api/v1/member/$memberId3/role" $TM1 (Body 'g4.json' '{"roleId":1}')
+Write-Host ("  change role -> super_admin: HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
+Check 'change member role to super_admin -> 1003' ($r.Obj.code -eq 1003) ("code={0}" -f $r.Obj.code)
+
+Write-Host "== 10) UMS create-user role-grant guard (gate = member:create, held by ws_admin) =="
+$r = Req 'POST' "$UmsUrl/api/v1/user" $TM1 (Body 'u1.json' ("{""email"":""smoke-wsperm-$ts-x1@example.com"",""nickname"":""Esc1"",""password"":""Passw0rd123"",""roleId"":1}"))
+Write-Host ("  M creates with roleId=1:   HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
+Check 'ws_admin creates super_admin user -> 1003' ($r.Obj.code -eq 1003) ("code={0}" -f $r.Obj.code)
+$r = Req 'POST' "$UmsUrl/api/v1/user" $TM1 (Body 'u2.json' ("{""email"":""smoke-wsperm-$ts-x2@example.com"",""nickname"":""Esc2"",""password"":""Passw0rd123"",""roleId"":2}"))
+Write-Host ("  M creates with roleId=2:   HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
+Check 'ws_admin creates org_admin user -> 1003' ($r.Obj.code -eq 1003) ("code={0}" -f $r.Obj.code)
+$r = Req 'POST' "$UmsUrl/api/v1/user" $TM1 (Body 'u3.json' ("{""email"":""smoke-wsperm-$ts-x3@example.com"",""nickname"":""Ok3"",""password"":""Passw0rd123"",""roleId"":5}"))
+Write-Host ("  M creates with roleId=5:   HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
+Check 'ws_admin creates end_user user -> 200' ($r.Obj.code -eq 0) ''
+$r = Req 'POST' "$UmsUrl/api/v1/user" $TM1 (Body 'u4.json' ("{""email"":""smoke-wsperm-$ts-x4@example.com"",""nickname"":""Bad4"",""password"":""Passw0rd123"",""roleId"":999}"))
+Write-Host ("  M creates with roleId=999: HTTP={0} code={1} msg={2}" -f $r.Http, $r.Obj.code, $r.Obj.message)
+Check 'unknown roleId -> 1001 (no orphan member)' ($r.Obj.code -eq 1001) ("code={0}" -f $r.Obj.code)
+$r = Req 'POST' "$UmsUrl/api/v1/user" $TAdmin (Body 'u5.json' ("{""email"":""smoke-wsperm-$ts-x5@example.com"",""nickname"":""Super5"",""password"":""Passw0rd123"",""roleId"":1}"))
+Write-Host ("  admin creates with roleId=1: HTTP={0} code={1}" -f $r.Http, $r.Obj.code)
+Check 'super_admin may grant super_admin -> 200' ($r.Obj.code -eq 0) ''
+
+Write-Host "== 11) cleanup: delete both test workspaces with ADMIN token =="
 foreach ($w in @($W1, $W2)) {
   $r = Req 'DELETE' "$WsUrl/api/v1/workspace/$w" $TAdmin $null
   Write-Host ("  delete ws {0}: HTTP={1} code={2}" -f $w, $r.Http, $r.Obj.code)
@@ -116,5 +160,5 @@ foreach ($w in @($W1, $W2)) {
 
 Remove-Item -Force -Recurse $tmp -ErrorAction SilentlyContinue
 Write-Host ""
-Write-Host "(test users M/N remain; no user-delete API -- see header notes for the SQL cleanup)"
+Write-Host "(test users smoke-wsperm-* remain; no user-delete API -- see header notes for the SQL cleanup)"
 if ($fail -eq 0) { Write-Host "RESULT: ALL PASS" } else { Write-Host ("RESULT: {0} FAILED" -f $fail); exit 1 }

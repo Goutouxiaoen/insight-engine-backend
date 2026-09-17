@@ -34,4 +34,12 @@ public interface WorkspacePermissionChecker {
      * @return 权限编码列表（无成员关系时返回空列表，不返回 null）
      */
     List<String> permissionsOf(Long userId, Long workspaceId);
+
+    /**
+     * 该用户在该空间内的角色编码（与 {@link #permissionsOf} **取自同一份快照**，
+     * 避免"角色实时查库、权限读缓存"造成同一响应内两者不一致，2026-09-17 code review 收口）。
+     *
+     * @return 角色编码列表（无成员关系时返回空列表，不返回 null）
+     */
+    List<String> rolesOf(Long userId, Long workspaceId);
 }

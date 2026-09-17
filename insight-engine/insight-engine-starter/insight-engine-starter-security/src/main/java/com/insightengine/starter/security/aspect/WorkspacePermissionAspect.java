@@ -11,6 +11,8 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.expression.Expression;
@@ -20,6 +22,8 @@ import org.springframework.expression.spel.support.ReflectivePropertyAccessor;
 import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * {@link WorkspacePermission} 的判定切面：**第二层鉴权**（空间维度）。
@@ -32,8 +36,9 @@ import java.lang.reflect.Method;
  *      → 方法体
  * </pre>
  *
- * <p>顺序说明：`@PreAuthorize` 由 Spring Security 的方法级 AOP 拦截，本切面默认 order 更低（后执行）；
- * 两层都拒绝时，先由第一层给出 2006——语义上"先说动作、再说空间"，符合直觉。</p>
+ * <p>顺序说明：`@PreAuthorize` 由 Spring Security 的方法级 AOP 拦截，本切面显式声明
+ * {@code @Order(Ordered.LOWEST_PRECEDENCE)} 保证**后执行**（此前依赖"默认就是最低优先级"的隐式约定，
+ * 2026-09-17 code review 要求显式化）；两层都拒绝时先由第一层给出 2006——语义上"先说动作、再说空间"。</p>
  *
  * <h3>空间 ID 的取值</h3>
  * <ol>
@@ -48,12 +53,23 @@ import java.lang.reflect.Method;
  * 前端据此提示"无权限"，而 1003 提示"操作不允许"。</p>
  */
 @Aspect
+@Order(Ordered.LOWEST_PRECEDENCE)
 public class WorkspacePermissionAspect {
 
     private static final Logger log = LoggerFactory.getLogger(WorkspacePermissionAspect.class);
 
     private static final ParameterNameDiscoverer PARAMETER_NAME_DISCOVERER = new DefaultParameterNameDiscoverer();
     private static final SpelExpressionParser SPEL_PARSER = new SpelExpressionParser();
+
+    /**
+     * SpEL 表达式缓存：{@code 表达式字符串 → Expression}。
+     *
+     * <p>实测结论（2026-09-17，`javap` 核对 spring-expression 6.1.6）：{@code SpelExpressionParser.parseExpression(String)}
+     * **没有内部表达式缓存**（{@code InternalSpelExpressionParser} 只缓存了正则 {@code patternCache}），
+     * 因此每请求都会重新构建 AST。表达式集合来自注解、数量有限且稳定，按字符串缓存即可。
+     * 缓存的是**解析结果**（不可变、线程安全），求值上下文仍是每请求新建（含参数绑定）。</p>
+     */
+    private static final Map<String, Expression> EXPRESSION_CACHE = new ConcurrentHashMap<>(8);
 
     private final WorkspacePermissionChecker checker;
 
@@ -109,7 +125,8 @@ public class WorkspacePermissionAspect {
         for (int i = 0; i < paramNames.length; i++) {
             context.setVariable(paramNames[i], args[i]);
         }
-        Expression expression = SPEL_PARSER.parseExpression(expr);
+        // 表达式按字符串缓存（解析一次，复用多次），求值上下文仍每请求新建
+        Expression expression = EXPRESSION_CACHE.computeIfAbsent(expr, SPEL_PARSER::parseExpression);
         Object value = expression.getValue(context);
         if (value == null) {
             return null;

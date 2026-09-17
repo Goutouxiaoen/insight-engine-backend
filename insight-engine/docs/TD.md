@@ -414,7 +414,7 @@ CREATE UNIQUE INDEX uk_ws_code_org ON ie_workspace(org_id, code) WHERE deleted =
 | `ie:user:info:{userId}` | hash | 30min | 用户缓存 |
 | `ie:role:permissions:{roleId}` | set | 10min | 角色权限 |
 | `ie:ws:member:{workspaceId}` | set | 10min | 空间成员 userId |
-| `ie:ws:user-perm:{workspaceId}:{userId}` | string | 10min | 用户**在该空间内**的权限编码（逗号拼接）；`@WorkspacePermission` 二次判定与 `my-permissions` 接口的读缓存；成员变更主动失效，角色授权变更靠 TTL（2026-09-17 新增） |
+| `ie:ws:user-perm:{workspaceId}:{userId}` | string | 10min | 用户**在该空间内**的**角色+权限快照**（值格式 `角色码,角色码\|权限码,权限码`，两段取自同一次读库）；`@WorkspacePermission` 二次判定与 `my-permissions` 接口的读缓存；成员/角色变更**先失效后改库**，角色授权变更（UMS 侧）靠 TTL（2026-09-17 新增，同日改为快照格式） |
 
 > **实现侧口径（2026-09-16）**：上表 `ie:auth:*` 五个键的**字面量统一定义在 `common.constant.CacheKeyConstants`**（UMS 写入：登录/刷新/登出/锁定；workspace 写入：切换空间换签；各服务读取：starter-redis 的登录态/黑名单实现）。新增/改名键必须只改这一处，禁止在各服务内重复写字面量（防 drift 致静默失效）。
 >
@@ -507,7 +507,7 @@ SecurityFilterChain filterChain(HttpSecurity http) {
 >
 > | 层 | 内容 | 状态 |
 > |----|------|------|
-> | **A. 空间维度鉴权**（"在这一个空间里能不能做"） | `common` 的 `@WorkspacePermission` 注解 + `starter-security` 的 `WorkspacePermissionAspect`（判据由业务实现 `WorkspacePermissionChecker`：`ie_member → ie_role → ie_role_permission`，结果缓存 `ie:ws:user-perm:*` 10min）；配套 `GET /api/v1/workspace/{id}/my-permissions`（IF §5.7）供前端门控同源 | ✅ 已实现（证据：PROGRESS §三 2026-09-17，冒烟 `scripts/smoke-workspace-permission.ps1` 全绿） |
+> | **A. 空间维度鉴权**（"在这一个空间里能不能做"） | `common` 的 `@WorkspacePermission` 注解 + `starter-security` 的 `WorkspacePermissionAspect`（判据由业务实现 `WorkspacePermissionChecker`：`ie_member → ie_role → ie_role_permission`，结果缓存 `ie:ws:user-perm:*` 10min）；配套 `GET /api/v1/workspace/{id}/my-permissions`（IF §5.7）供前端门控同源 | ✅ 已实现（证据：PROGRESS §三 2026-09-17，冒烟 `scripts/smoke-workspace-permission.ps1` 全绿）。**同日 code review 收口**：`Expression` 缓存、`@Order` 显式化、roles/permissions 同快照、**缓存失效前移到改库之前**（fail-closed，失败即 `9999` 操作取消）；另修 Y1 角色授予越权（`RoleGrantPolicy`：空间接口只能授 WS/SELF）+ Y2 租户归属（`TenantGuard`，跨租户 `1004`） |
 > | **B. 行级数据过滤**（"能查到哪些行"） | 下面这段 `DataScopeInterceptor`：自动追加 `workspace_id = 当前空间`，作为"忘了写 where"的防漏兜底（水平越权的主要来源） | ⬜ 待做（PROGRESS §6.3 / §7 待办） |
 >
 > 分工记法：**A 管"动作"，B 管"数据行"**；A 拒绝返回 `403/2006`，B 是让查询结果里根本不存在别人的数据。
