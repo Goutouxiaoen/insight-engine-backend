@@ -48,8 +48,9 @@ import java.util.UUID;
  *   <li><b>可见范围收敛</b>（{@link #page}）：组织级管理员及以上（持 {@code org:write}）可见组织内
  *       全部空间；其他用户仅可见自己所属空间（按 {@code ie_member} 反查），避免越权看到他人空间；</li>
  *   <li><b>切换空间即换签</b>（{@link #switchWorkspace}）：切换范围由「成员关系」在服务端强约束
- *       （PROGRESS §三 2026-09-09 裁决：不新增 {@code ws:switch} 权限码），并按目标空间维度重新展开
- *       {@code roles}/{@code perms}，避免「切到 A 空间却带着 B 空间权限」；</li>
+ *       （PROGRESS §三 2026-09-09 裁决：不新增 {@code ws:switch} 权限码）；
+ *       **只改 {@code ws_id}（当前上下文），{@code roles}/{@code perms} 按用户维度取全量、与登录一致**
+ *       （2026-09-17 修正 BE-20260916-01：早期"按目标空间重展开"会丢掉组织级/平台级能力，属错误口径）；</li>
  *   <li><b>会话一致</b>：换签后覆盖 Redis 登录态摘要与 refresh 会话（键契约见
  *       {@link CacheKeyConstants}），使旧 access token 立即失效，新 token 在 UMS 与其他服务同样有效。</li>
  * </ul>
@@ -195,7 +196,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     }
 
     /**
-     * 切换当前工作空间：成员关系校验 → 按目标空间展开角色/权限 → 重签并覆盖会话。
+     * 切换当前工作空间：成员关系校验 → 带上用户全量角色/权限 + 目标空间 ws_id 重签 → 覆盖会话。
      */
     @Override
     public WorkspaceSwitchVO switchWorkspace(Long userId, WorkspaceSwitchRequest request) {
@@ -218,8 +219,12 @@ public class WorkspaceServiceImpl implements WorkspaceService {
             throw new BizException(ErrorCode.FORBIDDEN, "您不是该工作空间的成员");
         }
 
-        List<String> roles = roleMapper.selectRoleCodesByUserAndWorkspace(userId, workspaceId);
-        List<String> permissions = roleMapper.selectPermissionCodesByUserAndWorkspace(userId, workspaceId);
+        // 角色/权限按「用户」维度取（与 UMS 登录完全同口径），**不按目标空间过滤**（2026-09-17 修正，BE-20260916-01）：
+        // 切换空间只是换"当前站在哪个空间"(ws_id)，不是换"我是谁"；按空间过滤会丢掉组织级/平台级能力
+        // （org:*、ws:create、ws:delete），表现为"一切空间就降级"（删除按钮消失、1003 变 2006）。
+        // 空间维度的"能不能做"由服务端按当前 ws_id + 成员关系二次判定（TD §7.5 / PROGRESS §6.3 待办）。
+        List<String> roles = roleMapper.selectRoleCodesByUserId(userId);
+        List<String> permissions = roleMapper.selectPermissionCodesByUserId(userId);
 
         String accessToken = jwtUtil.createAccessToken(
                 userId, member.getTenantId(), workspaceId, roles, permissions);

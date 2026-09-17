@@ -122,6 +122,8 @@
 - [2026-09-16] ✅ 已决策并修正（`/auth/me` 当前工作空间语义）：`workspaceId`/`workspaceName` 改以 JWT `ws_id` 为准（无 `ws_id` 时回退「成员关系中最早的空间」）。原实现固定返回最早所属空间，导致 workspace 切换空间后 `ensureMe()` 仍显示旧空间，**实现与 IF §3.5/§5.5 语义不符**；已写入 IF §3.5 并登记 FE-SYNC §2
 - [2026-09-16] ✅ 已核实并补执行（云端库角色授权增量 seed）：实测云端 `ie_role_permission` 只有 role 1(48)/4(15)，**role 2/3/5 的授权从未增量执行**（BE-20260908-03 的「落地提醒」未落实）——这正是「`ws_admin` 成员 Tab 403/2006」与「切换空间后新 token 全 403」的直接成因（非代码缺陷）。→ 执行 init.sql §6 三条幂等 INSERT 后为 1:48 / 2:46 / 3:27 / 4:15 / 5:7 = **143**（与 DB.md 一致）。**教训：seed 变更必须同时执行到已初始化库，否则代码正确也会表现为权限缺失**
 
+- [2026-09-17] ✅ 已修复（切换空间权限口径错误，答复前端 BE-20260916-01）：**切换空间只改 `ws_id`（上下文），`roles`/`perms` 按「用户」维度取全量、与 UMS 登录同口径**。根因见 §四 同日条目；代码改动 `workspace/RoleMapper`（删掉 `...ByUserAndWorkspace` 两个按空间过滤的查询，改为与 UMS 同口径的 `selectRoleCodesByUserId` / `selectPermissionCodesByUserId`）+ `WorkspaceServiceImpl.switchWorkspace`；`IF §5.5/§5.3`、`FEATURES 2.5`、`FE-SYNC §2/§3` 同步。**证据（2026-09-17，workspace 独立实例 `:17102` 隔离验证，不打断 IDEA 中运行的实例）**：登录 `ws_id=1 perms=48` → 切换 `ws_id=7 perms=48`（`ws:delete`/`org:write`/`ws:create` 保留），**断言 perms 切换前后一致 = True**；`DELETE /workspace/7`（当前空间）→ **403/1003**（修复前 2006）。**遗留另立**：空间维度授权（同一用户不同空间权限不同）需服务端二次判定 + 前端「当前空间权限」接口，转 §6.3 待办
+
 ---
 
 ## 四、踩坑记录（增量追加）
@@ -152,6 +154,7 @@
 - [2026-09-09] 坑：**`lb://` 路由缺 LoadBalancer 依赖**——`spring-cloud-starter-alibaba-nacos-discovery` 不传递引入 `spring-cloud-loadbalancer`，网关 `lb://` URI 会因无负载均衡器不可用 → 规避：显式引 `spring-cloud-starter-loadbalancer`（已放 starter-nacos 统一提供）
 - [2026-09-09] 协作/判定沉淀：远程中间件「连不上」的排查链路 = ① 本机到目标端口 TCP 可达性（`Test-NetConnection`）→ ② 云主机侧（ss 监听 / docker-proxy / ufw / firewalld / iptables policy）→ ③ 云安全组入方向。**主机全放行 ≠ 公网可达**，安全组与主机防火墙是两层，勿只查一层就下结论
 
+- [2026-09-17] 协作教训（想当然，非文档缺失——答复 BE-20260916-01）：实现 workspace「切换空间」时我把 `roles`/`perms` **按目标空间重算**，导致一切空间就丢掉组织级/平台级能力（`org:*`/`ws:create`/`ws:delete`），连锁产生三个现象：① 按钮消失但菜单还在（`perms` 与 `/auth/me` 的 `roles` 两套口径打架）；② `IF §5.3` 承诺的「删除当前空间 → `1003`」被 `2006` 抢先拦截（`ws_admin` 无 `ws:delete`）；③ `org:write` 驱动的可见范围缩水。**根因三段**：(a) 套用了"多租户 token 只带当前租户权限"的通用假设，**没回项目自己的模型核对**（`ie_member.workspace_id` 可空 = 组织级成员；`ie_role.scope` 分 ALL/ORG/WS/SELF）；(b) **没复用 UMS 既有口径**——UMS 登录的两个查询本就不带空间过滤，我却另写一套 `...ByUserAndWorkspace`，同一身份两种算法；(c) 还把错方向写进了 `IF §5.5`（"按目标空间维度重新展开"）并配了句自洽理由，文档与代码一起错，更难发现。→ 规避：**① 换签口径必须与登录同源（能复用就复用，不复用也要逐字段对齐）；② 冒烟必须断言「切换前后 perms 相同、仅 ws_id 变化」（本次已补）；③ 写契约时先分清「身份能力」与「请求上下文」，能力不进空间**
 - [2026-09-16] 坑：**gateway 关闭时抛 `ERR_NACOS_DEREGISTER ... Client not connected, current status:STARTING` → 根因不是网络，而是 `NACOS_ADDR` 没注入**：gateway `application.yml` 的 Nacos 地址写成 `${NACOS_ADDR:127.0.0.1:8848}`（**有默认值 → 不 fail-fast**），IDEA 里没配 profile/环境变量时静默回落本机 127.0.0.1 → 启动期刷 `Server check fail ... 127.0.0.1:9848`、关闭期抛上面那条（**报错出现在 shutdown 线程，属症状非根因**）、`lb://` 路由不可用。**与 UMS/workspace 的差异**：它们的 `datasource`/`redis` 占位符无默认值 → 缺变量直接启动失败（报错显眼）；gateway 这类"有默认值"的配置则**静默降级**，更难发现。→ 规避（当日定稿）：① **Nacos 地址直接写死在 `application.yml`**（不再依赖 `NACOS_ADDR` 注入，彻底消除静默降级）；② gateway 设 `register-enabled: false`（纯消费方，不注册）；③ 三服务统一"非敏感写死 + 口令 auto-import"的配置方式（见上一条），IDEA/终端/机器怎么换都一样。**实测**：修复后启动 1.84s、`127.0.0.1` 相关报错 **0 条**、关闭时 `ERR_NACOS_DEREGISTER` **0 条**（见 §六 6.4 `lb://` 复验）
 - [2026-09-16] 坑：**「昨天能连、今天连不上」的云库 = 本机公网 IP 变了**（联通动态 IP：`123.138.150.18` → `123.139.53.41`），而云安全组是「按来源 IP 放行 5433/6380/8848」→ 新 IP 不在名单里，连接被挡在云主机**之外**。**排查口径（可复用）**：主机侧全绿（`ufw inactive` / `INPUT ACCEPT` / 端口 `0.0.0.0` 监听 / 容器 Up）时，问题必在**安全组那一层**（云控制台）；用 `auth.log` 的历史 SSH 来源 IP 可反证本机 IP 是否变过。→ 规避：开发期连库走 **SSH 隧道**（只依赖 22，IP 变了也不影响）；不要把库端口长期按 IP 放行（IP 一变即失效，且容易顺手开成 `0.0.0.0/0`）
 - [2026-09-16] 坑：**本机 → 云主机 5433/6380/8848 全部不可达（22 可达）**，服务启动后登录一律 500（`Unable to connect to Redis`）→ 排查链路复用 §四既有沉淀（本机 TCP → 云主机 `ss`/docker-proxy → 主机防火墙 → 云安全组）：云上容器均 `Up 6 days` 且 `0.0.0.0:5433/6380/8848` 正常监听，本机 `Test-NetConnection` 对三端口全 False、仅 22 True → 判定为**安全组已收敛（或本机出口 IP 变化）** → 临时用 **SSH 隧道**（paramiko `direct-tcpip`，本地 5433/6380 → 云 `127.0.0.1` 同端口）完成冒烟，服务侧用命令行覆盖 `--spring.datasource.url/--spring.data.redis.host` 指到 `127.0.0.1`，**不改受版本控制的配置**。验证后已停进程、关隧道
@@ -241,7 +244,14 @@
 - [x] 权限编码二级/三级混用统一规范（`kb:read` vs `model:vendor:write`）——**2026-09-09 完成**：统一规则「`资源路径:动作`，最后一段固定为动作」，写入 IF §6.7（前端按最后一个 `:` 切分或用权限树 `resource` 字段分组，禁用 `startsWith` 前缀匹配）；现有编码零改动，已答复前端 BE-20260909-06
 - [ ] `WorkspaceMapper` 直查 `ie_workspace` 改走 Feign（workspace 服务落地后，TD §3.2 服务边界）——**workspace 已于 2026-09-16 落地，该项仍未做**：`/auth/me` 的 `workspaceName` 目前仍由 UMS 直查 `ie_workspace`（同库只读），需与下一项一并收口
 - [ ] `UserRefMapper` 直查 `ie_user`（workspace 侧按邮箱定位已注册用户，IF §5.6 添加成员）同样属 MVP 临时直查；与上一项一起抽象为 `insight-engine-api` Feign 契约（TD §3.2）
+- [ ] 🟡 **空间维度授权（"同一用户在不同空间权限不同"）**（2026-09-17 由 BE-20260916-01 引出，属 TD §7.5 的一部分）：
+  **现状**：token 只承载「用户级能力」（用户维度全量，与登录一致），服务端**尚未**按「当前 `ws_id`」做二次判定，故"在 A 空间能建、在 B 空间不能建"这类需求**目前无法表达**。
+  **设计（分两步，先轻后重）**：
+  ① **轻量版**：新增 `@workspacePermission("kb:write")`（或 `WorkspacePermissionAspect`），判定 = 当前 `ws_id` 空间内该用户是否拥有该权限（`ie_member`→`ie_role`→`ie_role_permission`→`ie_permission`，走 Redis 缓存 `ie:ws:member:{wsId}` / `ie:role:permissions:{roleId}`，TD §6.1）；同时给前端补「我在这个空间的权限」接口（或在 `/auth/me` 增 `currentWorkspacePerms` 字段），保证**按钮显示与后端判定同源**（否则会出现"按钮在、点了 403"）；
+  ② **彻底版**：ABAC/DataScope 行级拦截器（`InnerInterceptor#beforeQuery`）自动追加 `workspace_id = 当前 ws_id`；并按 §6.6 方案 A 把 perms 从 token 移到「角色→权限」缓存（token 只留角色编码），顺带解决权限变更 2h 滞后与 `perms` 膨胀。
+  **纪律**：这两步都**不得**回退到"按空间裁剪 token 权限"的老路（已证实会丢组织级/平台级能力，见 §四 2026-09-17）
 - [ ] DataScope 行级数据权限拦截器（TD §7.5）——多租户/V1.0 前必须完成，覆盖全部业务列表查询
+- [ ] 🟡 **token 内 `roles`/`perms` 口径不统一（待开发者裁决）**：`roles`/`perms` 有**三个签发入口**，其中 **UMS 登录 / 刷新按全局展开**（`RoleMapper.selectRoleCodesByUserId`、`PermissionMapper.selectPermissionCodesByUserId`，仅按 `user_id` 过滤），而 **`workspace/switch` 按目标空间展开**（`RoleMapper.selectRoleCodesByUserAndWorkspace`，带 `m.workspace_id` 条件）→ 登录后是全局权限、切空间后仅本空间权限，**同一语义两套口径**。IF §3.5 已如实标注「两者语义不同」，但**从未裁决**。两条路：**A. 统一为按空间**（登录也按默认空间展开，`org_admin` 无空间时保留全局兜底）——权限隔离更正确，需改 UMS；**B. 统一为全局**（`switch` 只换 `ws_id`、不重展开 `roles`/`perms`）——改动小但切空间无权限隔离。**裁决前不得再扩散第三种口径**（AGENTS.md 铁律 6）
 
 ### 6.4 gateway / Nacos / 部署阶段（🟡）
 
@@ -301,6 +311,8 @@
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-17
+- 内容：**修复「切换空间权限口径」缺陷（答复 BE-20260916-01）+ 讲清两层鉴权原理 + 沉淀学习笔记** —— ① **问题定性**：切换空间时把 `roles`/`perms` 按目标空间重算 → 丢掉组织级/平台级能力（`org:*`/`ws:create`/`ws:delete`），连锁产生"按钮消失但菜单在"（两套口径打架）、`IF §5.3` 的 `1003` 被 `2006` 抢先拦截、`org:write` 可见范围缩水；② **根因**：想当然套用"多租户 token 只带当前租户权限"，未核对项目模型（`ie_member.workspace_id` 可空 = 组织级成员）、未复用 UMS 既有登录口径（另写了 `...ByUserAndWorkspace`），并把错方向写进 `IF §5.5`；③ **修复**：`RoleMapper` 删掉两个按空间过滤的查询、改用与 UMS 同口径的 `selectRoleCodesByUserId`/`selectPermissionCodesByUserId`；`switchWorkspace` 只改 `ws_id`；④ **证据**（workspace 独立实例 `:17102`，**不打断 IDEA 中运行的服务**）：登录 `perms=48` → 切换 `perms=48`、`ws:delete`/`org:write`/`ws:create` 保留，**断言 perms 前后一致 = True**；`DELETE /workspace/{当前}` → **403/1003**；⑤ **排查副产品**：发现 IDEA 实例与 `java -jar` 实例会抢同一端口（我的 jar 起不来、冒烟打到 IDEA 旧代码 → 断言假失败），**教训：验证前先确认端口上是谁的进程**（`-javaagent`/`TieredStopAtLevel=1` = IDEA）；⑥ **沉淀**：`LEARNING.md` 新增「接口能力层 vs 资源/空间关系层」两层鉴权原理篇（含 `@PreAuthorize` 执行链、`@workspacePermission`/DataScope 两种空间维度判定、权限为何不每次查库、本项目落地路线）；⑦ **遗留**：空间维度授权立为 `§6.3` 待办（轻量 `@workspacePermission` + 前端「当前空间权限」接口 → 彻底 DataScope + perms 移出 token）；⑧ 测试数据已清理（仅保留种子空间与前端自测残留 `fe-*`）
 - 日期：2026-09-16
 - 内容：**配置方案定稿：应用侧改「写死 + 口令自动加载」，启动不再需要任何 IDE 配置**（同日第三段，响应"不要绕、直接写死"）—— ① **改动**：三服务 `application.yml` 的 PG/Redis/Nacos 地址、库名、账号**直接写死并备注**；口令只放各服务 `application-local.yml`（gitignore），由 `spring.config.import: optional:classpath:application-local.yml` 自动加载；`application.yml` **故意不写 `password` 键**（导入优先级更低会被覆盖）；生产用 `SPRING_DATASOURCE_PASSWORD` / `SPRING_DATA_REDIS_PASSWORD` 覆盖；② **删除**：`.run/*.run.xml`（共享运行配置，profile 方案已废弃）、gateway 的 `application-local(.example).yml`（网关无口令、地址已写死）；③ **文档同步**：TD §18.2.6 重写、DEVGUIDE P19 第 1 条改口径、`.env.example` 应用侧段改为「已不再需要 `INSIGHT_PG_*`/`NACOS_ADDR`」、PROGRESS §三/§四/§五 P1-1 更正；④ **实测**：三服务**零参数**启动全部 `Started ...Application`，经网关 `:7000` 登录 code=0、`workspace/page`/`org/1`/`member/page` 均 200；⑤ **收尾**：三服务已停（端口空）、临时文件已清。**下一步：`feature/workspace` 走 PR 合并 + 前端切真复测（§七 Top1）**
 - 日期：2026-09-16

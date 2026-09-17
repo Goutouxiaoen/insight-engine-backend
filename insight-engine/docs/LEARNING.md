@@ -45,6 +45,7 @@
 - [x] Spring Cloud Gateway 核心原理：跟着一条请求走网关（Route/Predicate/Filter、GlobalFilter vs GatewayFilter、首配命中与路由吞并、lb:// 与 NettyRoutingFilter、WebFlux 选型）
 - [x] Docker 运维命令地图：容器生命周期命令（pull/run/ps/logs/exec/stop/start/rm）+ Linux 配套语法（重定向/管道/heredoc/systemctl）+ compose 命令对照 + `run` 参数↔compose 字段映射（2026-09-08，含实战复盘：`docker run` 漏挂数据卷导致数据零持久化）
 - [x] 负载均衡 LB —— 客户端 LB vs 服务端 LB、`lb://` 八步解析链、Spring Cloud LoadBalancer 策略与缓存、健康实例摘除、Ribbon 为何退场（**2026-09-09 含本地代码 + 云服务器实测对照**：从 Nacos HTTP API 原样取出实例名单并实证 5s/15s/30s 三参数；`lb://` 转发实测通（200 + X-Trace-Id）；活体复现"进程一停 → 名单清空"；依赖版本从 fat jar 反查实证；**另登记 2 个 P0 漏洞**：注册 IP 落在 `vEthernet (Default Switch)` 虚拟网卡（本机假通过、跨机必炸）、公网 Nacos 未开鉴权导致 **LB 名单可被未授权写入 = 流量劫持**）
+- [x] **接口能力层 vs 资源/空间关系层**：`@PreAuthorize` 执行链 + 空间维度判定的两种实现（`@workspacePermission` 语义 / DataScope 行级拦截器）+ **为什么"空间维度"不能塞进 token**（2026-09-17，事故驱动：BE-20260916-01「切换空间丢组织级权限」；含`java -jar` 与 IDEA 实例抢端口的排查坑）
 
 **待学习**：
 
@@ -6135,6 +6136,155 @@ tar -tf <module>/target/<artifact>.jar | grep -i loadbalancer
 3. **坑：改了 yml 立刻验证，结果"没生效"。** 名单在**两层缓存**里（Nacos 客户端 + LB），等一个 TTL 或重启调用方再看。
 4. **坑：`enabled` / `healthy` / 进程活着 三件事混为一谈。** 控制台"下线"改 `enabled`；心跳超时改 `healthy`；进程在但注册失败（`fail-fast: false` 会**只告警不阻断启动**）——本项目就开着 `fail-fast: false`，所以"服务起来了但没在名单里"是完全可能的状态，别用"进程在不在"当判据。
 5. **坑：单实例环境下测不出 LB 行为，却据此得出"LB 没问题"的结论。** 本次就是：真正危险的是注册 IP，而它在本机被"假通过"掩盖了。
+
+---
+
+## 鉴权分两层：接口能力层（@PreAuthorize）vs 资源/空间关系层
+
+> 2026-09-17 沉淀。事故驱动：workspace「切换空间」按空间裁剪 token 权限，导致切完就丢组织级能力（BE-20260916-01）。
+> 本文回答三个问题：① 这两层各自到底怎么实现的？② 为什么必须分两层？③ 为什么「同一用户在不同空间权限不同」这种需求**不能**靠 token？
+
+### 一、一层管"动作"，一层管"资源"——先立这个框架
+
+| 层 | 回答的问题 | 判据从哪来 | 实现形态 | 是否查库/缓存 |
+|---|---|---|---|---|
+| **接口能力层** | 这个**动作类别**我能不能做？（`kb:write`、`member:create`） | token 里的权限码（`perms` Claim） | `@PreAuthorize("hasAuthority('kb:write')")` | **不查**，纯内存 |
+| **资源/空间关系层** | 对**这条数据 / 这个空间**我能不能做？ | 我与该资源的关系（成员关系 / 资源归属） | 切面/`@workspacePermission` 判定 + DataScope 行级过滤 | 查（走 Redis 缓存） |
+
+一句话：**token 只能证明"你是谁、你会哪些动作"，证明不了"你和这条数据是什么关系"**——因为 token 是登录那一刻算好并冻住的静态快照，它不知道你这次要动哪条数据。
+
+### 二、第一层：`@PreAuthorize` 的执行链（跟着一次请求走）
+
+```
+请求
+ └─ JwtAuthFilter（starter-security）
+      ├─ 解析 Bearer → JwtUtil.parseAccessToken() 得到 perms / roles / ws_id
+      ├─ perms → SimpleGrantedAuthority，塞进 SecurityContextHolder 的 Authentication
+      └─ 同时填 UserContext（业务侧读 userId/tenantId/workspaceId）
+ └─ DispatcherServlet
+      └─ Controller 方法调用点 ——【被 AOP 拦截】
+           AuthorizationManagerBeforeMethodInterceptor
+             ├─ 读 @PreAuthorize 表达式（SpEL）
+             ├─ 用 SecurityContextHolder 的 authorities 求值 hasAuthority('kb:write')
+             └─ 不满足 → 抛 AccessDeniedException
+ └─ 我们项目的 SecurityExceptionHandlerAdvice → 转 403 / code=2006
+```
+
+要点（都是本项目实际踩过的）：
+- **必须先有 `@EnableMethodSecurity`**（starter-security 的 `SecurityAutoConfiguration` 上），否则注解是装饰品；
+- 判定**零 I/O**：这就是"权限进 JWT"的最大价值——不用每次查库；
+- 表达式里 `hasAuthority('kb:write')` 与 `hasRole('ADMIN')` 不同：后者会自动补 `ROLE_` 前缀，本项目统一用 `hasAuthority` + 权限码；
+- `AccessDeniedException` 在**方法调用点**抛出，属于 DispatcherServlet 层，**普通 filter 层的 `AccessDeniedHandler` 接不住** → 所以要单独一个 `@RestControllerAdvice`（本项目 `SecurityExceptionHandlerAdvice`，2026-09-08 修的就是这个"403 被误报 500"）；
+- 它**只能回答动作类别**：authorities 里只有权限码字符串，没有"这个 kbId 属于哪个空间"这类信息。
+
+### 三、第二层：资源/空间关系判定——两种实现，通常并用
+
+**（a）服务端围栏（授权判定）**：进方法时查一次"当前用户 × 当前 `ws_id` × 权限码"的关系：
+
+```sql
+-- 语义：这个用户"在当前空间"是否有这个权限
+SELECT 1
+FROM ie_member m
+JOIN ie_role_permission rp ON rp.role_id = m.role_id
+JOIN ie_permission p       ON p.id = rp.permission_id
+WHERE m.user_id = ? AND m.workspace_id = ? AND p.code = ? AND m.deleted = 0 AND p.deleted = 0
+```
+
+项目落地形态（建议，见 PROGRESS §6.3 待办）：自定义注解 + 切面
+
+```java
+@workspacePermission("kb:write")        // 切面里用 UserContext.getWorkspaceId() + 目标资源归属空间去查关系
+@PostMapping("/api/v1/kb")
+public Result<Long> create(@RequestBody KbCreateRequest req) { ... }
+
+// 或者复用 SpEL 调 Bean（不用自定义注解，但要写表达式）：
+@PreAuthorize("@wsPerm.has('kb:write', #req.workspaceId)")
+```
+
+缓存落点（TD §6.1）：`ie:ws:member:{workspaceId}`（空间成员）、`ie:role:permissions:{roleId}`（角色权限）——避免每次请求打三张表。
+
+**（b）数据行过滤（DataScope 拦截器，TD §7.5）**：用 MyBatis-Plus 的 `InnerInterceptor#beforeQuery` 改写 SQL，自动追加范围条件：
+
+| 角色 `scope` | 追加什么 |
+|---|---|
+| `ALL`（平台/超管） | 不追加 |
+| `ORG`（组织管理员） | `AND org_id = 当前组织` |
+| `WS`（空间管理员/开发者） | `AND workspace_id = 当前 ws_id` |
+| `SELF`（业务用户） | `AND created_by = 当前用户` |
+
+它是**防漏兜底**：即使某个查询忘了写条件，也查不到别的空间的数据（这类"忘了加 where"正是水平越权的主要来源）。代价是 SQL 改写有风险（联表别名、子查询、复杂 SQL），所以通常"关键接口显式判定 + 拦截器兜底"两者并用。
+
+### 四、为什么"空间维度"不能塞进 token（本次事故的根子）
+
+想满足"同一用户在不同空间权限不同"，直觉上有两条路，都不对：
+
+| 路 | 做法 | 为什么不行 |
+|---|---|---|
+| 甲 | 把"空间 → 权限"整张映射塞进 token | token 膨胀（权限本来就已约 1.3KB，见 PROGRESS §6.6），且权限变更要等 token 过期才生效 |
+| 乙 | **切换空间时按目标空间重算 token 权限** | **就是本次做的，错的**：`ie_member.workspace_id` **可空**（= 组织级成员），且组织级能力（`org:*`、`ws:create`、`ws:delete`）**不属于任何空间** → 按空间过滤必然丢掉它们 → "一切空间就降级"（按钮消失、`1003` 被 `2006` 抢先拦截） |
+
+正解只有一条：**token 承载「用户级能力」（与空间无关的并集），空间维度判定放服务端**。
+
+这也是主流系统的做法，本质相同：
+
+| 系统 | token 里放什么 | 空间/资源维度怎么判 |
+|---|---|---|
+| GitHub | 只证明"你是哪个用户"（+scope 粗粒度） | 能不能推这个 repo，按"你在该 repo 的权限"实时判 |
+| Google Cloud IAM / K8s RBAC | 只证明主体身份 | `主体 × 资源 × 动作` 的策略判定 |
+| 飞书/钉钉开放平台 | 应用/用户身份 | 部门/空间维度权限服务端算 |
+
+附带两个好处：**权限变更即时生效**、**token 不再膨胀**（对应 PROGRESS §6.6 方案 A：token 只留角色编码 + 服务端"角色→权限"缓存）。
+
+**但代价必须一起处理**：前端拿什么控制按钮？如果前端只看 token 里的 `perms`（用户级并集），就会出现"在 A 空间有 `kb:write`，切到 B 空间按钮还在、点下去 403"。所以：
+> **前端门控要用「我在这个空间的权限」** —— 服务端提供 `GET /api/v1/workspace/{id}/my-permissions`（或在 `/auth/me` 里带 `currentWorkspacePerms`），让**按钮显示与后端判定同源**。
+
+### 五、本项目落地路线（现状 → 目标）
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| 第 1 步 | **切换空间只改 `ws_id`，`roles`/`perms` 与登录同口径（用户维度全量）** | ✅ 2026-09-17 已修（`WorkspaceServiceImpl` + `RoleMapper`） |
+| 第 2 步（轻量） | `@workspacePermission` 空间维度判定 + 前端「当前空间权限」接口 | ⬜ PROGRESS §6.3 待办 |
+| 第 3 步（彻底） | DataScope 行级拦截器 + perms 移出 token（角色编码 + Redis 权限缓存，§6.6 方案 A） | ⬜ PROGRESS §6.3 / §6.6 |
+
+> ⚠️ 纪律：第 2/3 步都**不得**回退到"按空间裁剪 token 权限"的老路。
+
+### 六、验证配方（自己跑一遍，别背结论）
+
+```powershell
+# ① 第一层（动作门控）：用 ws_admin 的 token 调需要 ws:delete 的接口 → 应 403/2006
+curl.exe -s -o NUL -w "%{http_code}`n" -X DELETE -H "Authorization: Bearer $TK_WS_ADMIN" http://localhost:7102/api/v1/workspace/1
+# ② 同一 token 调 member:read → 应 200（证明只挡住了"动作类别"）
+
+# ③ 第二层（空间维度，第 2 步实现后）：用 A 空间的 token 去访问 B 空间的资源 → 应 404/403/空列表
+#    断言方式：同一个 token，换目标 ws_id → 结果必须不同
+
+# ④ 本次事故的断言（已写进冒烟）：解码 JWT payload，比对切换前后 perms 集合
+function Decode($jwt) {
+  $p = ($jwt -split '\.')[1]; $p = $p.Replace('-','+').Replace('_','/')
+  switch ($p.Length % 4) { 2 { $p += '==' } 3 { $p += '=' } }
+  return ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p)) | ConvertFrom-Json)
+}
+$P0 = Decode $TOKEN_BEFORE; $P1 = Decode $TOKEN_AFTER
+if (($P0.perms -join ',') -ne ($P1.perms -join ',')) { 'FAIL: 切换空间不该改变 perms' }
+if ($P0.ws_id -eq $P1.ws_id)                        { 'FAIL: ws_id 应该变了' }
+```
+
+### 七、面试追问（这页要能顺口答）
+
+1. **权限为什么放 JWT 而不是每次查库？** 吞吐 vs 实时性/一致性；折中是"token 只放身份、权限走 Redis 缓存"（本项目 §6.6 方案 A）。
+2. **RBAC 与 ABAC 的边界？** RBAC 管"动作能不能做"（第一层），ABAC 管"能看到哪些数据"（第二层）；本项目 `ie_role.scope`（ALL/ORG/WS/SELF）就是 ABAC 的落点（**现状：零消费方**，只在角色创建/详情里读写）。
+3. **垂直越权 vs 水平越权？** 垂直 = 缺权限码（第一层拦住）；水平 = 有同样的权限但跨资源/跨空间访问（**第二层才拦得住，也是最容易漏的一类**）。
+4. **"切换空间后权限变少"为什么是设计错误？** 因为把「身份（你是谁、会什么）」与「上下文（此刻站在哪个空间）」混成了一个东西；上下文的变化不该改变身份。
+5. **`@PreAuthorize` 抛的异常为什么普通 `AccessDeniedHandler` 接不住？** 它在方法调用点（DispatcherServlet 之后）抛出，而 filter 层的 handler 只覆盖 filter 链内的拒绝——两者是两个拦截点。
+
+### 八、踩坑（本项目真实事故 + 排查技巧）
+
+1. **坑（本次事故）：换签口径与登录口径不一致。** UMS 登录用"用户维度"查询（不带空间过滤），workspace 换签却另写了"按空间过滤"的版本 → 同一份身份两套算法。**教训：能复用就复用；不能复用也要逐字段对齐，并用断言锁住（"切换前后 perms 相同"）。**
+2. **坑：把"上下文"当"身份"改。** 见第七节第 4 条。
+3. **坑：把错误方向写进契约。** `IF §5.5` 当时写的"按目标空间维度重新展开"看着自洽（"避免切到 A 空间却带着 B 空间权限"），结果文档与代码一起错，反而更难发现。**教训：契约里写"为什么这样"之前，先核对数据模型（本例：`workspace_id` 是否可空）。**
+4. **坑（排查技巧）：`java -jar` 与 IDEA 启动的实例抢同一端口。** 现象是"改了代码、重启、仍是旧行为"。识别方法：看端口上的进程命令行——
+   `Get-CimInstance Win32_Process -Filter "Name='java.exe'"`：带 `-javaagent` / `-XX:TieredStopAtLevel=1` 的是 **IDEA** 起的；`-jar xxx.jar` 才是命令行起的。
+   验证正确姿势：**另起一个端口**（如 `--server.port=17102 --spring.cloud.nacos.discovery.register-enabled=false`）做隔离验证，别去抢 7102。
 
 ---
 
