@@ -708,6 +708,42 @@ curl -X POST http://localhost:7000/auth/login \
 
 `POST /api/v1/model` / `PUT /api/v1/model/{id}` / `DELETE /api/v1/model/{id}`
 
+**权限**：`model:list:write`
+
+**创建请求体**：
+
+```json
+{
+  "vendorId": 1,
+  "code": "qwen-plus",
+  "displayName": "通义千问 Plus",
+  "type": "CHAT",
+  "contextWindow": 131072,
+  "inputPricePer1k": "0.000800",
+  "outputPricePer1k": "0.002000"
+}
+```
+
+**更新请求体**（仅非空字段生效；`vendorId` 与 `code` **不可修改**）：
+
+```json
+{
+  "displayName": "通义千问 Plus（改）",
+  "type": "CHAT",
+  "contextWindow": 131072,
+  "inputPricePer1k": "0.000800",
+  "outputPricePer1k": "0.002000",
+  "enabled": 1
+}
+```
+
+**业务规则（2026-09-17 实现并写入契约）**：
+- `vendorId` 必须存在（否则 `1001`「厂商不存在」），避免模型指向不存在的厂商（孤儿数据）；
+- `(vendorId, code)` 唯一（业务层先查 + DB `uk_model_vendor_code` 兜底），重复 → `1001`「同一厂商下模型编码已存在」；
+- **`vendorId` / `code` 不可更新**：`code` 是对厂商 API 的**模型名**，且历史用量按 `modelId` 归属 → 改它会让旧数据指向语义已变的模型；"换模型"请**新建**一条；
+- 金额字段（`inputPricePer1k` / `outputPricePer1k`）**入参与响应均为字符串**（IF §2.5：元、6 位小数）；入参为空的非空字段不更新；
+- 删除为**逻辑删除**，不影响已产生的用量记录。
+
 ### 7.4 模型路由策略
 
 - `GET /api/v1/model/route/list` — 策略列表
