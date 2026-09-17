@@ -214,6 +214,15 @@
 
 > **高价值优先组**（原 §七 Top2，已核对代码均未落地，保持待办）：phone 唯一索引、roleId 前置校验、授权集合去重校验、`DuplicateKey`/`HttpMessageNotReadableException`(1002) 友好映射、`Result` 成功响应 traceId 回填（末项在 §6.2）。建议 gateway 阶段收尾后作为独立任务优先处理。
 
+- [ ] 🟡 **`ws_id` 口径不一致：`/auth/refresh` 会把"当前空间"悄悄重置回默认空间**（2026-09-17 排查 BE-20260916-01 时发现，**按 AGENTS 铁律 6 登记待裁决，未自行改**）
+  - **现象**：切到空间 B 后，access token 过期（2h）或前端主动刷新 → 新 access token 的 `ws_id` **变回默认空间（成员关系中最早加入的那个）**，前端"当前空间"被静默切回；`roles`/`perms` 不受影响（48/48），故很难察觉，直到发现列表/数据又回默认空间视角。
+  - **证据（代码，附行号）**：`ums/AuthServiceImpl.java:130` `refresh()` → `:163` `buildLoginResponse(user)` → `:279` `Long workspaceId = roleMapper.selectDefaultWorkspaceIdByUserId(user.getId())`；即刷新链路**重算** ws_id，而不是沿用旧 token 的 `ws_id`。对照：`/auth/me` 用的是 `:307` 的"JWT `ws_id` 优先、缺失才兜底默认空间"（口径正确）。
+  - **三个签发入口现状**：登录 = 默认空间（合理，此刻尚无"当前空间"）✅ ｜ 切换空间 = 目标空间 ✅ ｜ **刷新 = 默认空间 ❌（不一致）** —— 与铁律 6「同一语义只能有一种口径」冲突。
+  - **裁决选项**：
+    - **A（推荐）**：refresh **沿用当前 `ws_id`**。实现二选一：① 把 `ws_id` 写进 refresh token 的 Claim（`JwtUtil.createRefreshToken` 增参）；② 在 refresh 会话里与 jti 摘要一起存 `ws_id`（Redis `ie:auth:refresh:{userId}` 改存 `jti摘要:ws_id`）。代价：改 `starter-security` 的 `JwtUtil` 或 UMS 会话结构，需同步网关解析（网关不解析 refresh，影响面小）。
+    - **B**：维持现状，仅在 `IF §3.2` 明确写「刷新后回到默认空间」，由前端每次刷新后重新调用切换接口。**代价**：切空间后每 2h 被弹回一次，体验差。
+    - **C**：前端禁止使用 refresh（只用切换换签）→ 不可行：access 2h 过期后无续期手段。
+  - **影响面**：`IF §3.2`（refresh 响应）、前端 `auth.ensureMe()` 后的空间一致性、`FE-SYNC §2`。**未裁决前前端只能按"刷新后可能回到默认空间"防御**。
 - [ ] `ie_user.phone` 加部分唯一索引（`init.sql` 补 `uk_user_phone`，`DB.md` 同步）——手机号也是登录账号（IF §3.1），当前无唯一约束存在串号登录歧义
 - [ ] 邮箱大小写归一：注册/创建/登录/唯一性查询统一 `lower(trim)`，防 `A@x.com` 与 `a@x.com` 注册成双账号
 - [ ] 创建用户前校验 `roleId` 存在（`UserServiceImpl.create` 前置 `requireRole`），防孤儿 member
