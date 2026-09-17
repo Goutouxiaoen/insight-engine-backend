@@ -47,4 +47,45 @@ public final class ModelConstants {
 
     /** 掩码占位串 */
     public static final String MASK_MIDDLE = "****";
+
+    /* ============ 聊天补全（IF §7.5） ============ */
+
+    /**
+     * 逻辑模型名 {@code auto}：交给路由策略选具体模型。
+     *
+     * <p>MVP 说明：路由策略（IF §7.4）尚未实现，当前 {@code auto} 的语义 = **取第一个启用中的 CHAT 模型**；
+     * 等 §7.4 落地后由路由策略接管（此时本常量语义不变，只是选择逻辑变复杂）。</p>
+     */
+    public static final String LOGICAL_MODEL_AUTO = "auto";
+
+    /* ============ SSE 事件（IF §2.6 是心跳的单一事实源） ============ */
+
+    /** 业务事件：增量内容（delta） */
+    public static final String SSE_EVENT_MESSAGE = "message";
+
+    /** 业务事件：错误（流中出错时推送，随后关闭连接） */
+    public static final String SSE_EVENT_ERROR = "error";
+
+    /** 业务事件：结束（携带 usage 汇总） */
+    public static final String SSE_EVENT_FINISH = "finish";
+
+    /** 通用心跳事件：**所有** stream=true 接口都有，15s 一次，不可关闭（IF §2.6） */
+    public static final String SSE_EVENT_HEARTBEAT = "heartbeat";
+
+    /** 心跳周期（毫秒）——IF §2.6 规定 15s，不可关闭 */
+    public static final long SSE_HEARTBEAT_INTERVAL_MS = 15_000L;
+
+    /** SSE 默认内容类型（UTF-8，避免中文乱码） */
+    public static final String SSE_CONTENT_TYPE = "text/event-stream;charset=UTF-8";
+
+    /* ============ 用量计量（DB.md §5.9.2 ie_usage_record 的取值口径） ============ */
+
+    /** 计量维度：租户（token 无 ws_id 时的退化维度） */
+    public static final String USAGE_SCOPE_TENANT = "TENANT";
+
+    /** 计量维度：工作空间（默认维度——空间是资源与计费的容器） */
+    public static final String USAGE_SCOPE_WORKSPACE = "WORKSPACE";
+
+    /** 业务类型：模型调用（biz_type 取值之一，见 DB.md §5.9.2） */
+    public static final String USAGE_BIZ_MODEL = "MODEL";
 }

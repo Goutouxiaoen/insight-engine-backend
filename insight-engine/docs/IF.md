@@ -803,6 +803,40 @@ curl -X POST http://localhost:7000/auth/login \
 
 **流式（stream=true）**：SSE，事件 `message`（delta）/ `error` / `finish`（含 usage）；**另含通用 `heartbeat`（见 §2.6）**。
 
+**权限**：`model:list:read`（MVP 复用；是否新增独立的"调用模型"权限码见 PROGRESS §6.3 待裁决）
+
+**`model` 字段语义**：具体模型编码（如 `qwen3.7-plus`）或逻辑名 `auto`。
+- `auto` = 交给路由策略选模；**路由策略（§7.4）未实现前**，`auto` 等价于「第一个启用中的 CHAT 模型」；
+- 响应里的 `data.model` 是**实际使用的模型编码**（前端可据此显示"实际用了哪个模型"）。
+
+**SSE 帧格式（2026-09-17 定稿，实现见 `ChatController`）**：
+
+```
+event: message
+data: {"model":"qwen3.7-plus","delta":{"content":"你"}}
+
+event: heartbeat
+data: {"ts":1789634540000}
+
+event: finish
+data: {"model":"qwen3.7-plus","finishReason":"stop","usage":{"promptTokens":14,"completionTokens":111,"totalTokens":125}}
+
+event: error
+data: {"code":3003,"message":"模型限流"}
+```
+
+**流式约定**：
+- 一帧 = `event: <名>\n` + `data: <JSON 单行>\n\n`；每个 `message` 帧只带**增量**（delta），前端自行拼接；
+- **`finish` 在每个流中恰好出现一次**（上游只给 `[DONE]`、不给 `finish_reason` 时按 `"stop"` 兜底）；
+- `heartbeat` 每 15s 一次（IF §2.6，不可关闭）——短回答可能**一次都不出现**，前端不得依赖它来判断"是否有数据"；
+- 上游厂商的 `[DONE]` / `event:` 行**不作为契约**（实现只解析 `data:` 行做跨厂商兼容）；
+- 出错时推 `error` 帧后关闭连接（HTTP 状态已发出 200，故错误码走帧内 `code` 字段）；
+- 响应头带 `X-Accel-Buffering: no`，避免 nginx 类代理缓冲导致"边生成边推送"失效。
+
+**错误码（模型网关 3xxx 段，本轮启用）**：模型不存在/未启用 → `3001`；调用超时 → `3002`；上游限流 → `3003`；上游其它失败/厂商未配置 → `3004`；密钥缺失或解密失败、上游 401/403 → `3005`。
+
+**用量计量（§7.8 的数据来源）**：每次调用写一条 `ie_usage_record`——`scope_type=WORKSPACE`（token 无 `ws_id` 时退化为 `TENANT`）、`biz_type=MODEL`、`ref_id=ie_model.id`、`quantity=total tokens`、`cost` 留空（套餐制暂无可折算单价）、`trace_id` 取本次链路 ID。**记账失败不影响调用结果**（只告警，避免"模型已答完却报错"）。
+
 **curl**：
 
 ```bash
