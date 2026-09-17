@@ -58,6 +58,10 @@
 
 ## 三、关键技术决策记录（增量追加）
 
+- [2026-09-17] ✅ 已落地（**厂商 API Key 正式接入 + KEK 落位**）：通过管理接口 `PUT /api/v1/model/vendor/6` 提交明文 `apiKey`（HTTPS）→ 服务端 AES-256-GCM 加密 → 落 `ie_secret`（`api_key_secret_id=3`），读取只回掩码 `sk-****bvKQ`；`ie_secret` 明文泄露检查 **0 行**。
+  **KEK（主密钥）落位口径（新增配置项，按铁律 5 三件事）**：① 代码占位 `${INSIGHT_SECRET_KEK:}`（`model/application.yml`）；② `.env.example` 补变量名与生成方式；③ **本机开发放 `insight-engine-model/src/main/resources/application-local.yml` 的 `insight.secret.kek`**（gitignore 已覆盖，已实测 `git check-ignore` 命中），生产用环境变量注入。**⚠️ 纪律**：KEK 换掉 = 已加密的厂商 Key **永久解不开**（本次 KEK 已随密文绑定）→ 换密钥请走 `ie_secret.kek_version` 轮换机制，不要直接改 KEK 值。
+  **"为什么界面/库里看不到 Key"（答疑留档）**：这是**设计如此**——种子/`init.sql` 不含凭据（进 Git），明文只存在于"提交那一次请求"的内存里，落库是密文、回显只有掩码；因此 `hasApiKey=false` 表示"尚未接入密钥"，而非报错。
+
 - [2026-08-25] 选定产品方向：企业级 AI Agent 编排与知识中枢平台（对标 Dify/Coze/FastGPT）
 - [2026-08-25] 主库选 PostgreSQL（含 PGVector）而非 MySQL，见 TD ADR-2
 - [2026-08-25] AI 框架 Spring AI 为主 + LangChain4j 为辅，见 TD ADR-3
