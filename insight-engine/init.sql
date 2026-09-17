@@ -1038,6 +1038,56 @@ CREATE UNIQUE INDEX uk_secret_tenant_name ON ie_secret (tenant_id, name) WHERE d
 -- 种子数据（TD §18.4：管理员账号、权限字典、内置工具）
 -- =============================================================================
 
+-- -----------------------------------------------------------------------------
+-- 0) 模型目录种子（2026-09-17 阶段 6 准入时新增）
+--
+--    背景：模型目录是平台级资源（2026-09-17 裁决「所有业务方共用」，PROGRESS §三），
+--          但没有种子时新库/新环境部署后目录为空，必须手工逐条接入才能用。
+--
+--    三条纪律：
+--      a) **API Key 绝不入种子**（AGENTS 铁律 5）：本文件进 Git，凭据只走
+--         "管理接口明文入参 → AES-256-GCM 加密 → ie_secret"（IF §7.1）；
+--         故下面 vendor 的 api_key_secret_id 留空，首次接入时由管理界面/接口补。
+--      b) **不编造单价与上下文窗口**：Token Plan 为套餐制、无单 token 价目，
+--         input/output_price_per1k 与 context_window 一律留 NULL，待官方价目表核实后经管理界面补
+--         （铁律 2：不认记忆与推测）。
+--      c) **幂等可重跑**：vendor 用 ON CONFLICT DO NOTHING；模型不硬编码 vendor_id，
+--         通过 `INSERT ... SELECT` 关联 vendor.code，同样 ON CONFLICT DO NOTHING
+--         → 可安全地对已初始化的库增量重跑。
+--
+--    只种 CHAT 类模型：套餐内的图像（wan2.7-image*）与语音（qwen-audio-3.0-*）模型
+--    无法用现有 type 枚举（CHAT/EMBEDDING/RERANK）表达 → 扩展枚举属契约变更，
+--    已登记 PROGRESS §6.3 待裁决，未裁决前不擅自种入（铁律 6）。
+-- -----------------------------------------------------------------------------
+
+-- 接入点：千问AI平台「Token Plan 专属版」的 OpenAI 兼容入口（实测：标准百炼入口不识别该 Key）
+INSERT INTO ie_model_vendor (code, name, base_url, type, enabled, config)
+VALUES ('qwen-token-plan',
+        '千问AI平台 Token Plan',
+        'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        'CHAT', 1,
+        '{"note":"Token Plan 专属接入点；与标准百炼 dashscope.aliyuncs.com 不通用，用错入口会报 invalid_api_key/Arrearage"}')
+ON CONFLICT DO NOTHING;
+
+-- 套餐实测可用的 10 个 CHAT 模型（清单来自 `GET {baseUrl}/models`，2026-09-17 实测）
+INSERT INTO ie_model (vendor_id, code, display_name, type, enabled)
+SELECT v.id, m.code, m.display_name, 'CHAT', 1
+FROM ie_model_vendor v
+CROSS JOIN (VALUES
+    ('qwen3.7-plus',        'Qwen3.7-Plus（默认）'),
+    ('qwen3.7-max',         'Qwen3.7-Max'),
+    ('qwen3.8-max',         'Qwen3.8-Max'),
+    ('qwen3.8-flash',       'Qwen3.8-Flash'),
+    ('qwen3.6-flash',       'Qwen3.6-Flash'),
+    ('glm-5.3',             'GLM-5.3'),
+    ('glm-5.2',             'GLM-5.2'),
+    ('deepseek-v4-pro',     'DeepSeek-V4-Pro'),
+    ('deepseek-v4.1-flash', 'DeepSeek-V4.1-Flash'),
+    ('deepseek-v4-flash-0731', 'DeepSeek-V4-Flash-0731')
+) AS m(code, display_name)
+WHERE v.code = 'qwen-token-plan'
+ON CONFLICT DO NOTHING;
+
 -- 1) 管理员账号（明文 Admin@123，hash 由 BCryptPasswordEncoder strength=10 生成，$2b$ 兼容 Spring Security）
 INSERT INTO ie_user (id, tenant_id, email, nickname, password_hash, status, created_by, updated_by)
 VALUES (1, 1, 'admin@example.com', '管理员',
