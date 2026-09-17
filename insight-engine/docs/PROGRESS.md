@@ -124,6 +124,15 @@
 
 - [2026-09-17] ✅ 已修复（切换空间权限口径错误，答复前端 BE-20260916-01）：**切换空间只改 `ws_id`（上下文），`roles`/`perms` 按「用户」维度取全量、与 UMS 登录同口径**。根因见 §四 同日条目；代码改动 `workspace/RoleMapper`（删掉 `...ByUserAndWorkspace` 两个按空间过滤的查询，改为与 UMS 同口径的 `selectRoleCodesByUserId` / `selectPermissionCodesByUserId`）+ `WorkspaceServiceImpl.switchWorkspace`；`IF §5.5/§5.3`、`FEATURES 2.5`、`FE-SYNC §2/§3` 同步。**证据（2026-09-17，workspace 独立实例 `:17102` 隔离验证，不打断 IDEA 中运行的实例）**：登录 `ws_id=1 perms=48` → 切换 `ws_id=7 perms=48`（`ws:delete`/`org:write`/`ws:create` 保留），**断言 perms 切换前后一致 = True**；`DELETE /workspace/7`（当前空间）→ **403/1003**（修复前 2006）。**遗留另立**：空间维度授权（同一用户不同空间权限不同）需服务端二次判定 + 前端「当前空间权限」接口，转 §6.3 待办
 
+- [2026-09-17] ✅ 已决策并实施（**口径收口三件套**，治本 BE-20260916-01 这一"类"问题，呼应 AGENTS 铁律 6）：把"token 里放什么"从**靠人记**改为**结构性保证**——
+  ① `common.constant.AuthQuerySql`：`roles` / `perms` 两条查询的**唯一字面量**（UMS `RoleMapper/PermissionMapper` 与 workspace `RoleMapper` 全部改为 `@Select(AuthQuerySql.XXX)`）→ SQL 只有一份，改一次全系统同步；
+  ② `starter-security.token.AuthTokenIssuer` + `IssuedTokens`：**唯一令牌签发入口**，登录 / 刷新 / 切换空间三者都调它（access + refresh 一次成型，refresh **携带 `ws_id`**）；
+  ③ `starter-redis.session.TokenSessionCache`：登录态与 refresh 会话的**唯一读写入口**（`save` / `matchesRefreshJti` / `clear`），取代原先 UMS 与 workspace 各自拼 Redis 键的写法；
+  ④ **顺带修掉 refresh 的 `ws_id` 重置问题**（方案 A：刷新沿用当前空间，见 §6.1）；
+  ⑤ 清理死配置：`AuthConstants` 中三个键常量随收口下沉后已无引用，删除并留注；
+  ⑥ **断言**：新增 `scripts/smoke-auth-claims.ps1`（全 ASCII —— PS 5.1 读无 BOM 的 UTF-8 会乱码；口令走参数不落库），覆盖 5 类/10 项断言。
+  **验证（隔离实例 :17101/:17102，不打断 IDEA 中运行的服务）**：`RESULT: ALL PASS` —— 登录/刷新/切换三入口 `roles`+`perms` 一致、**刷新前后 `ws_id` 不变**、**切换后刷新仍停留在目标空间**、切换后旧 token `401/2001`、删当前空间 `403/1003`、清理返回 200
+
 ---
 
 ## 四、踩坑记录（增量追加）
@@ -214,7 +223,8 @@
 
 > **高价值优先组**（原 §七 Top2，已核对代码均未落地，保持待办）：phone 唯一索引、roleId 前置校验、授权集合去重校验、`DuplicateKey`/`HttpMessageNotReadableException`(1002) 友好映射、`Result` 成功响应 traceId 回填（末项在 §6.2）。建议 gateway 阶段收尾后作为独立任务优先处理。
 
-- [ ] 🟡 **`ws_id` 口径不一致：`/auth/refresh` 会把"当前空间"悄悄重置回默认空间**（2026-09-17 排查 BE-20260916-01 时发现，**按 AGENTS 铁律 6 登记待裁决，未自行改**）
+- [x] 🟡 **`ws_id` 口径不一致：`/auth/refresh` 会把"当前空间"悄悄重置回默认空间** —— **2026-09-17 已修（选择方案 A：刷新沿用当前 ws_id）**：refresh token 现在**携带 `ws_id`**（`JwtUtil.createRefreshToken(userId, jti, workspaceId)`），刷新时**沿用**旧令牌的空间而非重算默认空间；实现细节与验证见 §三 2026-09-17「口径收口」条目。以下为原登记内容（留档）：
+  **原登记（现象 / 证据 / 选项，留档）**：
   - **现象**：切到空间 B 后，access token 过期（2h）或前端主动刷新 → 新 access token 的 `ws_id` **变回默认空间（成员关系中最早加入的那个）**，前端"当前空间"被静默切回；`roles`/`perms` 不受影响（48/48），故很难察觉，直到发现列表/数据又回默认空间视角。
   - **证据（代码，附行号）**：`ums/AuthServiceImpl.java:130` `refresh()` → `:163` `buildLoginResponse(user)` → `:279` `Long workspaceId = roleMapper.selectDefaultWorkspaceIdByUserId(user.getId())`；即刷新链路**重算** ws_id，而不是沿用旧 token 的 `ws_id`。对照：`/auth/me` 用的是 `:307` 的"JWT `ws_id` 优先、缺失才兜底默认空间"（口径正确）。
   - **三个签发入口现状**：登录 = 默认空间（合理，此刻尚无"当前空间"）✅ ｜ 切换空间 = 目标空间 ✅ ｜ **刷新 = 默认空间 ❌（不一致）** —— 与铁律 6「同一语义只能有一种口径」冲突。
@@ -260,7 +270,7 @@
   ② **彻底版**：ABAC/DataScope 行级拦截器（`InnerInterceptor#beforeQuery`）自动追加 `workspace_id = 当前 ws_id`；并按 §6.6 方案 A 把 perms 从 token 移到「角色→权限」缓存（token 只留角色编码），顺带解决权限变更 2h 滞后与 `perms` 膨胀。
   **纪律**：这两步都**不得**回退到"按空间裁剪 token 权限"的老路（已证实会丢组织级/平台级能力，见 §四 2026-09-17）
 - [ ] DataScope 行级数据权限拦截器（TD §7.5）——多租户/V1.0 前必须完成，覆盖全部业务列表查询
-- [ ] 🟡 **token 内 `roles`/`perms` 口径不统一（待开发者裁决）**：`roles`/`perms` 有**三个签发入口**，其中 **UMS 登录 / 刷新按全局展开**（`RoleMapper.selectRoleCodesByUserId`、`PermissionMapper.selectPermissionCodesByUserId`，仅按 `user_id` 过滤），而 **`workspace/switch` 按目标空间展开**（`RoleMapper.selectRoleCodesByUserAndWorkspace`，带 `m.workspace_id` 条件）→ 登录后是全局权限、切空间后仅本空间权限，**同一语义两套口径**。IF §3.5 已如实标注「两者语义不同」，但**从未裁决**。两条路：**A. 统一为按空间**（登录也按默认空间展开，`org_admin` 无空间时保留全局兜底）——权限隔离更正确，需改 UMS；**B. 统一为全局**（`switch` 只换 `ws_id`、不重展开 `roles`/`perms`）——改动小但切空间无权限隔离。**裁决前不得再扩散第三种口径**（AGENTS.md 铁律 6）
+- [x] 🟡 **token 内 `roles`/`perms` 口径不统一（2026-09-17 开发者裁决：方案 B，已实施）** —— 裁决为 **B. 统一为全局**：`switch` 只换 `ws_id`、不重展开 `roles`/`perms`，三个签发入口统一走 `AuthTokenIssuer` + `common.AuthQuerySql`；"按空间隔离权限"的需求**另立为 §6.3「空间维度授权」两步**（服务端二次判定 + 前端「当前空间权限」接口），**不作为 token 口径**。验证：`scripts/smoke-auth-claims.ps1` 全绿。原登记（留档）：：`roles`/`perms` 有**三个签发入口**，其中 **UMS 登录 / 刷新按全局展开**（`RoleMapper.selectRoleCodesByUserId`、`PermissionMapper.selectPermissionCodesByUserId`，仅按 `user_id` 过滤），而 **`workspace/switch` 按目标空间展开**（`RoleMapper.selectRoleCodesByUserAndWorkspace`，带 `m.workspace_id` 条件）→ 登录后是全局权限、切空间后仅本空间权限，**同一语义两套口径**。IF §3.5 已如实标注「两者语义不同」，但**从未裁决**。两条路：**A. 统一为按空间**（登录也按默认空间展开，`org_admin` 无空间时保留全局兜底）——权限隔离更正确，需改 UMS；**B. 统一为全局**（`switch` 只换 `ws_id`、不重展开 `roles`/`perms`）——改动小但切空间无权限隔离。**裁决前不得再扩散第三种口径**（AGENTS.md 铁律 6）
 
 ### 6.4 gateway / Nacos / 部署阶段（🟡）
 
@@ -320,6 +330,8 @@
 
 ## 八、最近一次对话摘要
 
+- 日期：2026-09-17（续）
+- 内容：**口径收口三件套落地（治本层）+ 修掉 refresh 的 `ws_id` 重置 + 新增跨入口一致性断言脚本** —— ① **用户决策**："一起解决"（选项上：`roles/perms` 统一为**全局口径**＝方案 B；refresh 的 `ws_id` 统一为**沿用**＝方案 A）；② **实现收口**：新增 `common.AuthQuerySql`（SQL 唯一字面量）、`starter-security.AuthTokenIssuer`+`IssuedTokens`（唯一签发入口）、`starter-redis.TokenSessionCache`（会话唯一读写入口），UMS 登录/刷新/登出/改密/禁用 与 workspace 切换空间**全部改走这三个收口点**；`JwtUtil.createRefreshToken(userId, jti, wsId)` + `JwtRefreshPayload.workspaceId`（refresh 携带空间）；删除 `AuthConstants` 三个已无引用的键常量；③ **修掉第 4 个不一致**：`/auth/refresh` 不再把 `ws_id` 重置回默认空间（`AuthServiceImpl` 改传旧令牌的 `ws_id`）；④ **新增断言**：`scripts/smoke-auth-claims.ps1`（全 ASCII、口令参数化、可按 `-UmsUrl/-WsUrl` 指向直连或网关），覆盖**登录 / 刷新 / 切换 / 切换后刷新 / 删除保护 / 旧令牌失效** 六组共 10 项断言；⑤ **证据**：隔离实例（UMS `:17101` + workspace `:17102`，`register-enabled=false`，**不打断 IDEA 中运行的实例**）→ `RESULT: ALL PASS`（含"切换后刷新 `ws_id` 仍为目标空间"这条本轮修复的关键断言）；⑥ **文档**：`IF §3.0 新增「token 载荷口径表」`（三个签发入口 × 各字段口径 + 三条硬约束）、`IF §3.2` 补刷新语义、`PROGRESS §三/§6.1/§6.3`、`FE-SYNC §2`；⑦ **收尾**：隔离实例已停、测试空间已硬删（云端仅剩种子空间与前端自测残留）、服务端口 7000/7101/7102 仍为用户 IDEA 实例。**下一步：workspace 走 PR 合并 + 前端切真复测**
 - 日期：2026-09-17
 - 内容：**修复「切换空间权限口径」缺陷（答复 BE-20260916-01）+ 讲清两层鉴权原理 + 沉淀学习笔记** —— ① **问题定性**：切换空间时把 `roles`/`perms` 按目标空间重算 → 丢掉组织级/平台级能力（`org:*`/`ws:create`/`ws:delete`），连锁产生"按钮消失但菜单在"（两套口径打架）、`IF §5.3` 的 `1003` 被 `2006` 抢先拦截、`org:write` 可见范围缩水；② **根因**：想当然套用"多租户 token 只带当前租户权限"，未核对项目模型（`ie_member.workspace_id` 可空 = 组织级成员）、未复用 UMS 既有登录口径（另写了 `...ByUserAndWorkspace`），并把错方向写进 `IF §5.5`；③ **修复**：`RoleMapper` 删掉两个按空间过滤的查询、改用与 UMS 同口径的 `selectRoleCodesByUserId`/`selectPermissionCodesByUserId`；`switchWorkspace` 只改 `ws_id`；④ **证据**（workspace 独立实例 `:17102`，**不打断 IDEA 中运行的服务**）：登录 `perms=48` → 切换 `perms=48`、`ws:delete`/`org:write`/`ws:create` 保留，**断言 perms 前后一致 = True**；`DELETE /workspace/{当前}` → **403/1003**；⑤ **排查副产品**：发现 IDEA 实例与 `java -jar` 实例会抢同一端口（我的 jar 起不来、冒烟打到 IDEA 旧代码 → 断言假失败），**教训：验证前先确认端口上是谁的进程**（`-javaagent`/`TieredStopAtLevel=1` = IDEA）；⑥ **沉淀**：`LEARNING.md` 新增「接口能力层 vs 资源/空间关系层」两层鉴权原理篇（含 `@PreAuthorize` 执行链、`@workspacePermission`/DataScope 两种空间维度判定、权限为何不每次查库、本项目落地路线）；⑦ **遗留**：空间维度授权立为 `§6.3` 待办（轻量 `@workspacePermission` + 前端「当前空间权限」接口 → 彻底 DataScope + perms 移出 token）；⑧ 测试数据已清理（仅保留种子空间与前端自测残留 `fe-*`）
 - 日期：2026-09-16

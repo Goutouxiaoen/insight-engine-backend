@@ -416,6 +416,10 @@ CREATE UNIQUE INDEX uk_ws_code_org ON ie_workspace(org_id, code) WHERE deleted =
 | `ie:ws:member:{workspaceId}` | set | 10min | 空间成员 userId |
 
 > **实现侧口径（2026-09-16）**：上表 `ie:auth:*` 五个键的**字面量统一定义在 `common.constant.CacheKeyConstants`**（UMS 写入：登录/刷新/登出/锁定；workspace 写入：切换空间换签；各服务读取：starter-redis 的登录态/黑名单实现）。新增/改名键必须只改这一处，禁止在各服务内重复写字面量（防 drift 致静默失效）。
+>
+> **读写入口收口（2026-09-17）**：登录态 + refresh 会话的**读写只有三个入口**，全部在 `starter-redis` 的 `TokenSessionCache`（`save` / `matchesRefreshJti` / `clear`）——UMS（登录/刷新/登出/改密/禁用）与 workspace（切换空间）共用；**禁止在业务服务里直接 `redisTemplate.opsForValue().set(CacheKeyConstants.AUTH_*)`**。
+> 同理，token 的**签发入口唯一**：`starter-security` 的 `AuthTokenIssuer`（登录/刷新/切换空间三者都调它，refresh 携带 `ws_id`）；`roles`/`perms` 的**查询口径唯一**：`common.constant.AuthQuerySql`。
+> 口径表与三条硬约束见 **IF §3.0**（新增/修改前必读）。
 | `ie:model:list:enabled` | string(json) | 5min | 启用模型列表 |
 | `ie:kb:meta:{kbId}` | string(json) | 30min | KB 元信息 |
 | `ie:quota:used:{scopeType}:{scopeId}:{type}` | string | 周期内 | 配额已用（incr） |

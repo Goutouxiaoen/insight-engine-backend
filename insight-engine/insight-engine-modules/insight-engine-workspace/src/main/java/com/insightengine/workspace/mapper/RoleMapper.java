@@ -1,6 +1,7 @@
 package com.insightengine.workspace.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.insightengine.common.constant.AuthQuerySql;
 import com.insightengine.workspace.entity.Role;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -34,29 +35,19 @@ import java.util.List;
 public interface RoleMapper extends BaseMapper<Role> {
 
     /**
-     * 查询用户拥有的角色编码列表（用户维度，跨空间聚合；与 UMS 登录口径一致）。
+     * 查询用户拥有的角色编码列表（用户维度，跨空间聚合）。
+     *
+     * <p><b>SQL 口径来源</b>：{@link AuthQuerySql#SELECT_ROLE_CODES_BY_USER}——
+     * 与 UMS「登录 / 刷新」共用同一份字面量（三个签发入口必须同口径，IF §3 口径表）。</p>
      */
-    @Select("""
-            SELECT DISTINCT r.code
-            FROM ie_role r
-            JOIN ie_member m ON m.role_id = r.id AND m.deleted = 0
-            WHERE m.user_id = #{userId}
-              AND r.deleted = 0
-            """)
+    @Select(AuthQuerySql.SELECT_ROLE_CODES_BY_USER)
     List<String> selectRoleCodesByUserId(@Param("userId") Long userId);
 
     /**
-     * 查询用户拥有的权限编码列表（按角色展开、去重；与 UMS 登录口径一致）。
+     * 查询用户拥有的权限编码列表（按角色展开、去重）。
+     *
+     * <p><b>SQL 口径来源</b>：{@link AuthQuerySql#SELECT_PERMISSION_CODES_BY_USER}。</p>
      */
-    @Select("""
-            SELECT DISTINCT p.code
-            FROM ie_permission p
-            JOIN ie_role_permission rp ON rp.permission_id = p.id
-            JOIN ie_role r ON r.id = rp.role_id AND r.deleted = 0
-            JOIN ie_member m ON m.role_id = r.id AND m.deleted = 0
-            WHERE m.user_id = #{userId}
-              AND p.deleted = 0
-            ORDER BY p.code
-            """)
+    @Select(AuthQuerySql.SELECT_PERMISSION_CODES_BY_USER)
     List<String> selectPermissionCodesByUserId(@Param("userId") Long userId);
 }

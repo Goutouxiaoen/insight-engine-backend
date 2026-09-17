@@ -33,14 +33,9 @@ public final class AuthConstants {
     /** 账号锁定 Key：ie:auth:lock:{account}，TTL=锁定时长 */
     public static final String KEY_LOGIN_LOCK = CacheKeyConstants.AUTH_LOGIN_LOCK;
 
-    /** 登录态 Key：ie:auth:token:{userId}，值=access token 摘要，TTL=2h */
-    public static final String KEY_AUTH_TOKEN = CacheKeyConstants.AUTH_TOKEN;
-
-    /** refresh 会话 Key：ie:auth:refresh:{userId}，值=当前有效 refresh token 的 jti 摘要，TTL=7d */
-    public static final String KEY_AUTH_REFRESH = CacheKeyConstants.AUTH_REFRESH;
-
-    /** 登出黑名单 Key：ie:auth:blacklist:{tokenHash}，TTL=token 剩余有效期 */
-    public static final String KEY_AUTH_BLACKLIST = CacheKeyConstants.AUTH_BLACKLIST;
+    // 说明（2026-09-17）：登录态 / refresh 会话 / 黑名单三个键的读写已收口到
+    // starter-redis 的 TokenSessionCache 与 starter-security 的黑名单实现，
+    // 不再在 UMS 内直接拼键（避免"同一语义多处实现"漂移），故此处不再保留对应常量。
 
     /* ============ 注册默认值（MVP 单租户） ============ */
 

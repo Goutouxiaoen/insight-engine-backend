@@ -88,22 +88,28 @@ public class JwtUtil {
     }
 
     /**
-     * 签发刷新令牌（仅含用户 ID + jti + 类型，载荷最小化）。
+     * 签发刷新令牌（用户 ID + jti + 当前空间 + 类型，载荷最小化）。
      *
      * <p>{@code jti}（JWT ID）用于 refresh 一次性轮换与重放检测：服务端记录当前有效
      * jti，refresh 时旧 jti 作废并签发新对；旧 jti 再被使用即视为泄露。签发方需生成
      * 唯一 jti 并负责服务端会话记录（见 {@link JwtRefreshPayload}）。</p>
+     *
+     * <p>{@code workspaceId}（2026-09-17 新增）：刷新链路必须**沿用当前空间**，
+     * 若刷新时不带该信息就只能重算默认空间 → 用户会被悄悄切回默认空间
+     * （BE-20260916-01 同源问题）。组织级管理员可为空，JJWT 会忽略 null Claim。</p>
      */
-    public String createRefreshToken(Long userId, String jti) {
+    public String createRefreshToken(Long userId, String jti, Long workspaceId) {
         Date now = new Date();
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .id(jti)
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_TYPE, TYPE_REFRESH)
                 .issuedAt(now)
-                .expiration(new Date(now.getTime() + refreshTtlMillis))
-                .signWith(secretKey)
-                .compact();
+                .expiration(new Date(now.getTime() + refreshTtlMillis));
+        if (workspaceId != null) {
+            builder.claim(CLAIM_WS_ID, workspaceId);
+        }
+        return builder.signWith(secretKey).compact();
     }
 
     /**
@@ -134,7 +140,8 @@ public class JwtUtil {
         if (!TYPE_REFRESH.equals(claims.get(CLAIM_TYPE, String.class))) {
             throw new JwtException("非法的刷新令牌类型");
         }
-        return new JwtRefreshPayload(Long.valueOf(claims.getSubject()), claims.getId());
+        return new JwtRefreshPayload(Long.valueOf(claims.getSubject()), claims.getId(),
+                toLong(claims.get(CLAIM_WS_ID)));
     }
 
     /**

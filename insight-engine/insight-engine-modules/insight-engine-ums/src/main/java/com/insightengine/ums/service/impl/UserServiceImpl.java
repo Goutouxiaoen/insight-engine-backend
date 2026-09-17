@@ -17,7 +17,7 @@ import com.insightengine.ums.entity.User;
 import com.insightengine.ums.mapper.MemberMapper;
 import com.insightengine.ums.mapper.UserMapper;
 import com.insightengine.ums.service.UserService;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import com.insightengine.starter.redis.session.TokenSessionCache;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,16 +39,16 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final MemberMapper memberMapper;
     private final PasswordEncoder passwordEncoder;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final TokenSessionCache tokenSessionCache;
 
     public UserServiceImpl(UserMapper userMapper,
                            MemberMapper memberMapper,
                            PasswordEncoder passwordEncoder,
-                           StringRedisTemplate stringRedisTemplate) {
+                           TokenSessionCache tokenSessionCache) {
         this.userMapper = userMapper;
         this.memberMapper = memberMapper;
         this.passwordEncoder = passwordEncoder;
-        this.stringRedisTemplate = stringRedisTemplate;
+        this.tokenSessionCache = tokenSessionCache;
     }
 
     /**
@@ -136,8 +136,7 @@ public class UserServiceImpl implements UserService {
 
         // 禁用时踢下线：删除登录态 + refresh 会话（TD §6.1 主动失效，access/refresh 一并作废）
         if (request.getStatus() == AuthConstants.ACCOUNT_DISABLED) {
-            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + id);
-            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_REFRESH + id);
+            tokenSessionCache.clear(id);
         }
     }
 
@@ -159,8 +158,7 @@ public class UserServiceImpl implements UserService {
         userMapper.updateById(update);
 
         // 改密后旧登录态全部失效（access 登录态 + refresh 会话一并作废），强制重新登录
-        stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + userId);
-        stringRedisTemplate.delete(AuthConstants.KEY_AUTH_REFRESH + userId);
+        tokenSessionCache.clear(userId);
     }
 
     /* ==================== 私有方法 ==================== */

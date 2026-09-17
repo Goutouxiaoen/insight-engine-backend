@@ -21,7 +21,9 @@ import com.insightengine.ums.mapper.RoleMapper;
 import com.insightengine.ums.mapper.UserMapper;
 import com.insightengine.ums.mapper.WorkspaceMapper;
 import com.insightengine.ums.service.AuthService;
-import com.insightengine.starter.security.util.TokenDigestUtil;
+import com.insightengine.starter.security.token.AuthTokenIssuer;
+import com.insightengine.starter.security.token.IssuedTokens;
+import com.insightengine.starter.redis.session.TokenSessionCache;
 import com.insightengine.starter.web.context.UserContext;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +55,8 @@ public class AuthServiceImpl implements AuthService {
     private final WorkspaceMapper workspaceMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final AuthTokenIssuer authTokenIssuer;
+    private final TokenSessionCache tokenSessionCache;
     private final StringRedisTemplate stringRedisTemplate;
     private final TokenBlacklistService tokenBlacklistService;
 
@@ -63,6 +67,8 @@ public class AuthServiceImpl implements AuthService {
                            WorkspaceMapper workspaceMapper,
                            PasswordEncoder passwordEncoder,
                            JwtUtil jwtUtil,
+                           AuthTokenIssuer authTokenIssuer,
+                           TokenSessionCache tokenSessionCache,
                            StringRedisTemplate stringRedisTemplate,
                            TokenBlacklistService tokenBlacklistService) {
         this.userMapper = userMapper;
@@ -72,6 +78,8 @@ public class AuthServiceImpl implements AuthService {
         this.workspaceMapper = workspaceMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.authTokenIssuer = authTokenIssuer;
+        this.tokenSessionCache = tokenSessionCache;
         this.stringRedisTemplate = stringRedisTemplate;
         this.tokenBlacklistService = tokenBlacklistService;
     }
@@ -109,10 +117,8 @@ public class AuthServiceImpl implements AuthService {
         stringRedisTemplate.delete(AuthConstants.KEY_LOGIN_FAIL + account);
         updateLastLoginAt(user.getId());
 
-        LoginResponse response = buildLoginResponse(user);
-        // 登录态写 Redis（TD §6.1：ie:auth:token:{userId} 存 access 摘要），支持主动踢人
-        cacheToken(user.getId(), response.getToken());
-        return response;
+        // 登录入口：ws_id 取「成员关系中最早的空间」（此刻尚无"当前空间"概念，IF §3 口径表）
+        return buildLoginResponse(user, defaultWorkspaceId(user.getId()));
     }
 
     /**
@@ -150,19 +156,15 @@ public class AuthServiceImpl implements AuthService {
         // key 缺失即「该用户 refresh 已被吊销」→ 拒绝续期；旧 jti（重放）同样视为泄露。
         // 注意不能以 access 登录态 key 是否存在做兜底：它 TTL=2h，而 refresh 有效 7 天，
         // 用它会误伤「超过 2h 未活动后的正常刷新」。
-        String refreshKey = AuthConstants.KEY_AUTH_REFRESH + userId;
-        String activeDigest = stringRedisTemplate.opsForValue().get(refreshKey);
-        if (activeDigest == null || !activeDigest.equals(TokenDigestUtil.sha256Hex(jti))) {
+        if (!tokenSessionCache.matchesRefreshJti(userId, jti)) {
             // 吊销该用户全部会话（含 access 登录态与 refresh 会话），强制重新登录
-            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + userId);
-            stringRedisTemplate.delete(refreshKey);
+            tokenSessionCache.clear(userId);
             throw new BizException(ErrorCode.UNAUTHORIZED, "刷新令牌已失效或检测到重放，已注销全部会话");
         }
 
-        // 一次性轮换：buildLoginResponse 生成新 access + refresh（新 jti）并覆盖会话记录
-        LoginResponse response = buildLoginResponse(user);
-        cacheToken(user.getId(), response.getToken());
-        return response;
+        // 一次性轮换：签发新 access + refresh（新 jti）并覆盖会话记录。
+        // ⚠️ ws_id **沿用旧刷新令牌里的值**，不重算默认空间——否则用户会被悄悄切回默认空间（IF §3 口径表）
+        return buildLoginResponse(user, payload.getWorkspaceId());
     }
 
     /**
@@ -177,8 +179,7 @@ public class AuthServiceImpl implements AuthService {
         // 删除登录态与 refresh 会话：即便剩余有效期已为 0，也确保缓存不残留
         try {
             Long userId = jwtUtil.parseAccessToken(accessToken).getUserId();
-            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_TOKEN + userId);
-            stringRedisTemplate.delete(AuthConstants.KEY_AUTH_REFRESH + userId);
+            tokenSessionCache.clear(userId);
         } catch (JwtException e) {
             // token 已不可解析，登录态本就失效，忽略即可（登出幂等）
         }
@@ -267,29 +268,41 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * 组装登录响应：查角色/权限/工作空间，签发令牌。
+     * 组装登录响应：查角色/权限 → 经唯一入口签发令牌 → 落地会话。
      *
-     * <p>refresh token 每次签发携带新 {@code jti}，并把摘要写入 Redis 会话
-     * （{@code ie:auth:refresh:{userId}}），作为「当前有效 refresh」的唯一凭据：
-     * 轮换时旧 jti 摘要被覆盖，旧 refresh token 再次使用即被判重放而失效。</p>
+     * <p>口径（IF §3 口径表）：</p>
+     * <ul>
+     *   <li>{@code roles}/{@code perms} 按<b>用户维度全量</b>（SQL 字面量来自
+     *       {@code common.AuthQuerySql}，与 workspace 切换空间共用同一份）；</li>
+     *   <li>{@code workspaceId} 由调用方决定：<b>登录</b>传"最早加入的空间"、<b>刷新</b>传旧令牌的
+     *       {@code ws_id}（沿用，不重算）；</li>
+     *   <li>签发与会话落地都走唯一实现（{@link AuthTokenIssuer} + {@link TokenSessionCache}），
+     *       避免"同一语义多种口径"。</li>
+     * </ul>
      */
-    private LoginResponse buildLoginResponse(User user) {
+    private LoginResponse buildLoginResponse(User user, Long workspaceId) {
         List<String> roles = roleMapper.selectRoleCodesByUserId(user.getId());
         List<String> permissions = permissionMapper.selectPermissionCodesByUserId(user.getId());
-        Long workspaceId = roleMapper.selectDefaultWorkspaceIdByUserId(user.getId());
 
-        String accessToken = jwtUtil.createAccessToken(
+        IssuedTokens tokens = authTokenIssuer.issue(
                 user.getId(), user.getTenantId(), workspaceId, roles, permissions);
-        String refreshJti = java.util.UUID.randomUUID().toString().replace("-", "");
-        String refreshToken = jwtUtil.createRefreshToken(user.getId(), refreshJti);
-        cacheRefreshToken(user.getId(), refreshJti);
+        // 会话落地：access 摘要（踢人/单会话依据）+ refresh jti 摘要（轮换/重放检测依据）
+        tokenSessionCache.save(user.getId(), tokens.accessToken(), tokens.refreshJti(),
+                tokens.accessTtlSeconds(), tokens.refreshTtlSeconds());
 
         LoginResponse response = new LoginResponse();
-        response.setToken(accessToken);
-        response.setRefreshToken(refreshToken);
-        response.setExpiresIn(jwtUtil.getAccessTtlSeconds());
+        response.setToken(tokens.accessToken());
+        response.setRefreshToken(tokens.refreshToken());
+        response.setExpiresIn(tokens.accessTtlSeconds());
         response.setUser(buildUserInfo(user, roles, workspaceId));
         return response;
+    }
+
+    /**
+     * 默认工作空间：成员关系中最早加入的那个（登录入口用；IF §3 口径表）。
+     */
+    private Long defaultWorkspaceId(Long userId) {
+        return roleMapper.selectDefaultWorkspaceIdByUserId(userId);
     }
 
     /**
@@ -336,33 +349,6 @@ public class AuthServiceImpl implements AuthService {
             return phone;
         }
         return phone.substring(0, 3) + "****" + phone.substring(7);
-    }
-
-    /**
-     * 写登录态缓存（TTL = access 有效期）。
-     *
-     * <p>只存 SHA-256 摘要、不落明文 token（与黑名单服务一致，TD §6.1/ADR-10）：
-     * Redis 被拖库时拿不到可直接使用的 token。校验方（JwtAuthFilter → TokenSessionService）
-     * 同样对请求 token 算摘要比对，「缓存存在且摘要一致」才视为有效登录态。</p>
-     */
-    private void cacheToken(Long userId, String accessToken) {
-        stringRedisTemplate.opsForValue().set(
-                AuthConstants.KEY_AUTH_TOKEN + userId,
-                TokenDigestUtil.sha256Hex(accessToken),
-                Duration.ofSeconds(jwtUtil.getAccessTtlSeconds()));
-    }
-
-    /**
-     * 写 refresh 会话缓存（TTL = refresh token 有效期，7d）。
-     *
-     * <p>存 jti 摘要而非明文（与黑名单/登录态同安全约定）；值为「当前有效 refresh」，
-     * refresh 轮换即覆盖旧值，旧 jti 摘要不匹配即重放信号。</p>
-     */
-    private void cacheRefreshToken(Long userId, String refreshJti) {
-        stringRedisTemplate.opsForValue().set(
-                AuthConstants.KEY_AUTH_REFRESH + userId,
-                TokenDigestUtil.sha256Hex(refreshJti),
-                Duration.ofSeconds(jwtUtil.getRefreshTtlSeconds()));
     }
 
     /**

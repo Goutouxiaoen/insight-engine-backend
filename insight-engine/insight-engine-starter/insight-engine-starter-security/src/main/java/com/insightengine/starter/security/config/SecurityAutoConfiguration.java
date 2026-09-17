@@ -7,6 +7,7 @@ import com.insightengine.starter.security.handler.RestAccessDeniedHandler;
 import com.insightengine.starter.security.handler.SecurityExceptionHandlerAdvice;
 import com.insightengine.starter.security.handler.RestAuthenticationEntryPoint;
 import com.insightengine.starter.security.session.TokenSessionService;
+import com.insightengine.starter.security.token.AuthTokenIssuer;
 import com.insightengine.starter.security.util.JwtUtil;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -88,6 +89,16 @@ public class SecurityAutoConfiguration {
                     + "请通过环境变量 INSIGHT_SECURITY_JWT_SECRET 注入独立随机密钥后重启");
         }
         return new JwtUtil(properties);
+    }
+
+    /**
+     * 令牌签发唯一入口：登录 / 刷新 / 切换空间三个入口都必须调用它，
+     * 否则"同一语义多种口径"（2026-09-17 BE-20260916-01 的根因）。见 {@link AuthTokenIssuer}。
+     */
+    @Bean
+    @ConditionalOnMissingBean(AuthTokenIssuer.class)
+    public AuthTokenIssuer authTokenIssuer(JwtUtil jwtUtil) {
+        return new AuthTokenIssuer(jwtUtil);
     }
 
     /**

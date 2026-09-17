@@ -2,13 +2,13 @@ package com.insightengine.workspace.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.insightengine.common.constant.CacheKeyConstants;
 import com.insightengine.common.constant.Constants;
 import com.insightengine.common.core.BizException;
 import com.insightengine.common.core.ErrorCode;
 import com.insightengine.common.core.PageResult;
-import com.insightengine.starter.security.util.JwtUtil;
-import com.insightengine.starter.security.util.TokenDigestUtil;
+import com.insightengine.starter.redis.session.TokenSessionCache;
+import com.insightengine.starter.security.token.AuthTokenIssuer;
+import com.insightengine.starter.security.token.IssuedTokens;
 import com.insightengine.starter.web.context.UserContext;
 import com.insightengine.workspace.constant.WorkspaceConstants;
 import com.insightengine.workspace.dto.request.WorkspaceCreateRequest;
@@ -26,7 +26,6 @@ import com.insightengine.workspace.mapper.OrganizationMapper;
 import com.insightengine.workspace.mapper.RoleMapper;
 import com.insightengine.workspace.mapper.WorkspaceMapper;
 import com.insightengine.workspace.service.WorkspaceService;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,11 +33,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * 工作空间服务实现。
@@ -51,8 +48,9 @@ import java.util.UUID;
  *       （PROGRESS §三 2026-09-09 裁决：不新增 {@code ws:switch} 权限码）；
  *       **只改 {@code ws_id}（当前上下文），{@code roles}/{@code perms} 按用户维度取全量、与登录一致**
  *       （2026-09-17 修正 BE-20260916-01：早期"按目标空间重展开"会丢掉组织级/平台级能力，属错误口径）；</li>
- *   <li><b>会话一致</b>：换签后覆盖 Redis 登录态摘要与 refresh 会话（键契约见
- *       {@link CacheKeyConstants}），使旧 access token 立即失效，新 token 在 UMS 与其他服务同样有效。</li>
+ *   <li><b>会话一致</b>：换签后经 {@link TokenSessionCache} 覆盖 Redis 登录态摘要与 refresh 会话，
+ *       使旧 access token 立即失效、新 token 在 UMS 与其他服务同样有效；令牌本身经
+ *       {@link AuthTokenIssuer} 统一签发（与 UMS 登录/刷新同一实现，防口径漂移）。</li>
  * </ul>
  */
 @Service
@@ -62,21 +60,21 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     private final OrganizationMapper organizationMapper;
     private final MemberMapper memberMapper;
     private final RoleMapper roleMapper;
-    private final JwtUtil jwtUtil;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final AuthTokenIssuer authTokenIssuer;
+    private final TokenSessionCache tokenSessionCache;
 
     public WorkspaceServiceImpl(WorkspaceMapper workspaceMapper,
                                OrganizationMapper organizationMapper,
                                MemberMapper memberMapper,
                                RoleMapper roleMapper,
-                               JwtUtil jwtUtil,
-                               StringRedisTemplate stringRedisTemplate) {
+                               AuthTokenIssuer authTokenIssuer,
+                               TokenSessionCache tokenSessionCache) {
         this.workspaceMapper = workspaceMapper;
         this.organizationMapper = organizationMapper;
         this.memberMapper = memberMapper;
         this.roleMapper = roleMapper;
-        this.jwtUtil = jwtUtil;
-        this.stringRedisTemplate = stringRedisTemplate;
+        this.authTokenIssuer = authTokenIssuer;
+        this.tokenSessionCache = tokenSessionCache;
     }
 
     /**
@@ -226,38 +224,22 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         List<String> roles = roleMapper.selectRoleCodesByUserId(userId);
         List<String> permissions = roleMapper.selectPermissionCodesByUserId(userId);
 
-        String accessToken = jwtUtil.createAccessToken(
+        // 令牌经唯一入口签发（与 UMS 登录/刷新同一实现）：access 带新 ws_id，refresh 也带新 ws_id
+        // （这样下次刷新会沿用该空间，不会被重置回默认空间）
+        IssuedTokens tokens = authTokenIssuer.issue(
                 userId, member.getTenantId(), workspaceId, roles, permissions);
-        String refreshJti = UUID.randomUUID().toString().replace("-", "");
-        String refreshToken = jwtUtil.createRefreshToken(userId, refreshJti);
-        cacheSession(userId, accessToken, refreshJti);
+        // 会话落地（唯一实现）：覆盖登录态摘要 + refresh 会话 → 切换前的旧 access token 立即失效
+        tokenSessionCache.save(userId, tokens.accessToken(), tokens.refreshJti(),
+                tokens.accessTtlSeconds(), tokens.refreshTtlSeconds());
 
         WorkspaceSwitchVO vo = new WorkspaceSwitchVO();
-        vo.setToken(accessToken);
-        vo.setRefreshToken(refreshToken);
-        vo.setExpiresIn(jwtUtil.getAccessTtlSeconds());
+        vo.setToken(tokens.accessToken());
+        vo.setRefreshToken(tokens.refreshToken());
+        vo.setExpiresIn(tokens.accessTtlSeconds());
         return vo;
     }
 
     /* ==================== 私有方法 ==================== */
-
-    /**
-     * 覆盖服务端会话，使「切换前签发的旧令牌」立即失效（单会话语义）。
-     *
-     * <p>与 UMS 登录/刷新写入的是同一组 Redis 键（统一由
-     * {@link CacheKeyConstants} 提供），因此换签后的新 token 在 UMS、Workspace 及其他
-     * 引入 starter-redis 的服务上都通过登录态校验；旧 access token 因摘要不匹配被拒。</p>
-     */
-    private void cacheSession(Long userId, String accessToken, String refreshJti) {
-        stringRedisTemplate.opsForValue().set(
-                CacheKeyConstants.AUTH_TOKEN + userId,
-                TokenDigestUtil.sha256Hex(accessToken),
-                Duration.ofSeconds(jwtUtil.getAccessTtlSeconds()));
-        stringRedisTemplate.opsForValue().set(
-                CacheKeyConstants.AUTH_REFRESH + userId,
-                TokenDigestUtil.sha256Hex(refreshJti),
-                Duration.ofSeconds(jwtUtil.getRefreshTtlSeconds()));
-    }
 
     /**
      * 当前用户是否组织级管理员及以上（持 {@code org:write}）：决定空间列表是否收敛到本人所属空间。

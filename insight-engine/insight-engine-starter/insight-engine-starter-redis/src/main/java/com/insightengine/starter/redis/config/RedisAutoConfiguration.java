@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import com.insightengine.starter.redis.blacklist.RedisTokenBlacklistService;
 import com.insightengine.starter.redis.session.RedisTokenSessionService;
+import com.insightengine.starter.redis.session.TokenSessionCache;
 import com.insightengine.starter.security.blacklist.TokenBlacklistService;
 import com.insightengine.starter.security.session.TokenSessionService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -88,5 +89,15 @@ public class RedisAutoConfiguration {
     @ConditionalOnMissingBean(TokenBlacklistService.class)
     public TokenBlacklistService redisTokenBlacklistService(StringRedisTemplate stringRedisTemplate) {
         return new RedisTokenBlacklistService(stringRedisTemplate);
+    }
+
+    /**
+     * 服务端会话缓存（登录态 + refresh 会话）的唯一读写入口：
+     * 由 UMS（登录/刷新/登出）与 workspace（切换空间）共用，防"键名/摘要算法漂移导致静默失效"。
+     */
+    @Bean
+    @ConditionalOnMissingBean(TokenSessionCache.class)
+    public TokenSessionCache tokenSessionCache(StringRedisTemplate stringRedisTemplate) {
+        return new TokenSessionCache(stringRedisTemplate);
     }
 }
