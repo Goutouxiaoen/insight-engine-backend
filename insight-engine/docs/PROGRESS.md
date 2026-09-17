@@ -211,6 +211,12 @@
 
 ### 云服务器凭据安全收敛（部署安全，2026-09-08 review 新增 / 2026-09-09 核实扩面）
 
+- [ ] 🟡 **打包产物会把本机口令带进 jar（2026-09-17 实测新增）**
+  - **现象 [已核实]**：`jar tf insight-engine-ums-1.0.0-SNAPSHOT.jar` 输出含 **`BOOT-INF/classes/application-local.yml`** —— 因 `application.yml:20` 用的是 `spring.config.import: optional:classpath:application-local.yml`，**classpath 来源会被 Maven 打进 jar**，于是本机 PG/Redis 口令随产物走。
+  - **影响面**：任何"把本机构建的 jar 拿去云上部署 / 发给他人 / 传网盘"的动作 = 口令泄露（且与云库同口令）；对 CI 构建无害（CI 无该文件，`optional:` 直接跳过）。
+  - **修法（一行，三服务 `application.yml` 同改）**：`optional:classpath:application-local.yml` → **`optional:file:./application-local.yml`**（从**进程当前目录**读，jar 外），同时把 `application-local.yml` 从 `src/main/resources/` 挪到**服务模块根目录**（或保留位置但不再被打包）。改完需同步 `application-local.yml` 头注释、`.env.example`、TD §18.2.6 / DEVGUIDE P19 的措辞。
+  - **为何未立即改**：属"配置位置变更 + 3 服务 + 文档联动"的独立任务（非顺手改，符合铁律 3），已登记待办；**在此之前：本机 jar 不要外发/上传，部署用 CI 或云上重建**。
+
 - [ ] 🔴 **云服务器凭据明文已进入 master 历史（闸门已失守），止血只能靠口令轮换**
   - **闸门结论修正 [已核实 2026-09-09]**：原判「`d437202` 尚未进 master → master 是最后一道闸门」**已失效**——PR #5（`f84ffd2`）已把 `feature/gateway` 合入 master，`git merge-base --is-ancestor d437202 master` 现返回 0，即 `d437202`（`ums/application.yml` 的公网 IP + 弱口令明文）**已是 master 祖先**。→ 明文已进主干历史，改文件/改文档都无法回收。
   - 暴露面 [已核实]：弱口令明文同时存在于 master 历史的 `docker-compose.yml`（`ed8bfec` 引入，PG/Redis/RabbitMQ/MinIO 共 5 处）与 `ums/application.yml`；文档明文：`DEVGUIDE.md:1120,1122`、`DB.md:48`、`TD.md:1110,1127`、`LEARNING.md:4706`。
@@ -362,7 +368,7 @@
 
 1. **workspace 收尾（阶段 5 收口，只差两步）**：① **建 PR 并合入 master**——`feature/workspace` 已推送且**领先 master 20 commits**（`cf6580c` 为最新），本机未安装 `gh`，PR 待开发者点：<https://github.com/Goutouxiaoen/insight-engine-backend/compare/master...feature/workspace>；② **前端把空间内门控改用 `GET /api/v1/workspace/{id}/my-permissions`**（FE-SYNC §2 2026-09-17 条目），并在 `BE-ISSUES.md` 把 `BE-20260916-01` 核到 `🟢`（后端已回填答复 + 证据，2026-09-17）
 2. **§五 口令轮换（唯一止血手段，部署前必办）**：云 PG/Redis（后续 RabbitMQ/MinIO）改强随机口令 + 安全组收敛（需云凭据/控制台，见 §五）；文档占位化 + **规范补缺（`AGENTS.md` 铁律 5 / `DEVGUIDE.md` P19 / P17 修正）+ 代码侧配置占位化（§五 b）均已完成**——**未轮换前该项不闭环**
-3. **阶段 6「模型网关」准入（2026-09-17 判定：有条件进入，开工前先办 5 件事）**：
+3. **阶段 6「模型网关」准入（2026-09-17 判定：有条件进入；开工前需 3 项裁决 + 若干必办）**：
    - ✅ **已具备**：IF §7.1~§7.8 契约完整（厂商 CRUD / 模型 CRUD / 路由策略 / **chat completions SSE** / embeddings / rerank / 用量查询）；权限码 `model:*` **7 条**已在字典（实测授权：`super_admin` 7 / `org_admin` 7 / `ws_admin` 2 / `end_user` 1 / **`app_developer` 0** → 说明"模型管理=组织级、空间级只读"的分域已天然成立，但**应用开发者调用 chat/embeddings 会 2006**，需按 PRD §12.2.2 复核是否补种子）；`ie_model_vendor` / `ie_model` 两表**云端已建**；`starter-security`（JWT/权限/第二层空间鉴权）、`starter-redis`、`starter-mybatis`、OpenAPI 均可复用；网关路由纪律与 workspace 已示范接入方式；IF §2.6 SSE 心跳契约已定（`heartbeat`/15s）
    - ⬜ **必须补（DB/契约缺口，按铁律 2/6 先裁决再动手）**：
      1. ~~`ie_model_route` 表缺失~~ **【2026-09-17 更正：此项为误判，已撤回】**——路由策略表**已存在**，名为 **`ie_route_policy`**（`init.sql:301`、`DB.md §5.3.3`、`PRD.md:2160`、云端库已建）。列 = `id/name/rules(jsonb)/priority/enabled/created_at/updated_at/created_by/updated_by/deleted`，与 **IF §7.4 的 `{name, priority, rules}` 完全对得上**，无需补表、无需裁决。**真实待办只剩一条小的**：该表**无 seed**（实测 0 行）→ 本章是否需要一条"默认路由"种子（可选，不阻塞）。误判成因见 §四 2026-09-17；
@@ -371,6 +377,10 @@
      4. **用量计入口径**：`ie_usage_record` 已存在，但 §6.3 登记"补 `event_id` 幂等唯一键（billing 阶段）"→ 本章会写用量，建议**在 model 阶段就把幂等键补上**（否则重试/流式中断会重复计量，billing 阶段再补要回改）；
      5. **需开发者提供的输入**：① 通义 DashScope **API Key**（放各服务 `application-local.yml` 或密钥表，**不入库明文**）；② ~~本机/云端是否有 Ollama~~ → **【2026-09-17 已确认：本机/云端均无 Ollama，且不阻塞】** 替代方案（任选，`ie_model_vendor` 表天然多厂商：`code` + `base_url` + `type`，换厂商**不改代码**）：**(a)** 通义 DashScope（计划内首选，OpenAI 兼容模式 + 免费额度 + `text-embedding-v3` 恰好 1024 维，对上 `ie_chunk.embedding` 约束）；**(b)** 其它 OpenAI 兼容云厂商（智谱 GLM / DeepSeek / 硅基流动 / Kimi）——插一条 vendor 记录即可；**(c)** 本机轻量替代（不想装 Ollama）：**LM Studio**（GUI + 兼容端口）/ `llama.cpp server` / vLLM（需 GPU）。**结论：离线本地模型不是阶段 6 的必需品**，其真实价值在 kb（阶段 7）的 embedding/rerank 省钱与断网演示，届时再定；
      6. **权限种子复核**：实测 `app_developer` 的 `model:*` 授权为 **0 条**（`super_admin`/`org_admin` 各 7、`ws_admin` 2、`end_user` 1）→ 若按 PRD §12.2.2「应用开发者可管理知识库/Agent/工具」的语义，其调用 `chat/completions`、`embeddings` 属必需 → 需裁决是否补种（`init.sql` + 云端增量 seed，带 `ON CONFLICT DO NOTHING`）
+     7. **★模型归属口径（2026-09-17 开发者提出，必须开工前裁决——直接影响表结构）**：开发者指出平台定位不是"简单和模型对话"，而是**编排智能体/工作流**，因此**用户应当可以配置自己的大模型**。但**实测当前 schema 不支持**：`ie_model_vendor`（`code/base_url/api_key_secret_id/type/enabled/config`）与 `ie_model`（`vendor_id/code/display_name/type/context_window/input_price_per_1k/output_price_per_1k/enabled`）**都没有 `tenant_id` / `workspace_id`** → 现状 = **平台级统一模型目录**（PRD L1921 时序图也是「Admin 配置模型厂商（通义+Ollama）」、L1105 用户故事是"统一接口调用任意大模型，不关心底层厂商"）。
+     **两条路线**：**A（一期）** 保持平台级目录：Admin 接入 + 统一调用 + 路由（主备降级/成本能力择模），BYOK 后置；**B（直达目标）** 多级模型库：`ie_model_vendor`/`ie_model` 增 `scope(PLATFORM/TENANT/WORKSPACE)` 或 `workspace_id`（NULL=平台级）+ 空间级接入能力（权限码 `model:vendor:write` 的空间级语义 + 前端页面归属 + 密钥按空间隔离）。
+     **建议（折中，不阻塞一期）**：**一期走 A，但建表时先把归属列留出来**（`tenant_id`/`workspace_id` 可空，一期只写 NULL）→ 一期能最快跑通"真调通义 + SSE"，二期做空间级接入时**不必改表结构**。
+     **连带修正**：IF §7.4 的示例 JSON 里写了 `{"match": {"tenantTier": "PRO"}}`（按租户分档）——若定位以"Agent/工作流按需选模型 + 主备降级"为主，该示例应改写为 `agentId`/`scene`/`capability` 之类的 match 条件（**待裁决后同步 IF**）。
    - ⬜ **需一并裁决**：**阶段 5 的「数据权限拦截器（DataScope）」归属** —— DEVGUIDE 阶段 5 含此项，现未做；**建议**：不阻塞阶段 6，但**必须在 kb（阶段 7）落地前完成**（理由：现阶段只有 `ie_workspace` 一张业务表且已按 tenant/org 收敛；`ie_kb`/`ie_kb_doc` 等带 `workspace_id` 的表在阶段 7 才出现，那才是它的主战场）。**待开发者确认该归属**（确认后同步 DEVGUIDE 阶段 5/7 与 §6.3）
 
 ---
