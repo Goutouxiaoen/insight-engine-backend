@@ -766,6 +766,26 @@ curl -X POST http://localhost:7000/auth/login \
 - `PUT /api/v1/model/route/{id}` — 更新
 - `PUT /api/v1/model/route/{id}/status` — 启用/禁用
 
+**权限**：读 `model:route:read` / 写 `model:route:write`（实测仅 `super_admin` / `org_admin` 持有 → **组织级资源**，不做空间维度判定）
+
+**rules 语义（2026-09-17 实现定稿）**：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `strategy` | 否 | 默认 `PRIORITY`；**当前仅支持 PRIORITY**（其它值写入即 `1001`，避免"配了不生效"） |
+| `fallback` | 否 | 默认 `true`：主目标调用失败时按 `targets` 顺序降级。**仅非流式生效**——SSE 一旦发出 200 与响应头就无法更换上游，"流中途换模型"会把两段不同模型的输出拼给用户（更糟）；流式降级登记 PROGRESS §6.3 |
+| `rules[]` | 是 | **有序**，先匹配先生效；命中一条即停止 |
+| `rules[].match` | 否 | 缺省或 `{}` = 匹配全部；当前支持 `tenantId` / `workspaceId`；**其它键（如 `tenantTier`）写入即 `1001`**（租户套餐字段尚未落地，见 PROGRESS §6.3） |
+| `rules[].targets` | 是 | **有序**：第 1 个为主目标，其余为备；元素 `{"modelId": <id>}`（正整数） |
+
+**匹配与选择口径**：
+- 取**启用中**的策略，按 `priority 升序、id 升序` 逐条匹配（`priority` **数值越小越先匹配**，且 `priority ≥ 1`）；
+- `targets` 中**不存在/已停用/非 CHAT** 的模型会被跳过并告警，按剩余顺序返回；
+- 全部未命中时，`auto` 兜底为「第一个启用中的 CHAT 模型」（保证未配策略也能用，日志会写明走了兜底）；
+- `GET /route/list` 的返回顺序 = 实际匹配顺序。
+
+**契约缺口（已登记 PROGRESS §6.3）**：本节**没有删除接口**（只有 list/create/update/status）→ 策略只能**停用**，不能删除。
+
 ### 7.5 聊天补全（核心，兼容 OpenAI 协议）
 
 `POST /api/v1/model/chat/completions`
@@ -904,6 +924,37 @@ curl -X POST http://localhost:7000/api/v1/model/chat/completions \
 ### 7.8 模型用量查询
 
 `GET /api/v1/model/usage/page?modelId=1&start=2026-08-01&end=2026-08-25&pageNum=1&pageSize=10`
+
+**权限**：`model:usage:read`
+
+**参数**：`modelId`（可选）、`start`/`end`（可选，`yyyy-MM-dd`，**闭区间**：含结束日当天）、`pageNum`/`pageSize`。
+
+**响应 `data.records[]`**：
+
+```json
+{
+  "id": 12,
+  "modelId": 3,
+  "modelCode": "qwen3.7-plus",
+  "modelName": "Qwen3.7-Plus（默认）",
+  "scopeType": "WORKSPACE",
+  "scopeId": 1,
+  "tokens": 125,
+  "cost": null,
+  "traceId": "fe846d90461a4500b43218132de01872",
+  "createdAt": "2026-09-17T08:55:24.107"
+}
+```
+
+**可见范围（2026-09-17 定稿，重要）**：本权限**空间管理员（`ws_admin`）也持有**，若"有权限即看全量"会造成跨空间信息泄露。实际规则：
+
+| 调用者 | 可见范围 |
+|--------|----------|
+| 持 `org:write`（组织级，判据取自 token 的 perms，与 §5.4 同源） | **全量** |
+| 其它（如 `ws_admin`） | **强制限定 `scope_type=WORKSPACE AND scope_id=当前空间`** |
+| 非组织级且无当前空间（`ws_id` 缺失） | 返回**空集**（不回退为全量） |
+
+**其它口径**：`cost` 按 §2.5 为**字符串**（元、6 位小数），套餐制无价目时为 `null`；`tokens` = total token；仅返回 `biz_type=MODEL` 的记录（同一张表还承载 TOOL/AGENT/KB）。
 
 ---
 

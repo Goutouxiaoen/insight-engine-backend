@@ -1088,6 +1088,26 @@ CROSS JOIN (VALUES
 WHERE v.code = 'qwen-token-plan'
 ON CONFLICT DO NOTHING;
 
+-- 默认路由策略（IF §7.4）：逻辑名 auto 的落点 = 主 qwen3.7-plus、备 qwen3.6-flash
+--   说明：match 为空对象 = 匹配全部；targets 有序（首个为主，其余为备）；fallback=true 表示
+--         非流式调用失败时按顺序降级（流式不降级，原因见 ChatServiceImpl.stream 注释）。
+--   幂等：仅当"一条策略都没有"时插入（避免重复跑出多条默认策略）。
+INSERT INTO ie_route_policy (name, rules, priority, enabled)
+SELECT '默认路由',
+       jsonb_build_object(
+               'strategy', 'PRIORITY',
+               'fallback', true,
+               'rules', jsonb_build_array(jsonb_build_object(
+                       'match', '{}'::jsonb,
+                       'targets', jsonb_build_array(
+                               jsonb_build_object('modelId', (SELECT id FROM ie_model WHERE code = 'qwen3.7-plus' AND deleted = 0 LIMIT 1)),
+                               jsonb_build_object('modelId', (SELECT id FROM ie_model WHERE code = 'qwen3.6-flash' AND deleted = 0 LIMIT 1))
+                       )
+               ))
+       ),
+       1, 1
+WHERE NOT EXISTS (SELECT 1 FROM ie_route_policy WHERE deleted = 0);
+
 -- 1) 管理员账号（明文 Admin@123，hash 由 BCryptPasswordEncoder strength=10 生成，$2b$ 兼容 Spring Security）
 INSERT INTO ie_user (id, tenant_id, email, nickname, password_hash, status, created_by, updated_by)
 VALUES (1, 1, 'admin@example.com', '管理员',

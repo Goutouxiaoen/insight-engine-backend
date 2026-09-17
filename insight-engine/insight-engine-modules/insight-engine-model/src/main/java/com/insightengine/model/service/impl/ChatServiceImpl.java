@@ -19,6 +19,7 @@ import com.insightengine.model.mapper.UsageRecordMapper;
 import com.insightengine.model.service.ChatService;
 import com.insightengine.model.service.ChatStreamListener;
 import com.insightengine.model.service.SecretStore;
+import com.insightengine.model.support.ModelRouteResolver;
 import com.insightengine.model.support.OpenAiChatClient;
 import com.insightengine.starter.web.context.UserContext;
 import org.slf4j.Logger;
@@ -66,11 +67,23 @@ public class ChatServiceImpl implements ChatService {
     /** OpenAI 协议里流式结束的固定标记（厂商差异，仅作兼容识别） */
     private static final String SSE_DONE_PAYLOAD = "[DONE]";
 
+    /**
+     * 允许触发**降级**的错误码（3xxx 段里的"临时性/可转移"故障）。
+     *
+     * <p>不含 {@code 3001 模型不存在}：那是配置错误，换个模型只会掩盖问题（且路由解析阶段已过滤不可用模型）。</p>
+     */
+    private static final java.util.Set<Integer> RETRYABLE_ERROR_CODES = java.util.Set.of(
+            ErrorCode.MODEL_TIMEOUT.getCode(),
+            ErrorCode.MODEL_RATE_LIMIT.getCode(),
+            ErrorCode.MODEL_CALL_FAIL.getCode(),
+            ErrorCode.MODEL_KEY_ERROR.getCode());
+
     private final ModelMapper modelMapper;
     private final ModelVendorMapper vendorMapper;
     private final SecretStore secretStore;
     private final OpenAiChatClient chatClient;
     private final UsageRecordMapper usageRecordMapper;
+    private final ModelRouteResolver routeResolver;
     private final ObjectMapper objectMapper;
 
     public ChatServiceImpl(ModelMapper modelMapper,
@@ -78,28 +91,52 @@ public class ChatServiceImpl implements ChatService {
                            SecretStore secretStore,
                            OpenAiChatClient chatClient,
                            UsageRecordMapper usageRecordMapper,
+                           ModelRouteResolver routeResolver,
                            ObjectMapper objectMapper) {
         this.modelMapper = modelMapper;
         this.vendorMapper = vendorMapper;
         this.secretStore = secretStore;
         this.chatClient = chatClient;
         this.usageRecordMapper = usageRecordMapper;
+        this.routeResolver = routeResolver;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public ChatCompletionVO complete(ChatCompletionRequest request) {
-        Target target = resolveTarget(request.getModel());
-        String body = buildUpstreamBody(request, target.modelCode(), false);
-        String raw = chatClient.complete(target.baseUrl(), target.apiKey(), body);
-        ChatCompletionVO vo = mapResponse(raw, target.modelCode());
-        recordUsage(target.modelId(), vo.getUsage());
-        return vo;
+        Candidates candidates = resolveCandidates(request.getModel());
+        List<Long> modelIds = candidates.modelIds();
+        BizException lastError = null;
+        for (int i = 0; i < modelIds.size(); i++) {
+            Target target = loadTarget(modelIds.get(i));
+            boolean isLast = (i == modelIds.size() - 1);
+            try {
+                String body = buildUpstreamBody(request, target.modelCode(), false);
+                String raw = chatClient.complete(target.baseUrl(), target.apiKey(), body);
+                ChatCompletionVO vo = mapResponse(raw, target.modelCode());
+                recordUsage(target.modelId(), vo.getUsage());
+                return vo;
+            } catch (BizException e) {
+                // 降级条件：策略允许 fallback + 错误属"可重试类"（超时/限流/调用失败/密钥）+ 后面还有目标
+                if (!candidates.fallback() || isLast || !RETRYABLE_ERROR_CODES.contains(e.getCode())) {
+                    throw e;
+                }
+                lastError = e;
+                log.warn("主模型调用失败（modelId={}, code={}），按路由策略降级到下一个目标",
+                        target.modelId(), e.getCode());
+            }
+        }
+        throw lastError != null ? lastError
+                : new BizException(ErrorCode.MODEL_NOT_FOUND, "没有可用的模型目标");
     }
 
     @Override
     public void stream(ChatCompletionRequest request, ChatStreamListener listener) {
-        Target target = resolveTarget(request.getModel());
+        // 流式只用**路由的第一个目标**：SSE 一旦发出 200 与响应头就无法改换上游，
+        // "流中途换模型"会把两段不同模型的输出拼给用户（更糟）。故流式降级**不做**，
+        // 已登记 PROGRESS §6.3（如确需，做法应是"首包前探测 + 失败才重试"，属后续增强）。
+        Candidates candidates = resolveCandidates(request.getModel());
+        Target target = loadTarget(candidates.modelIds().get(0));
         String body = buildUpstreamBody(request, target.modelCode(), true);
         StreamState state = new StreamState();
         try {
@@ -121,30 +158,58 @@ public class ChatServiceImpl implements ChatService {
     /* ==================== 内部实现 ==================== */
 
     /**
-     * 解析目标模型与厂商接入信息（含解密后的 Key）。
+     * 解析候选模型（有序：主 + 备）与是否允许降级。
+     *
+     * <p>两种来源：</p>
+     * <ul>
+     *   <li><b>{@code auto}</b>（IF §7.4）：走路由策略——按 priority 取启用策略、匹配规则、取 targets
+     *       （主 + 备）与 {@code fallback} 开关；<b>未命中任何策略</b>时兜底为"第一个启用中的 CHAT 模型"
+     *       （保证没配策略也能用，且日志明确说明走了兜底）；</li>
+     *   <li><b>具体编码</b>：直接按 code 查，**不降级**（调用方指定了模型，就按它失败即失败）。</li>
+     * </ul>
      */
-    private Target resolveTarget(String modelOrAuto) {
-        List<Model> candidates;
+    private Candidates resolveCandidates(String modelOrAuto) {
         if (ModelConstants.LOGICAL_MODEL_AUTO.equalsIgnoreCase(modelOrAuto)) {
-            candidates = modelMapper.selectList(new LambdaQueryWrapper<Model>()
+            ModelRouteResolver.RouteDecision decision =
+                    routeResolver.resolve(UserContext.getTenantId(), UserContext.getWorkspaceId());
+            if (!decision.modelIds().isEmpty()) {
+                return new Candidates(decision.modelIds(), decision.fallback());
+            }
+            log.info("auto 未命中任何路由策略，兜底使用第一个启用中的 CHAT 模型");
+            List<Model> fallback = modelMapper.selectList(new LambdaQueryWrapper<Model>()
                     .eq(Model::getType, ModelConstants.TYPE_CHAT)
                     .eq(Model::getEnabled, 1)
                     .orderByAsc(Model::getId)
                     .last("LIMIT 1"));
-        } else {
-            candidates = modelMapper.selectList(new LambdaQueryWrapper<Model>()
-                    .eq(Model::getCode, modelOrAuto)
-                    .eq(Model::getEnabled, 1)
-                    .orderByAsc(Model::getId)
-                    .last("LIMIT 2"));
+            if (fallback.isEmpty()) {
+                throw new BizException(ErrorCode.MODEL_NOT_FOUND, "没有启用中的 CHAT 模型可用");
+            }
+            return new Candidates(List.of(fallback.get(0).getId()), false);
         }
+
+        List<Model> candidates = modelMapper.selectList(new LambdaQueryWrapper<Model>()
+                .eq(Model::getCode, modelOrAuto)
+                .eq(Model::getEnabled, 1)
+                .orderByAsc(Model::getId)
+                .last("LIMIT 2"));
         if (candidates.isEmpty()) {
             throw new BizException(ErrorCode.MODEL_NOT_FOUND, "模型不存在或未启用：" + modelOrAuto);
         }
         if (candidates.size() > 1) {
-            log.warn("模型编码 {} 在多个厂商下重复启用，暂取 id 最小者；待路由策略（IF §7.4）给出选择规则", modelOrAuto);
+            log.warn("模型编码 {} 在多个厂商下重复启用，暂取 id 最小者；如需确定性选择请配置路由策略（IF §7.4）",
+                    modelOrAuto);
         }
-        Model model = candidates.get(0);
+        return new Candidates(List.of(candidates.get(0).getId()), false);
+    }
+
+    /**
+     * 按 modelId 装载调用目标（模型 + 厂商接入信息 + 解密后的 Key）。
+     */
+    private Target loadTarget(Long modelId) {
+        Model model = modelMapper.selectById(modelId);
+        if (model == null || model.getEnabled() == null || model.getEnabled() != 1) {
+            throw new BizException(ErrorCode.MODEL_NOT_FOUND, "模型不存在或未启用：id=" + modelId);
+        }
 
         ModelVendor vendor = vendorMapper.selectById(model.getVendorId());
         if (vendor == null || vendor.getEnabled() == null || vendor.getEnabled() != 1) {
@@ -318,6 +383,12 @@ public class ChatServiceImpl implements ChatService {
      * 调用目标（解析结果）。
      */
     private record Target(Long modelId, String modelCode, String baseUrl, String apiKey) {
+    }
+
+    /**
+     * 候选目标（有序：首个为主、其余为备）+ 是否允许降级。
+     */
+    private record Candidates(List<Long> modelIds, boolean fallback) {
     }
 
     /**
